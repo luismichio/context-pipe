@@ -1,26 +1,21 @@
-# 🎯 Current Task: Scaffolding the Foundation
+# 🎯 Current Task: Finalizing the Pure Switchboard
 
 ## Goal
-Complete the Phase 1 scaffolding and prepare for the core implementation.
+Establish Context-Pipe as a 100% agnostic context router focusing on infrastructure and templates.
 
 ## 📝 Sub-tasks
 - [x] Create project structure (`AGENTS.md`, `README`, `.gitignore`).
-- [x] Define `pipes.json` schema.
+- [x] Define `pipes.json` schema with Pipe Templates.
 - [x] Add `backlog.md` and `task.md`.
-- [x] Perform initial Git push to `main`.
 - [x] Initialize Python package (`pyproject.toml`, `src/`).
-- [x] Implement core `orchestrator.py`.
-- [x] Implement MCP `server.py`.
-- [x] Implement `pipe_hook.py` universal interceptor.
-- [x] Implement `context_pipe/telemetry.py` for ROI tracking.
-- [x] Implement Graceful Resilience (Handling missing tools with help messages).
-- [x] Implement Phase 2: CPP Polyfill Wrapper (`context-pipe wrap`).
-- [x] Enhance Environment Detection (Zed, Continue, Windsurf).
-- [x] Implement Privacy Guard (Secret Masking node).
-- [x] Implement Phase 3: Multi-Modal Pipe (MarkItDown integration).
-- [ ] Implement Phase 3: Semantic-Sift Native Integration (Rust sidecar).
-- [ ] Implement Phase 3: Adaptive Thresholding node.
+- [x] Implement core `orchestrator.py` (Agnostic execution).
+- [x] Implement MCP `server.py` (Switchboard interface).
+- [x] Implement `pipe_hook.py` (Subconscious interceptor).
+- [x] Implement `context_pipe/telemetry.py` (Context Balance Sheet).
+- [x] Refactor: Remove internal nodes to achieve pure infrastructure status.
+- [ ] Perform final end-to-end verification.
 
 ## ⚠️ Notes
-- The project follows the **Context-Pipe Protocol (CPP)**.
-- All nodes must support `stdin`/`stdout` streaming.
+- **Agnostic Logic**: The platform does not bundle data-specific code.
+- **Pipe Templates**: Success is achieved via professional recipes in `pipes.json`.
+- **Atomic Integrity**: All refinery logic (Sift, MarkItDown) lives in external repositories.

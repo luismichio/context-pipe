@@ -1,26 +1,11 @@
 {
   "version": "1.0",
-  "description": "Standard high-fidelity context pipes for the Studio of Two.",
+  "description": "Standard high-fidelity context pipe templates for the Studio of Two.",
   "pipes": [
     {
       "name": "standard-distill",
-      "description": "Default log sifting pipe.",
+      "description": "The flagship log sifting template.",
       "nodes": [
-        {
-          "cmd": "sift-core",
-          "args": ["logs"],
-          "help_msg": "sift-core not found. Please install the Rust refinery via 'cargo install semantic-sift-core'."
-        }
-      ]
-    },
-    {
-      "name": "secure-distill",
-      "description": "Masks secrets before sifting logs.",
-      "nodes": [
-        {
-          "cmd": "context-pipe-mask",
-          "args": []
-        },
         {
           "cmd": "sift-core",
           "args": ["logs"],
@@ -30,11 +15,27 @@
     },
     {
       "name": "semantic-refinery",
-      "description": "High-intelligence neural distillation.",
+      "description": "High-intelligence neural distillation template.",
       "nodes": [
         {
           "cmd": "sift-core",
           "args": ["semantic", "--rate", "0.5"],
+          "help_msg": "sift-core not found. Please install the Rust refinery via 'cargo install semantic-sift-core'."
+        }
+      ]
+    },
+    {
+      "name": "full-refinery",
+      "description": "Complete ingestion and distillation chain template.",
+      "nodes": [
+        {
+          "cmd": "markitdown",
+          "args": ["-"],
+          "help_msg": "markitdown not found. Please install via 'pip install markitdown' to enable multi-modal support."
+        },
+        {
+          "cmd": "sift-core",
+          "args": ["semantic", "--rate", "0.3"],
           "help_msg": "sift-core not found. Please install the Rust refinery via 'cargo install semantic-sift-core'."
         }
       ]
@@ -46,22 +47,6 @@
         {
           "cmd": "findstr",
           "args": ["SIGNAL"]
-        }
-      ]
-    },
-    {
-      "name": "full-refinery",
-      "description": "Complete ingestion and distillation chain.",
-      "nodes": [
-        {
-          "cmd": "context-pipe-ingest",
-          "args": [],
-          "help_msg": "Multi-modal ingestion failed. Please run 'pip install context-pipe[multi-modal]'."
-        },
-        {
-          "cmd": "sift-core",
-          "args": ["semantic", "--rate", "0.3"],
-          "help_msg": "sift-core not found. Please install the Rust refinery via 'cargo install semantic-sift-core'."
         }
       ]
     }

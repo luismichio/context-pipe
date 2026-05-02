@@ -7,20 +7,18 @@
 - [x] **Pipes Logic**: Implementation of the `pipes.json` parser and execution engine.
 - [x] **MCP Server**: Formal tool and prompt interface.
 - [x] **Universal Hook**: Subconscious interceptor.
-- [x] **Telemetry Engine**: Basic ROI tracking.
+- [x] **Telemetry Engine**: Context Balance Sheet (ROI tracking).
 
 ## 🟡 Phase 2: Interoperability (Complete)
 - [x] **CPP Polyfill Wrapper**: Standalone utility (`context-pipe wrap`) for JSON-RPC tools.
 - [x] **Dynamic Environment Detection**: Multi-platform support (Zed, Continue, Windsurf, Cursor).
+- [x] **Agnostic Routing**: Dynamic pipe resolution based on tool and size triggers.
 - [ ] **Standard CLI Aliases**: Add `/pipe` commands to common shells.
 
-## 🟢 Phase 3: The Refinery Ecosystem (In Progress)
-- [x] **Graceful Resilience**: Automated help messages for missing tools (e.g. sift-core, markitdown).
-- [x] **Privacy Guard**: Native PII/Secret masking node (`context-pipe-mask`).
-- [x] **Multi-Modal Pipe**: High-fidelity ingestion for PDF/Office (`context-pipe-ingest`).
-- [ ] **Semantic-Sift Integration**: Pre-configured pipe for `sift-core`.
+## 🟢 Phase 3: The Template Ecosystem (In Progress)
+- [x] **Pure Switchboard Refactor**: Removed internal nodes to achieve 100% agnostic status.
+- [x] **Pipe Templates**: Professional recipes for `sift-core` and `markitdown`.
 - [ ] **Adaptive Thresholding**: Dynamically adjust rates based on window pressure.
-
 
 ## ⚪ Phase 4: Distribution
 - [ ] **PyPI Publishing**: `pip install context-pipe`.
