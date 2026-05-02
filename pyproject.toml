@@ -36,6 +36,7 @@ dev = [
 
 [project.scripts]
 context-pipe = "context_pipe.orchestrator:main"
+context-pipe-server = "context_pipe.server:main"
 
 [tool.setuptools]
 packages = ["context_pipe"]

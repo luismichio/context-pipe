@@ -8,7 +8,10 @@ Complete the Phase 1 scaffolding and prepare for the core implementation.
 - [x] Define `pipes.json` schema.
 - [x] Add `backlog.md` and `task.md`.
 - [x] Perform initial Git push to `main`.
-- [ ] Initialize Python package (`pyproject.toml`, `src/`).
+- [x] Initialize Python package (`pyproject.toml`, `src/`).
+- [x] Implement core `orchestrator.py`.
+- [x] Implement MCP `server.py`.
+- [ ] Implement `pipe_hook.py` universal interceptor.
 
 ## ⚠️ Notes
 - The project follows the **Context-Pipe Protocol (CPP)**.
