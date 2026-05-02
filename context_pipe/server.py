@@ -8,6 +8,7 @@ from typing import Any, Optional
 from mcp.server.fastmcp import FastMCP
 from .orchestrator import run_pipe
 from .telemetry import get_balance_sheet
+from .onboarding import inject_hooks
 
 # Initialize FastMCP server
 mcp = FastMCP("Context-Pipe")
@@ -74,6 +75,22 @@ def get_pipe_stats() -> str:
 - **Platform Events:** {sheet['total_events']}
 - **Avg Node Latency:** {sheet['avg_latency_ms']:.2f}ms
     """
+
+@mcp.tool()
+def pipe_onboard(environment: str, target_dir: Optional[str] = None) -> str:
+    """
+    Initializes Context-Pipe hooks and commands in the current project.
+    
+    Args:
+        environment: The IDE/CLI environment (e.g., 'Cursor', 'VSCode', 'Gemini').
+        target_dir: Optional directory to onboard. Defaults to current directory.
+    """
+    path = target_dir or os.getcwd()
+    actions = inject_hooks(path, environment)
+    if not actions:
+        return f"Context-Pipe is already active or no targets found in {path}."
+    
+    return "Onboarding Successful:\n" + "\n".join([f"- {a}" for a in actions])
 
 @mcp.prompt()
 def pipe_dashboard() -> str:
