@@ -1,18 +1,18 @@
 # 📋 Context-Pipe Backlog
 
-## 🔴 Phase 1: High-Fidelity Foundation (Nearly Complete)
+## 🔴 Phase 1: High-Fidelity Foundation (Complete)
 - [x] Repository scaffolding (`AGENTS.md`, `README`, `LICENSE`).
 - [x] Initial Context-Pipe Protocol (CPP) specification.
 - [x] **Python Orchestrator Boilerplate**: Initialize the core `context-pipe` package.
 - [x] **Pipes Logic**: Implementation of the `pipes.json` parser and execution engine.
 - [x] **MCP Server**: Formal tool and prompt interface.
 - [x] **Universal Hook**: Subconscious interceptor.
-- [ ] **Telemetry Engine**: Basic ROI tracking.
+- [x] **Telemetry Engine**: Basic ROI tracking.
 
-## 🟡 Phase 2: Interoperability
+## 🟡 Phase 2: Interoperability (In Progress)
 - [ ] **CPP Polyfill Wrapper**: Universal wrapper for standard JSON-RPC tools.
-- [ ] **Universal Interceptor (Hook)**: Migration of the `sift_hook.py` logic to a generalized `pipe_hook.py`.
-- [ ] **Environment Detection**: Auto-detection of IDEs (Cursor, VS Code, Zed).
+- [ ] **Dynamic Environment Detection**: Auto-detection of IDEs (Cursor, VS Code, Zed).
+- [ ] **Standard CLI Aliases**: Add `/pipe` commands to common shells.
 
 ## 🟢 Phase 3: The Refinery Ecosystem
 - [ ] **Semantic-Sift Integration**: Pre-configured pipe for `sift-core`.

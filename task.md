@@ -12,7 +12,8 @@ Complete the Phase 1 scaffolding and prepare for the core implementation.
 - [x] Implement core `orchestrator.py`.
 - [x] Implement MCP `server.py`.
 - [x] Implement `pipe_hook.py` universal interceptor.
-- [ ] Implement `context_pipe/telemetry.py` for ROI tracking.
+- [x] Implement `context_pipe/telemetry.py` for ROI tracking.
+- [ ] Implement Phase 2: CPP Polyfill Wrapper.
 
 ## ⚠️ Notes
 - The project follows the **Context-Pipe Protocol (CPP)**.

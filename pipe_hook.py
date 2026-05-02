@@ -4,8 +4,10 @@
 import sys
 import json
 import os
+import time
 from context_pipe.platforms import detect_client_id, extract_content, inject_content
 from context_pipe.orchestrator import run_pipe, resolve_pipe_from_context
+from context_pipe.telemetry import log_telemetry
 
 # Metadata Signatures
 CPP_SIGNATURE = "--- [Context-Pipe: Native Execution] ---"
@@ -21,6 +23,8 @@ def main():
         # If not JSON, we can't hook it properly, just pass it through
         sys.stdout.write(raw_input)
         return
+
+    start_t = time.time()
 
     # 1. Detect Platform & Extract Content
     platform = detect_client_id()
@@ -55,9 +59,22 @@ def main():
 
     # 5. Execute Pipe
     try:
-        sifted_content = run_pipe(pipe, str(raw_content))
-...
-        # 6. Inject & Signature
+        sifted_content, trace = run_pipe(pipe, str(raw_content))
+        
+        # 6. Telemetry (Accounting per node)
+        latency_per_node = (time.time() - start_t) * 1000 / max(1, len(trace))
+        for entry in trace:
+            if "error" in entry: continue
+            log_telemetry(
+                pipe_name=pipe_name,
+                tool_name=f"{entry['node']}:{tool_name}",
+                original_size=entry['input_size'],
+                final_size=entry['output_size'],
+                latency_ms=latency_per_node,
+                platform=platform
+            )
+        
+        # 7. Inject & Signature
         final_content = f"{sifted_content}\n\n{CPP_SIGNATURE}"
         data = inject_content(data, final_content, platform)
         

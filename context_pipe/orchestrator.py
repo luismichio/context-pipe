@@ -35,14 +35,15 @@ def resolve_pipe_from_context(config: Dict[str, Any], tool_name: str, content_le
 
     return None
 
-def run_pipe(pipe_config: Dict[str, Any], input_data: str) -> str:
-...
-    """Executes a chain of nodes via OS-level pipes."""
+def run_pipe(pipe_config: Dict[str, Any], input_data: str) -> tuple[str, List[Dict[str, Any]]]:
+    """Executes a chain of nodes and tracks context deltas."""
     current_input = input_data
-    
+    trace = []
+
     for node in pipe_config.get("nodes", []):
         cmd = [node["cmd"]] + node.get("args", [])
-        
+        start_size = len(current_input)
+
         # High-Fidelity OS Piping
         process = subprocess.Popen(
             cmd,
@@ -51,15 +52,28 @@ def run_pipe(pipe_config: Dict[str, Any], input_data: str) -> str:
             stderr=subprocess.PIPE,
             text=True
         )
-        
+
         stdout, stderr = process.communicate(input=current_input)
-        
+
         if process.returncode != 0:
-            return f"Error in node {node['cmd']}: {stderr}"
-        
+            # Record error in trace
+            trace.append({
+                "node": node["cmd"],
+                "error": stderr.strip()
+            })
+            return f"Error in node {node['cmd']}: {stderr}", trace
+
+        end_size = len(stdout)
+        trace.append({
+            "node": node["cmd"],
+            "input_size": start_size,
+            "output_size": end_size,
+            "delta": end_size - start_size
+        })
+
         current_input = stdout
-        
-    return current_input
+
+    return current_input, trace
 
 def main():
     parser = argparse.ArgumentParser(description="Context-Pipe Orchestrator")
@@ -86,7 +100,7 @@ def main():
     input_data = sys.stdin.read()
     
     # Run the pipe
-    result = run_pipe(pipe, input_data)
+    result, trace = run_pipe(pipe, input_data)
     
     # Output the result
     sys.stdout.write(result)
