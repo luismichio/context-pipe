@@ -39,9 +39,13 @@ def resolve_pipe_from_context(config: Dict[str, Any], tool_name: str, content_le
     return None
 
 def run_pipe(pipe_config: Dict[str, Any], input_data: str) -> tuple[str, List[Dict[str, Any]]]:
-    """Executes a chain of nodes and tracks context deltas."""
+    """Executes a chain of nodes and tracks context deltas with a timeout guard."""
     current_input = input_data
     trace = []
+    
+    # Global timeout for the entire pipe execution (default 10s)
+    raw_timeout = os.environ.get("PIPE_NODE_TIMEOUT_MS", "10000")
+    node_timeout = int(raw_timeout) / 1000.0
 
     for node in pipe_config.get("nodes", []):
         cmd = [node["cmd"]] + node.get("args", [])
@@ -57,7 +61,14 @@ def run_pipe(pipe_config: Dict[str, Any], input_data: str) -> tuple[str, List[Di
                 text=True
             )
             
-            stdout, stderr = process.communicate(input=current_input)
+            try:
+                stdout, stderr = process.communicate(input=current_input, timeout=node_timeout)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                stdout, stderr = process.communicate()
+                error_text = f"--- [Context-Pipe: Timeout] ---\nNode {node['cmd']} exceeded {node_timeout}s."
+                trace.append({"node": node["cmd"], "error": "Timeout"})
+                return error_text, trace
             
             if process.returncode != 0:
                 # Record error in trace

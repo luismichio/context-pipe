@@ -8,7 +8,7 @@ import os
 from typing import Dict, Any, Optional
 from .platforms import detect_client_id, extract_content, inject_content
 from .orchestrator import run_pipe, resolve_pipe_from_context, CPP_SIGNATURE
-from .telemetry import log_telemetry
+from .telemetry import log_telemetry, generate_audit_header
 
 def check_echo(text: str) -> bool:
     """Checks if the content was processed recently to prevent loops (30s TTL)."""
@@ -76,9 +76,10 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     # 5. Execution
     try:
         sifted_content, trace = run_pipe(pipe, str(raw_content))
+        latency_ms = (time.time() - start_t) * 1000
         
         # 6. Telemetry (Accounting per node)
-        latency_per_node = (time.time() - start_t) * 1000 / max(1, len(trace))
+        latency_per_node = latency_ms / max(1, len(trace))
         for entry in trace:
             if "error" in entry: continue
             log_telemetry(
@@ -91,8 +92,11 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
                 agent_label=agent_label
             )
             
-        # 7. Inject & Signature
-        final_content = f"{sifted_content}\n\n{CPP_SIGNATURE}"
+        # 7. Audit Header
+        header = generate_audit_header(pipe_name, trace, latency_ms)
+        
+        # 8. Inject & Signature
+        final_content = f"{header}{sifted_content}\n\n{CPP_SIGNATURE}"
         data = inject_content(data, final_content, platform)
         
         return json.dumps(data)

@@ -60,8 +60,33 @@ def log_telemetry(
             json.dump(events, f, indent=2)
     except OSError:
         pass
+def estimate_tokens(text: str) -> int:
+    """Provides a fast, high-fidelity token estimate (4 chars/token)."""
+    if not text: return 0
+    return max(1, len(text) // 4)
+
+def generate_audit_header(pipe_name: str, trace: List[Dict[str, Any]], latency_ms: float) -> str:
+    """Generates a Markdown audit header showing cumulative ROI and node latency."""
+    if not trace: return ""
+
+    start_size = trace[0]["input_size"]
+    end_size = trace[-1]["output_size"]
+
+    # Calculate Net ROI
+    reduction = (1 - (end_size / start_size)) * 100 if start_size > 0 else 0
+    reduction_label = f"{reduction:.1f}% Reduction" if reduction >= 0 else f"{abs(reduction):.1f}% Augmentation"
+
+    header = [
+        f"--- [Context-Pipe: {pipe_name}] ---",
+        f"📊 Context: {reduction_label} ({start_size/1024:.1f}KB -> {end_size/1024:.1f}KB)",
+        f"⚡ Latency: {latency_ms:.1f}ms",
+        "Nodes: " + " → ".join([n["node"] for n in trace]),
+        "-----------------------------\n"
+    ]
+    return "\n".join(header)
 
 def get_balance_sheet() -> Dict[str, Any]:
+...
     """Calculates context ROI as a Balance Sheet of signal vs noise."""
     if not os.path.exists(TELEMETRY_FILE):
         return {"signal_added": 0, "noise_removed": 0, "net_change": 0, "events": 0}
