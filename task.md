@@ -11,7 +11,8 @@ Complete the Phase 1 scaffolding and prepare for the core implementation.
 - [x] Initialize Python package (`pyproject.toml`, `src/`).
 - [x] Implement core `orchestrator.py`.
 - [x] Implement MCP `server.py`.
-- [ ] Implement `pipe_hook.py` universal interceptor.
+- [x] Implement `pipe_hook.py` universal interceptor.
+- [ ] Implement `context_pipe/telemetry.py` for ROI tracking.
 
 ## ⚠️ Notes
 - The project follows the **Context-Pipe Protocol (CPP)**.
