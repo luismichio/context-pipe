@@ -5,7 +5,7 @@ import sys
 import json
 import os
 from context_pipe.platforms import detect_client_id, extract_content, inject_content
-from context_pipe.orchestrator import run_pipe
+from context_pipe.orchestrator import run_pipe, resolve_pipe_from_context
 
 # Metadata Signatures
 CPP_SIGNATURE = "--- [Context-Pipe: Native Execution] ---"
@@ -31,25 +31,22 @@ def main():
         sys.stdout.write(raw_input)
         return
 
-    # 3. Decision Logic: Should we pipe?
-    # For now, we only pipe if it's large (> 1000 chars)
-    if len(str(raw_content)) < 1000:
-        sys.stdout.write(raw_input)
-        return
-
-    # 4. Load Pipe Configuration
-    # We use 'standard-distill' as the default pipe for the hook
+    # 3. Load Pipe Configuration
     config_path = os.environ.get("PIPE_CONFIG_PATH", "pipes.json")
     try:
         with open(config_path, "r") as f:
             config = json.load(f)
     except FileNotFoundError:
-        # No config, no pipe
         sys.stdout.write(raw_input)
         return
 
-    # Default Hook Pipe
-    pipe_name = os.environ.get("PIPE_HOOK_DEFAULT", "standard-distill")
+    # 4. Resolve Pipe Name (Agnostic Mapping)
+    pipe_name = resolve_pipe_from_context(config, str(tool_name), len(str(raw_content)))
+
+    if not pipe_name:
+        sys.stdout.write(raw_input)
+        return
+
     pipe = next((p for p in config.get("pipes", []) if p["name"] == pipe_name), None)
 
     if not pipe:
@@ -58,8 +55,8 @@ def main():
 
     # 5. Execute Pipe
     try:
-        sifted_content = run_pipe(pipe, raw_content)
-        
+        sifted_content = run_pipe(pipe, str(raw_content))
+...
         # 6. Inject & Signature
         final_content = f"{sifted_content}\n\n{CPP_SIGNATURE}"
         data = inject_content(data, final_content, platform)

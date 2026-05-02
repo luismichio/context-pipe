@@ -1,13 +1,42 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Luis Kobayashi. All rights reserved.
-
 import sys
 import json
 import subprocess
 import argparse
-from typing import List, Dict, Any
+import re
+from typing import List, Dict, Any, Optional
+
+def resolve_pipe_from_context(config: Dict[str, Any], tool_name: str, content_len: int) -> Optional[str]:
+    """Resolves a pipe name based on mapping triggers."""
+    mappings = config.get("mappings", [])
+
+    for m in mappings:
+        trigger = m.get("trigger", "")
+
+        # 1. Tool Trigger (tool:regex)
+        if trigger.startswith("tool:"):
+            pattern = trigger.replace("tool:", "")
+            if re.search(pattern, tool_name, re.IGNORECASE):
+                return m["pipe"]
+
+        # 2. Size Trigger (size:>num)
+        if trigger.startswith("size:>"):
+            try:
+                threshold = int(trigger.replace("size:>", ""))
+                if content_len > threshold:
+                    return m["pipe"]
+            except ValueError:
+                continue
+
+        # 3. Default Trigger
+        if trigger == "default":
+            return m["pipe"]
+
+    return None
 
 def run_pipe(pipe_config: Dict[str, Any], input_data: str) -> str:
+...
     """Executes a chain of nodes via OS-level pipes."""
     current_input = input_data
     
