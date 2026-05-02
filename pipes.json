@@ -8,7 +8,8 @@
       "nodes": [
         {
           "cmd": "sift-core",
-          "args": ["logs"]
+          "args": ["logs"],
+          "help_msg": "sift-core not found. Please install the Rust refinery via 'cargo install semantic-sift-core'."
         }
       ]
     },
@@ -18,7 +19,8 @@
       "nodes": [
         {
           "cmd": "sift-core",
-          "args": ["semantic", "--rate", "0.5"]
+          "args": ["semantic", "--rate", "0.5"],
+          "help_msg": "sift-core not found. Please install the Rust refinery via 'cargo install semantic-sift-core'."
         }
       ]
     },
@@ -38,11 +40,13 @@
       "nodes": [
         {
           "cmd": "markitdown",
-          "args": ["-"]
+          "args": ["-"],
+          "help_msg": "markitdown not found. Please install via 'pip install semantic-sift[multi-modal]'."
         },
         {
           "cmd": "sift-core",
-          "args": ["semantic", "--rate", "0.3"]
+          "args": ["semantic", "--rate", "0.3"],
+          "help_msg": "sift-core not found. Please install the Rust refinery via 'cargo install semantic-sift-core'."
         }
       ]
     }

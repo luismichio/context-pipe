@@ -43,26 +43,36 @@ def run_pipe(pipe_config: Dict[str, Any], input_data: str) -> tuple[str, List[Di
     for node in pipe_config.get("nodes", []):
         cmd = [node["cmd"]] + node.get("args", [])
         start_size = len(current_input)
-
-        # High-Fidelity OS Piping
-        process = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
-
-        stdout, stderr = process.communicate(input=current_input)
-
-        if process.returncode != 0:
-            # Record error in trace
+        
+        try:
+            # High-Fidelity OS Piping
+            process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            stdout, stderr = process.communicate(input=current_input)
+            
+            if process.returncode != 0:
+                # Record error in trace
+                trace.append({
+                    "node": node["cmd"],
+                    "error": stderr.strip()
+                })
+                return f"Error in node {node['cmd']}: {stderr}", trace
+                
+        except FileNotFoundError:
+            help_msg = node.get("help_msg", f"Command '{node['cmd']}' not found in system PATH.")
+            error_text = f"--- [Context-Pipe: Dependency Error] ---\n{help_msg}"
             trace.append({
                 "node": node["cmd"],
-                "error": stderr.strip()
+                "error": "FileNotFound"
             })
-            return f"Error in node {node['cmd']}: {stderr}", trace
-
+            return error_text, trace
+        
         end_size = len(stdout)
         trace.append({
             "node": node["cmd"],

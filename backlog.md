@@ -14,7 +14,8 @@
 - [ ] **Dynamic Environment Detection**: Auto-detection of IDEs (Cursor, VS Code, Zed).
 - [ ] **Standard CLI Aliases**: Add `/pipe` commands to common shells.
 
-## 🟢 Phase 3: The Refinery Ecosystem
+## 🟢 Phase 3: The Refinery Ecosystem (In Progress)
+- [x] **Graceful Resilience**: Automated help messages for missing tools (e.g. sift-core, markitdown).
 - [ ] **Semantic-Sift Integration**: Pre-configured pipe for `sift-core`.
 - [ ] **Multi-Modal Pipe**: Pre-configured pipe for `markitdown`.
 - [ ] **Privacy Guard**: Native PII/Secret masking node.

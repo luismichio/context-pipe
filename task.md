@@ -13,6 +13,7 @@ Complete the Phase 1 scaffolding and prepare for the core implementation.
 - [x] Implement MCP `server.py`.
 - [x] Implement `pipe_hook.py` universal interceptor.
 - [x] Implement `context_pipe/telemetry.py` for ROI tracking.
+- [x] Implement Graceful Resilience (Handling missing tools with help messages).
 - [ ] Implement Phase 2: CPP Polyfill Wrapper.
 
 ## ⚠️ Notes
