@@ -54,9 +54,9 @@
       "description": "Complete ingestion and distillation chain.",
       "nodes": [
         {
-          "cmd": "markitdown",
-          "args": ["-"],
-          "help_msg": "markitdown not found. Please install via 'pip install semantic-sift[multi-modal]'."
+          "cmd": "context-pipe-ingest",
+          "args": [],
+          "help_msg": "Multi-modal ingestion failed. Please run 'pip install context-pipe[multi-modal]'."
         },
         {
           "cmd": "sift-core",

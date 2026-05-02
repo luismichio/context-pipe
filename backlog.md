@@ -17,8 +17,9 @@
 ## 🟢 Phase 3: The Refinery Ecosystem (In Progress)
 - [x] **Graceful Resilience**: Automated help messages for missing tools (e.g. sift-core, markitdown).
 - [x] **Privacy Guard**: Native PII/Secret masking node (`context-pipe-mask`).
+- [x] **Multi-Modal Pipe**: High-fidelity ingestion for PDF/Office (`context-pipe-ingest`).
 - [ ] **Semantic-Sift Integration**: Pre-configured pipe for `sift-core`.
-- [ ] **Multi-Modal Pipe**: Pre-configured pipe for `markitdown`.
+- [ ] **Adaptive Thresholding**: Dynamically adjust rates based on window pressure.
 
 
 ## ⚪ Phase 4: Distribution
