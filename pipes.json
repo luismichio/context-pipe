@@ -1,0 +1,40 @@
+{
+  "version": "1.0",
+  "description": "Standard high-fidelity context pipes for the Studio of Two.",
+  "pipes": [
+    {
+      "name": "standard-distill",
+      "description": "Default log sifting pipe.",
+      "nodes": [
+        {
+          "cmd": "sift-core",
+          "args": ["logs"]
+        }
+      ]
+    },
+    {
+      "name": "semantic-refinery",
+      "description": "High-intelligence neural distillation.",
+      "nodes": [
+        {
+          "cmd": "sift-core",
+          "args": ["semantic", "--rate", "0.5"]
+        }
+      ]
+    },
+    {
+      "name": "full-refinery",
+      "description": "Complete ingestion and distillation chain.",
+      "nodes": [
+        {
+          "cmd": "markitdown",
+          "args": ["-"]
+        },
+        {
+          "cmd": "sift-core",
+          "args": ["semantic", "--rate", "0.3"]
+        }
+      ]
+    }
+  ]
+}
