@@ -23,6 +23,16 @@
       ]
     },
     {
+      "name": "test-pipe",
+      "description": "Verification pipe using findstr.",
+      "nodes": [
+        {
+          "cmd": "findstr",
+          "args": ["SIGNAL"]
+        }
+      ]
+    },
+    {
       "name": "full-refinery",
       "description": "Complete ingestion and distillation chain.",
       "nodes": [
