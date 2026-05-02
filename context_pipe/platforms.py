@@ -19,7 +19,9 @@ def detect_client_id() -> str:
         "VSCODE_PID": "VSCode",
         "GEMINI_SESSION_ID": "Gemini CLI",
         "OPENCODE_ENV": "OpenCode",
-        "ZED_SESSION": "Zed"
+        "ZED_SESSION": "Zed",
+        "CONTINUE": "Continue",
+        "WINDSURF_AGENT": "Windsurf"
     }
     
     for var, label in env_map.items():
@@ -35,6 +37,8 @@ def detect_client_id() -> str:
         if "code" in parent_name: return "VSCode"
         if "claude" in parent_name: return "Claude Desktop"
         if "zed" in parent_name: return "Zed"
+        if "continue" in parent_name: return "Continue"
+        if "windsurf" in parent_name: return "Windsurf"
         if "py" in parent_name or "python" in parent_name: return "Python Script"
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         pass
@@ -48,15 +52,19 @@ def extract_content(data: Dict, platform: str) -> tuple[str, Optional[str]]:
     tool_name = data.get("tool_name") or data.get("tool") or "unknown"
     content = ""
     
-    if platform in ["Gemini CLI", "VSCode", "OpenCode"]:
-        content = data.get("tool_response", {}).get("llmContent", "")
-    elif platform == "Cursor" or platform == "Claude Desktop":
-        content = data.get("result", "")
-    else:
-        # Fallback search for common content keys
-        content = data.get("llmContent") or data.get("result") or data.get("content") or ""
+    # 1. Standard MCP / VSCode / Gemini / OpenCode Shape
+    if "tool_response" in data and isinstance(data["tool_response"], dict):
+        content = data["tool_response"].get("llmContent", "")
         
-    # If content is still empty, maybe it's the whole data as a string
+    # 2. Cursor / Claude Desktop / CLI Shape
+    if not content:
+        content = data.get("result", "")
+        
+    # 3. Fallback search for common content keys
+    if not content:
+        content = data.get("llmContent") or data.get("content") or ""
+        
+    # 4. Final fallback: whole data if it's a string
     if not content and isinstance(data, str):
         content = data
         
@@ -66,15 +74,21 @@ def inject_content(data: Dict, content: str, platform: str) -> Dict:
     """
     Injects processed content back into the platform-specific JSON payload.
     """
-    if platform in ["Gemini CLI", "VSCode", "OpenCode"]:
-        if "tool_response" not in data: data["tool_response"] = {}
+    # 1. Standard MCP / VSCode / Gemini / OpenCode Shape
+    if "tool_response" in data and isinstance(data["tool_response"], dict):
         data["tool_response"]["llmContent"] = content
-    elif platform == "Cursor" or platform == "Claude Desktop":
+        return data
+        
+    # 2. Cursor / Claude Desktop / CLI Shape
+    if "result" in data:
         data["result"] = content
+        return data
+        
+    # 3. Fallback: if 'llmContent' exists directly
+    if "llmContent" in data:
+        data["llmContent"] = content
     else:
-        # Fallback: if 'result' exists, update it, otherwise set it
-        if "result" in data: data["result"] = content
-        elif "llmContent" in data: data["llmContent"] = content
-        else: data["processed_content"] = content
+        # 4. Universal key for unrecognized shapes
+        data["processed_content"] = content
         
     return data

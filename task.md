@@ -14,7 +14,9 @@ Complete the Phase 1 scaffolding and prepare for the core implementation.
 - [x] Implement `pipe_hook.py` universal interceptor.
 - [x] Implement `context_pipe/telemetry.py` for ROI tracking.
 - [x] Implement Graceful Resilience (Handling missing tools with help messages).
-- [ ] Implement Phase 2: CPP Polyfill Wrapper.
+- [x] Implement Phase 2: CPP Polyfill Wrapper (`context-pipe wrap`).
+- [x] Enhance Environment Detection (Zed, Continue, Windsurf).
+- [ ] Implement Phase 3: Semantic-Sift Native Integration.
 
 ## ⚠️ Notes
 - The project follows the **Context-Pipe Protocol (CPP)**.

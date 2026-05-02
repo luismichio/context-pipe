@@ -9,9 +9,9 @@
 - [x] **Universal Hook**: Subconscious interceptor.
 - [x] **Telemetry Engine**: Basic ROI tracking.
 
-## 🟡 Phase 2: Interoperability (In Progress)
-- [ ] **CPP Polyfill Wrapper**: Universal wrapper for standard JSON-RPC tools.
-- [ ] **Dynamic Environment Detection**: Auto-detection of IDEs (Cursor, VS Code, Zed).
+## 🟡 Phase 2: Interoperability (Complete)
+- [x] **CPP Polyfill Wrapper**: Standalone utility (`context-pipe wrap`) for JSON-RPC tools.
+- [x] **Dynamic Environment Detection**: Multi-platform support (Zed, Continue, Windsurf, Cursor).
 - [ ] **Standard CLI Aliases**: Add `/pipe` commands to common shells.
 
 ## 🟢 Phase 3: The Refinery Ecosystem (In Progress)

@@ -7,6 +7,9 @@ import argparse
 import re
 from typing import List, Dict, Any, Optional
 
+# Metadata Signatures
+CPP_SIGNATURE = "--- [Context-Pipe: Native Execution] ---"
+
 def resolve_pipe_from_context(config: Dict[str, Any], tool_name: str, content_len: int) -> Optional[str]:
     """Resolves a pipe name based on mapping triggers."""
     mappings = config.get("mappings", [])
@@ -87,9 +90,21 @@ def run_pipe(pipe_config: Dict[str, Any], input_data: str) -> tuple[str, List[Di
 
 def main():
     parser = argparse.ArgumentParser(description="Context-Pipe Orchestrator")
-    parser.add_argument("pipe_name", help="Name of the pipe to execute from pipes.json")
-    parser.add_argument("--config", default="pipes.json", help="Path to pipes.json")
+    subparsers = parser.add_subparsers(dest="command", help="Subcommands")
     
+    # 1. 'run' command (default)
+    run_parser = subparsers.add_parser("run", help="Run a specific pipe")
+    run_parser.add_argument("pipe_name", help="Name of the pipe to execute from pipes.json")
+    run_parser.add_argument("--config", default="pipes.json", help="Path to pipes.json")
+    
+    # 2. 'wrap' command (JSON polyfill)
+    wrap_parser = subparsers.add_parser("wrap", help="Wrap a JSON-RPC payload")
+    wrap_parser.add_argument("--config", default="pipes.json", help="Path to pipes.json")
+    
+    # Compatibility with old behavior (no subcommand)
+    if len(sys.argv) > 1 and sys.argv[1] not in ["run", "wrap"]:
+        sys.argv.insert(1, "run")
+        
     args = parser.parse_args()
     
     try:
@@ -99,21 +114,28 @@ def main():
         print(f"Error: Config file {args.config} not found.")
         sys.exit(1)
         
-    # Find the requested pipe
-    pipe = next((p for p in config.get("pipes", []) if p["name"] == args.pipe_name), None)
-    
-    if not pipe:
-        print(f"Error: Pipe '{args.pipe_name}' not found in {args.config}")
-        sys.exit(1)
+    if args.command == "run":
+        # Find the requested pipe
+        pipe = next((p for p in config.get("pipes", []) if p["name"] == args.pipe_name), None)
         
-    # Read from stdin
-    input_data = sys.stdin.read()
-    
-    # Run the pipe
-    result, trace = run_pipe(pipe, input_data)
-    
-    # Output the result
-    sys.stdout.write(result)
+        if not pipe:
+            print(f"Error: Pipe '{args.pipe_name}' not found in {args.config}")
+            sys.exit(1)
+            
+        # Read from stdin
+        input_data = sys.stdin.read()
+        
+        # Run the pipe
+        result, trace = run_pipe(pipe, input_data)
+        
+        # Output the result
+        sys.stdout.write(result)
+        
+    elif args.command == "wrap":
+        from .wrapper import wrap_payload
+        raw_input = sys.stdin.read()
+        result = wrap_payload(raw_input, config)
+        sys.stdout.write(result)
 
 if __name__ == "__main__":
     main()
