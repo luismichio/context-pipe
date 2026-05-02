@@ -16,9 +16,10 @@
 
 ## 🟢 Phase 3: The Refinery Ecosystem (In Progress)
 - [x] **Graceful Resilience**: Automated help messages for missing tools (e.g. sift-core, markitdown).
+- [x] **Privacy Guard**: Native PII/Secret masking node (`context-pipe-mask`).
 - [ ] **Semantic-Sift Integration**: Pre-configured pipe for `sift-core`.
 - [ ] **Multi-Modal Pipe**: Pre-configured pipe for `markitdown`.
-- [ ] **Privacy Guard**: Native PII/Secret masking node.
+
 
 ## ⚪ Phase 4: Distribution
 - [ ] **PyPI Publishing**: `pip install context-pipe`.

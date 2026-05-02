@@ -16,7 +16,8 @@ Complete the Phase 1 scaffolding and prepare for the core implementation.
 - [x] Implement Graceful Resilience (Handling missing tools with help messages).
 - [x] Implement Phase 2: CPP Polyfill Wrapper (`context-pipe wrap`).
 - [x] Enhance Environment Detection (Zed, Continue, Windsurf).
-- [ ] Implement Phase 3: Semantic-Sift Native Integration.
+- [x] Implement Privacy Guard (Secret Masking node).
+- [ ] Implement Phase 3: Multi-Modal Pipe (MarkItDown integration).
 
 ## ⚠️ Notes
 - The project follows the **Context-Pipe Protocol (CPP)**.

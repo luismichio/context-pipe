@@ -14,6 +14,21 @@
       ]
     },
     {
+      "name": "secure-distill",
+      "description": "Masks secrets before sifting logs.",
+      "nodes": [
+        {
+          "cmd": "context-pipe-mask",
+          "args": []
+        },
+        {
+          "cmd": "sift-core",
+          "args": ["logs"],
+          "help_msg": "sift-core not found. Please install the Rust refinery via 'cargo install semantic-sift-core'."
+        }
+      ]
+    },
+    {
       "name": "semantic-refinery",
       "description": "High-intelligence neural distillation.",
       "nodes": [
