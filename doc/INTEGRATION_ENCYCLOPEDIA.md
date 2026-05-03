@@ -56,10 +56,10 @@ To install the Context-Pipe server, find your software in the matrix below and c
 ### A. Standard Schema (JSON Object)
 ```json
 "context-pipe": {
-  "command": "C:/Users/luism/Workbench/GitHub/context-pipe/venv/Scripts/python.exe",
+  "command": "/path/to/python.exe",
   "args": ["-m", "context_pipe.server"],
   "env": {
-    "PIPE_CONFIG_PATH": "C:/Users/luism/Workbench/GitHub/context-pipe/pipes.json",
+    "PIPE_CONFIG_PATH": "/path/to/your/pipes.json",
     "PIPE_NODE_TIMEOUT_MS": "10000"
   }
 }
@@ -70,12 +70,12 @@ To install the Context-Pipe server, find your software in the matrix below and c
 "context-pipe": {
   "type": "local",
   "command": [
-    "C:/Users/luism/Workbench/GitHub/context-pipe/venv/Scripts/python.exe", 
+    "/path/to/python.exe", 
     "-m", 
     "context_pipe.server"
   ],
   "environment": {
-    "PIPE_CONFIG_PATH": "C:/Users/luism/Workbench/GitHub/context-pipe/pipes.json"
+    "PIPE_CONFIG_PATH": "/path/to/your/pipes.json"
   }
 }
 ```
@@ -83,8 +83,11 @@ To install the Context-Pipe server, find your software in the matrix below and c
 ### C. Extended Schema (Cline / Roo Code)
 ```json
 "context-pipe": {
-  "command": "C:/path/to/python.exe",
+  "command": "/path/to/python.exe",
   "args": ["-m", "context_pipe.server"],
+  "env": {
+    "PIPE_CONFIG_PATH": "/path/to/your/pipes.json"
+  },
   "autoApprove": ["pipe_read_file", "pipe_analyze_file", "pipe_run", "get_pipe_stats"]
 }
 ```
@@ -93,8 +96,11 @@ To install the Context-Pipe server, find your software in the matrix below and c
 ```json
 "context-pipe": {
   "type": "stdio",
-  "command": "C:/path/to/python.exe",
-  "args": ["-m", "context_pipe.server"]
+  "command": "/path/to/python.exe",
+  "args": ["-m", "context_pipe.server"],
+  "env": {
+    "PIPE_CONFIG_PATH": "/path/to/your/pipes.json"
+  }
 }
 ```
 
