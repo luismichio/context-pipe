@@ -113,4 +113,22 @@ Nodes: context-pipe-ingest → semantic-sift-cli
 ```
 
 ---
+
+## 7. Auto-Onboarding
+
+Context-Pipe includes an automated engine to configure your project workspace with one command.
+
+### How to Onboard
+Once you have connected the MCP server to your IDE, ask your AI assistant:
+> *"Run `pipe_onboard(environment='Cursor')`"*
+
+Replace `'Cursor'` with your active environment (e.g., `'Gemini'`, `'VSCode'`, `'Windsurf'`, `'Claude'`, `'Cline'`).
+
+### What Onboarding Does
+1.  **Mandate Injection**: Injects the Context-Pipe SOP into `AGENTS.md`, `.cursorrules`, and other instruction files. This forces the agent to use `pipe_read_file` for all file I/O.
+2.  **Hook Injection**: Automatically configures `.cursor/hooks.json` or `.github/hooks/` to use the `context-pipe wrap` polyfill for all other tool calls.
+3.  **Security Gateways**: Injects blocking hooks into Windsurf and Cline to proactively prevent large native file reads.
+4.  **Subagent Shielding**: Recursively discovers specialized agent configs (e.g., in `.cursor/agents/`) and applies context protection to them.
+
+---
 *Building Systems, not Patches.*

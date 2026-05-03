@@ -45,17 +45,26 @@ For development tools (pytest, ruff, mypy):
 pip install .[dev]
 ```
 
-### 2. Connect a Refinery
-Semantic-Sift is the recommended intelligence engine for Context-Pipe:
+### 2. Connect the MCP
+
+> **CRITICAL**: For exact configuration paths for Cursor, Gemini, OpenCode, VS Code, and Claude, reference the **[Master Configuration Matrix](doc/INTEGRATION_ENCYCLOPEDIA.md#2-master-configuration-matrix-installation)**.
+
+### 3. Connect a Refinery
+Context-Pipe is the "Switchboard," but it needs a "Refinery" to distill data. **[Semantic-Sift](https://github.com/luismichio/semantic-sift)** is the flagship intelligence engine for this ecosystem. It uses heuristic sieves and neural models (BERT/ONNX) to incinerate noise (timestamps, boilerplate) while preserving 95% of the signal.
+
 ```bash
-# Clone the Sift repository
+# Clone the Sift repository to gain access to the Rust sidecar and models
 git clone https://github.com/luismichio/semantic-sift.git
 cd semantic-sift
 pip install .[neural,multi-modal]
 ```
 
-### 3. Configure your first Pipe
-Edit `pipes.json` to define your high-fidelity context streams.
+### 4. Configure your first Pipe
+Edit `pipes.json` (see `pipes.json.example`) to define your high-fidelity context streams.
+
+### 5. Auto-Onboard
+Once connected, ask your AI Assistant to configure your workspace:
+> *"Run `pipe_onboard(environment='Cursor')` to configure this project."*
 
 ---
 

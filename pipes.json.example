@@ -1,0 +1,56 @@
+{
+  "version": "1.0",
+  "description": "High-fidelity context pipe template for the Studio of Two.",
+  "pipes": [
+    {
+      "name": "standard-distill",
+      "description": "Fast log sifting via Semantic-Sift.",
+      "nodes": [
+        {
+          "cmd": "semantic-sift-cli",
+          "args": ["logs"],
+          "help_msg": "semantic-sift-cli not found. Run 'pip install semantic-sift'."
+        }
+      ]
+    },
+    {
+      "name": "semantic-refinery",
+      "description": "Neural distillation for code and prose (Hybrid Engine).",
+      "nodes": [
+        {
+          "cmd": "semantic-sift-cli",
+          "args": ["semantic", "--rate", "0.5"],
+          "help_msg": "semantic-sift-cli not found. Run 'pip install semantic-sift'."
+        }
+      ]
+    },
+    {
+      "name": "secure-distill",
+      "description": "PII Masking -> Log Distillation.",
+      "nodes": [
+        {
+          "cmd": "context-pipe-skill",
+          "args": ["pii-masker"]
+        },
+        {
+          "cmd": "semantic-sift-cli",
+          "args": ["logs"]
+        }
+      ]
+    }
+  ],
+  "mappings": [
+    {
+      "trigger": "tool:search|grep|find",
+      "pipe": "semantic-refinery"
+    },
+    {
+      "trigger": "size:>10000",
+      "pipe": "semantic-refinery"
+    },
+    {
+      "trigger": "default",
+      "pipe": "standard-distill"
+    }
+  ]
+}

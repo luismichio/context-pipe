@@ -107,6 +107,11 @@ Safely merges execution commands into existing IDE configurations:
 *   **Post-Tool Shell Hooks**: Injects `context-pipe wrap` into Cursor, VS Code, Claude Code, Qwen CLI, and Codex CLI.
 *   **Pre-Tool Security Gateways**: Injects blocking logic into Windsurf (`hooks.json`) and Cline (`PreToolUse.ps1`).
 
+### C. Recursive Subagent Discovery
+During onboarding, the engine performs a recursive crawl of the workspace (up to 3 levels deep) to shield isolated background threads:
+*   **Specialized Agent Folders**: Specifically targets `.cursor/agents/`, `.codex/agents/`, `.junie/agents/`, and `.agents/`.
+*   **Scoped Mandates**: Identifies any `AGENTS.md` files located in subdirectories and injects the context protection SOP.
+
 ---
 
 ## 5. Payload Structures & Interception Logic (`wrapper.py`)

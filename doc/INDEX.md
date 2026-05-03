@@ -29,14 +29,15 @@ Welcome to the central hub for the **Context-Pipe Platform (CPP)**. This directo
     *   Dynamic Discovery standards.
 
 ### 4. [`doc/INTEGRATION_ENCYCLOPEDIA.md`](INTEGRATION_ENCYCLOPEDIA.md)
-*   **Intent**: Compatibility matrix and payload specifications for IDEs.
+*   **Intent**: Compatibility matrix, payload specifications, and Master Configuration blocks for IDEs.
 *   **Topics**:
     *   Support for Cursor, Windsurf, VS Code, Claude Code, and more.
     *   Hook injection logic and payload shapes.
     *   Security Gateways and Inhibitors.
+    *   Standard, Unified, and Extended Configuration schemas.
 
-### 5. [`doc/MCP_CONFIG_EXAMPLES.md`](MCP_CONFIG_EXAMPLES.md)
-*   **Intent**: Ready-to-use configuration blocks for all major AI platforms.
+### 5. [`doc/IDE_MCP_INTEGRATION_WIKI.md`](IDE_MCP_INTEGRATION_WIKI.md)
+*   **Intent**: Exhaustive legacy reference for deep IDE integration patterns.
 
 ### 6. [`doc/CHANGELOG.md`](CHANGELOG.md)
 *   **Intent**: Historical record of features, fixes, and architectural shifts.
