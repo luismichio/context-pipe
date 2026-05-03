@@ -32,14 +32,30 @@ Universal hooks that automatically apply your context pipes to *any* MCP tool ca
 
 ## 🏗️ Getting Started
 
-1. **Install the Orchestrator:**
-   `pip install context-pipe`
+### 1. Installation
+Clone the repository and install the orchestrator:
+```bash
+git clone https://github.com/luismichio/context-pipe.git
+cd context-pipe
+pip install .
+```
 
-2. **Connect a Refinery:**
-   `pip install semantic-sift[neural,multi-modal]` (Recommended) or `cargo install semantic-sift-core` (Native Sidecar)
+For development tools (pytest, ruff, mypy):
+```bash
+pip install .[dev]
+```
 
-3. **Configure your first Pipe:**
-   Edit `pipes.json` to define your high-fidelity context streams.
+### 2. Connect a Refinery
+Semantic-Sift is the recommended intelligence engine for Context-Pipe:
+```bash
+# Clone the Sift repository
+git clone https://github.com/luismichio/semantic-sift.git
+cd semantic-sift
+pip install .[neural,multi-modal]
+```
+
+### 3. Configure your first Pipe
+Edit `pipes.json` to define your high-fidelity context streams.
 
 ---
 
