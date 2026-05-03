@@ -133,13 +133,25 @@ def generate_audit_header(pipe_name: str, trace: List[Dict[str, Any]], latency_m
 def get_balance_sheet() -> Dict[str, Any]:
     """Calculates context ROI as a Balance Sheet of signal vs noise."""
     if not os.path.exists(TELEMETRY_FILE):
-        return {"signal_added": 0, "noise_removed": 0, "net_change": 0, "events": 0}
-        
+        return {
+            "signal_added": 0,
+            "noise_removed": 0,
+            "net_change": 0,
+            "total_events": 0,
+            "avg_latency_ms": 0.0
+        }
+
     try:
-        with open(TELEMETRY_FILE, "r", encoding="utf-8") as f:
+        with open(TELEMETRY_FILE, "r") as f:
             events = json.load(f)
     except (json.JSONDecodeError, OSError):
-        return {"signal_added": 0, "noise_removed": 0, "net_change": 0, "events": 0}
+        return {
+            "signal_added": 0,
+            "noise_removed": 0,
+            "net_change": 0,
+            "total_events": 0,
+            "avg_latency_ms": 0.0
+        }
         
     signal_added = sum(e["delta"] for e in events if e["delta"] > 0)
     noise_removed = sum(abs(e["delta"]) for e in events if e["delta"] < 0)
