@@ -26,16 +26,11 @@
     },
     {
       "name": "full-refinery",
-      "description": "Complete ingestion and distillation chain template.",
+      "description": "Complete ingestion and distillation chain (Smart Sift).",
       "nodes": [
         {
-          "cmd": "context-pipe-ingest",
-          "args": [],
-          "help_msg": "Multi-modal ingestion failed. Please run 'pip install context-pipe[multi-modal]'."
-        },
-        {
           "cmd": "semantic-sift-cli",
-          "args": ["semantic", "--rate", "0.3"],
+          "args": ["auto", "--rate", "0.3"],
           "help_msg": "semantic-sift-cli not found. Please install the Python orchestrator via 'pip install semantic-sift'."
         }
       ]
