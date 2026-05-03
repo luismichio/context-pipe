@@ -1,6 +1,6 @@
 # Context-Pipe: Integration Encyclopedia
 
-This document serves as the master compatibility map and payload specification authority for the **Context-Pipe Platform (CPP)**. It details how the system orchestrates context across a highly fragmented ecosystem of IDEs, AI coding assistants, and CLI agents.
+This document serves as the master compatibility map and configuration authority for the **Context-Pipe Platform (CPP)**. It details how the system orchestrates context across a highly fragmented ecosystem of IDEs, AI coding assistants, and CLI agents.
 
 ---
 
@@ -32,7 +32,68 @@ These environments have dedicated logic implemented in `pipe_hook.py` for payloa
 
 ---
 
-## 2. Onboarding & Mandate Injection (`onboarding.py`)
+## 2. Master Configuration Matrix (Installation)
+
+To install the Context-Pipe server, find your software in the matrix below and copy the appropriate schema from Section 3.
+
+| Software | Configuration Path | Target Key | Expected Schema |
+| :--- | :--- | :--- | :--- |
+| **Claude Desktop** | `~/AppData/Roaming/Claude/claude_desktop_config.json` | `mcpServers` | **A** (Standard) |
+| **Claude Code** | `~/.claude/settings.json` | `mcp_servers` | **A** (Standard) |
+| **Qwen CLI** | `~/.qwen/settings.json" | `mcp_servers` | **A** (Standard) |
+| **Codex CLI** | `~/.codex/mcp-config.json` | `mcpServers` | **A** (Standard) |
+| **Continue.dev** | `~/.continue/config.json` | `mcpServers` | **D** (Unified) |
+| **Zed** | `~/.config/zed/settings.json` | `context_servers` | **A** (Standard) |
+| **VS Code Copilot**| `~/.copilot/mcp-config.json` | `mcpServers` | **A** (Standard) |
+| **OpenCode** | `~/.opencode.json` | `mcpServers` | **B** (Array) |
+| **Google Antigravity**| `~/.gemini/antigravity/mcp_config.json` | `mcpServers` | **A** (Standard) |
+| **Cline / Roo Code** | IDE settings menu | `mcpServers` | **C** (Extended) |
+
+---
+
+## 3. Configuration Schemas
+
+### A. Standard Schema (JSON Object)
+```json
+"context-pipe": {
+  "command": "C:/path/to/python.exe",
+  "args": ["-m", "context_pipe.server"],
+  "env": {
+    "PIPE_CONFIG_PATH": "C:/path/to/your/pipes.json",
+    "PIPE_NODE_TIMEOUT_MS": "10000"
+  }
+}
+```
+
+### B. Local Array Schema (OpenCode, Kilo Code)
+```json
+"context-pipe": {
+  "type": "local",
+  "command": ["C:/path/to/python.exe", "-m", "context_pipe.server"]
+}
+```
+
+### C. Extended Schema (Cline / Roo Code)
+```json
+"context-pipe": {
+  "command": "C:/path/to/python.exe",
+  "args": ["-m", "context_pipe.server"],
+  "autoApprove": ["pipe_read_file", "pipe_analyze_file", "pipe_run", "get_pipe_stats"]
+}
+```
+
+### D. Unified Schema (Windsurf, Continue.dev)
+```json
+"context-pipe": {
+  "type": "stdio",
+  "command": "C:/path/to/python.exe",
+  "args": ["-m", "context_pipe.server"]
+}
+```
+
+---
+
+## 4. Onboarding & Hook Injection (`onboarding.py`)
 
 The `pipe_onboard` tool acts as the automated configuration engine, ensuring that all available security gateways, hook registries, and agent instruction files are primed for Context-Pipe.
 
@@ -48,7 +109,7 @@ Safely merges execution commands into existing IDE configurations:
 
 ---
 
-## 3. Payload Structures & Interception Logic (`wrapper.py`)
+## 5. Payload Structures & Interception Logic (`wrapper.py`)
 
 ### 1. Smart Hooks (CLI Agents & Plugins)
 *   **Gemini/OpenCode/OpenClaw**: Detects `AfterTool` or `Compacting` event names. Extracts `tool_response.llmContent`.
@@ -60,61 +121,11 @@ Safely merges execution commands into existing IDE configurations:
 
 ---
 
-## 4. The Context-Pipe Signature (Bypass)
+## 6. The Context-Pipe Signature (Bypass)
 
 To prevent **Double-Sifting** and infinite loops:
 1.  All processed content is appended with: `\n\n--- [Context-Pipe: Native Execution] ---`.
 2.  The wrapper explicitly scans content for this signature and the legacy `--- [Semantic-Sift Audit] ---` signature. If found, it instantly bypasses processing.
-
----
-
-## 5. Master Configuration Matrix (MCP Server Installation)
-
-| Software | Configuration Path | Target Key | Expected Schema Style |
-| :--- | :--- | :--- | :--- |
-| **Claude Desktop** | `~/AppData/Roaming/Claude/claude_desktop_config.json` | `mcpServers` | Standard |
-| **Claude Code** | `~/.claude/settings.json` | `mcp_servers` | Standard |
-| **Qwen CLI** | `~/.qwen/settings.json` | `mcp_servers` | Standard |
-| **Codex CLI** | `~/.codex/mcp-config.json` | `mcpServers` | Standard |
-| **Continue.dev** | `~/.continue/config.json` | `mcpServers` | Unified |
-| **Zed** | `~/.config/zed/settings.json` | `context_servers` | Standard |
-| **VS Code Copilot**| `~/.copilot/mcp-config.json` | `mcpServers` | Standard |
-| **OpenCode** | `~/.opencode.json` | `mcpServers` | Local Array |
-| **Google Antigravity**| `~/.gemini/antigravity/mcp_config.json` | `mcpServers` | Standard |
-
-### A. Standard Schema (Gemini, Claude, Cursor, Copilot, Zed, Codex)
-```json
-"context-pipe": {
-  "command": "python",
-  "args": ["-m", "context_pipe.server"]
-}
-```
-
-### B. Local Array Schema (OpenCode, Kilo Code)
-```json
-"context-pipe": {
-  "type": "local",
-  "command": ["python", "-m", "context_pipe.server"]
-}
-```
-
-### C. Extended Schema (Cline / Roo Code)
-```json
-"context-pipe": {
-  "command": "python",
-  "args": ["-m", "context_pipe.server"],
-  "autoApprove": ["pipe_read_file", "pipe_analyze_file", "pipe_run", "get_pipe_stats"]
-}
-```
-
-### D. Unified Schema (Continue, Windsurf)
-```json
-"context-pipe": {
-  "type": "stdio",
-  "command": "python",
-  "args": ["-m", "context_pipe.server"]
-}
-```
 
 ---
 *Building High-Fidelity Infrastructure for the Studio of Two.*

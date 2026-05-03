@@ -14,6 +14,7 @@ venv/
 .idea/
 .gemini/
 opencode.json
+.serena/
 
 # OS
 .DS_Store
@@ -22,3 +23,5 @@ Thumbs.db
 # Project Secrets
 .sift_identity
 .pipe_identity
+.sift_telemetry.json
+.sift_cache/

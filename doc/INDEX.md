@@ -35,7 +35,10 @@ Welcome to the central hub for the **Context-Pipe Platform (CPP)**. This directo
     *   Hook injection logic and payload shapes.
     *   Security Gateways and Inhibitors.
 
-### 5. [`doc/CHANGELOG.md`](CHANGELOG.md)
+### 5. [`doc/MCP_CONFIG_EXAMPLES.md`](MCP_CONFIG_EXAMPLES.md)
+*   **Intent**: Ready-to-use configuration blocks for all major AI platforms.
+
+### 6. [`doc/CHANGELOG.md`](CHANGELOG.md)
 *   **Intent**: Historical record of features, fixes, and architectural shifts.
 
 ---
