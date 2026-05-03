@@ -1,6 +1,6 @@
-# Semantic-Sift: Integration Encyclopedia
+# Context-Pipe: Integration Encyclopedia
 
-This document serves as the master compatibility map and payload specification authority for the Semantic-Sift system. It details how the system integrates across a highly fragmented ecosystem of IDEs, AI coding assistants, and CLI agents, preventing infinite loops, context corruption, and double-processing.
+This document serves as the master compatibility map and payload specification authority for the **Context-Pipe Platform (CPP)**. It details how the system orchestrates context across a highly fragmented ecosystem of IDEs, AI coding assistants, and CLI agents.
 
 ---
 
@@ -9,137 +9,112 @@ This document serves as the master compatibility map and payload specification a
 The ecosystem of MCP clients falls into specific architectural categories regarding how they handle tool execution and middleware interception.
 
 ### Explicitly Supported (Smart & Blind Hooks)
-These environments have dedicated logic implemented in `sift_hook.py` for payload extraction and reinjection, as well as onboarding logic in `server.py`.
+These environments have dedicated logic implemented in `pipe_hook.py` for payload extraction and reinjection.
 
 *   **Gemini CLI**: 
     *   **Architecture**: Native platform event hooks (`AfterTool`, `PreCompress`). 
-    *   **Hook Type**: Smart Hook. Passes explicit event names and tool arguments.
-    *   **Support**: Full support for standard sifting and lifecycle "Compaction" events.
+    *   **Support**: Full support for standard piping and lifecycle "Compaction" events.
 *   **Claude Code, Qwen CLI & Codex CLI**:
     *   **Architecture**: `PostToolUse` deterministic shell command execution with regex matching (`mcp__.*__.*`).
-    *   **Hook Type**: Smart Hook. Passes explicit context via environment variables (e.g., `$CLAUDE_TOOL_NAME`, `$QWEN_TOOL_NAME`, `$CODEX_TOOL_NAME`).
     *   **Support**: Injected into `~/.claude/settings.json`, `~/.qwen/settings.json`, or `~/.codex/settings.json`.
 *   **VS Code (Copilot)**:
     *   **Architecture**: `PostToolUse` shell command execution.
-    *   **Hook Type**: Blind Hook. Relies on checking for the `tool_response.llmContent` payload structure.
-    *   **Support**: Injected into `.github/hooks/semantic-sift.json`.
+    *   **Support**: Injected into `.github/hooks/context-pipe.json`.
 *   **Cursor & Roo Code**:
     *   **Architecture**: `postToolUse` and `beforeMCPExecution` triggers via `hooks.json`.
-    *   **Hook Type**: Blind Hook. Passes JSON via standard input, omitting `tool_name`.
-    *   **Support**: Merges hook execution commands into `.cursor/hooks.json`. Relies on the **Content-Signature Bypass** to prevent double-sifting.
+    *   **Support**: Merges hook execution commands into `.cursor/hooks.json`. Relies on the **Echo Guard** to prevent loops.
 *   **OpenCode & OpenClaw**:
     *   **Architecture**: Native TypeScript Plugins.
-    *   **Hook Type**: Smart Hook. Hooks into `tool.execute.after` (OpenCode) or `api.on("tool:after")` (OpenClaw).
-    *   **Support**: Generates custom TypeScript wrappers at `.opencode/plugins/semantic-sift.ts` or `.openclaw/plugins/semantic-sift.ts`.
+    *   **Support**: Generates custom TypeScript wrappers at `.opencode/plugins/context-pipe.ts` or `.openclaw/plugins/context-pipe.ts`.
 *   **Windsurf & Cline**:
     *   **Architecture**: Security Gateway.
-    *   **Hook Type**: Blocking Hook. Triggers on `pre_mcp_tool_use` (Windsurf) or via `PreToolUse` executable (Cline).
-    *   **Support**: Injected into `.windsurf/hooks.json` or `.clinerules/hooks/`. Automatically blocks native file readers > 1KB to force the use of `sift_read_file`.
-
-### Unshielded / Instruction-Reliant Environments
-These platforms lack robust post-tool shell hooks or act as pass-throughs. They rely entirely on `sift_onboard` injecting mandatory rules into their system prompts to force the agent to use `sift_read_file` instead of standard file readers.
-
-*   **Google Antigravity**: Relies on `AGENTS.md` and `GEMINI.md` rule injections.
-*   **Zed & Continue.dev**: Relies on aggressive prompt rules in `AGENTS.md`.
-*   **JetBrains (IDE AI Assistant & Junie CLI)**: Both environments are currently unshielded. Defense relies on the **Path-Native Mandate** in `AGENTS.md`.
-*   **Kilo Code**: Relies on prompt injection via `.kilocode/rules/context.md`.
-*   **ForgeCode**: System-level "Context Compaction" hook. Managed via `AGENTS.md` directives.
+    *   **Support**: Injected into `.windsurf/hooks.json` or `.clinerules/hooks/`. Automatically blocks native file readers > 1KB to force the use of `pipe_read_file`.
 
 ---
 
-## 2. Hook Injector & Onboarding Logic (`server.py`)
+## 2. Onboarding & Mandate Injection (`onboarding.py`)
 
-The `sift_onboard` tool acts as the automated configuration engine, ensuring that all available security gateways, hook registries, and agent instruction files are primed for Semantic-Sift.
+The `pipe_onboard` tool acts as the automated configuration engine, ensuring that all available security gateways, hook registries, and agent instruction files are primed for Context-Pipe.
 
-### A. Instruction File Modification
-The `update_instruction_files` function targets specific files to enforce the "Path-Native" mandate and MCP Synergy Matrix.
-*   **Targets**: `AGENTS.md`, `GEMINI.md`, `.clinerules`, `.cursorrules`, `.windsurfrules`, `.github/copilot-instructions.md`, `.kilocode/rules/context.md`.
-*   **Mandate Injection**: Injects a strict Markdown block demanding the use of `sift_read_file` for files > 1KB and providing recipes for Web, Logs, and Search data.
+### A. Mandate Enforcement
+The `inject_mandates` function targets specific files to enforce the "Path-Native" standard.
+*   **Targets**: `AGENTS.md`, `GEMINI.md`, `.clinerules`, `.cursorrules`, `.windsurfrules`, `.github/copilot-instructions.md`.
+*   **Mandate**: Demands the use of `pipe_read_file(path)` for all file access, ensuring every byte is processed by the optimal pipe.
 
-### B. Security Gateway Auditing
-*   Scans `.cursor/hooks.json` for `beforeMCPExecution` gateways. If detected, issues a critical alert requiring the user to whitelist sifting tools.
-
-### C. Automated Hook Injection
+### B. Automated Hook Injection
 Safely merges execution commands into existing IDE configurations:
-*   **Post-Tool Shell Hooks**: Injects `sift_hook.py` into Cursor, VS Code, Claude Code, Qwen CLI, and Codex CLI.
-*   **Pre-Tool Security Gateways**: Injects blocking logic into Windsurf (`hooks.json`) and Cline (`.clinerules/hooks/PreToolUse.ps1`).
-*   **Native Plugins**: Generates TypeScript wrappers for OpenCode and OpenClaw.
+*   **Post-Tool Shell Hooks**: Injects `context-pipe wrap` into Cursor, VS Code, Claude Code, Qwen CLI, and Codex CLI.
+*   **Pre-Tool Security Gateways**: Injects blocking logic into Windsurf (`hooks.json`) and Cline (`PreToolUse.ps1`).
 
 ---
 
-## 3. Payload Structures & Interception Logic (`sift_hook.py`)
+## 3. Payload Structures & Interception Logic (`wrapper.py`)
 
 ### 1. Smart Hooks (CLI Agents & Plugins)
 *   **Gemini/OpenCode/OpenClaw**: Detects `AfterTool` or `Compacting` event names. Extracts `tool_response.llmContent`.
-*   **Claude/Qwen/Codex**: Checks environment variables (`$CLAUDE_TOOL_NAME`, etc.). Extracts the raw tool output from standard input.
-*   **Reinjection**: Injects a notification into Gemini's `additionalContext` or prepends `--- [Distilled by Semantic-Sift] ---` to the text result.
+*   **Reinjection**: Injects ROI metrics into Gemini's `additionalContext` or prepends the **Audit Header** to the text result.
 
 ### 2. Blind Hooks (IDEs)
 *   **VS Code & Cursor**: Scans the incoming JSON for keys like `result` or `tool_response.llmContent`.
-*   **Reinjection**: Overwrites the found key with the distilled text, often prepending `[Sifted]`.
+*   **Reinjection**: Overwrites the found key with the piped text, prepended with the Audit Header and the CPP Signature.
 
 ---
 
-## 4. The Content-Signature Bypass
+## 4. The Context-Pipe Signature (Bypass)
 
-To prevent "Double-Sifting" (running BERT on already-compressed text):
-1.  Native MCP tools in `server.py` prepend their output with: `\n\n--- [Semantic-Sift: Native Execution] ---`.
-2.  `sift_hook.py` explicitly scans `raw_content` for `--- [Semantic-Sift Audit] ---`. If found, it instantly bypasses all processing.
+To prevent **Double-Sifting** and infinite loops:
+1.  All processed content is appended with: `\n\n--- [Context-Pipe: Native Execution] ---`.
+2.  The wrapper explicitly scans content for this signature and the legacy `--- [Semantic-Sift Audit] ---` signature. If found, it instantly bypasses processing.
 
 ---
 
 ## 5. Master Configuration Matrix (MCP Server Installation)
 
-| Software | Configuration Path (Parsed by Server) | Target Key | Expected Schema Style |
+| Software | Configuration Path | Target Key | Expected Schema Style |
 | :--- | :--- | :--- | :--- |
 | **Claude Desktop** | `~/AppData/Roaming/Claude/claude_desktop_config.json` | `mcpServers` | Standard |
 | **Claude Code** | `~/.claude/settings.json` | `mcp_servers` | Standard |
 | **Qwen CLI** | `~/.qwen/settings.json` | `mcp_servers` | Standard |
 | **Codex CLI** | `~/.codex/mcp-config.json` | `mcpServers` | Standard |
-| **Junie CLI** | `~/.junie/mcp/mcp.json` | `mcpServers` | Standard |
 | **Continue.dev** | `~/.continue/config.json` | `mcpServers` | Unified |
 | **Zed** | `~/.config/zed/settings.json` | `context_servers` | Standard |
 | **VS Code Copilot**| `~/.copilot/mcp-config.json` | `mcpServers` | Standard |
 | **OpenCode** | `~/.opencode.json` | `mcpServers` | Local Array |
 | **Google Antigravity**| `~/.gemini/antigravity/mcp_config.json` | `mcpServers` | Standard |
 
-### A. Standard Schema (Gemini, Claude, Cursor, Copilot, Zed, Codex, Junie)
+### A. Standard Schema (Gemini, Claude, Cursor, Copilot, Zed, Codex)
 ```json
-"semantic-sift": {
+"context-pipe": {
   "command": "python",
-  "args": ["/absolute/path/to/server.py"]
+  "args": ["-m", "context_pipe.server"]
 }
 ```
 
 ### B. Local Array Schema (OpenCode, Kilo Code)
 ```json
-"semantic-sift": {
+"context-pipe": {
   "type": "local",
-  "command": ["python", "/absolute/path/to/server.py"]
+  "command": ["python", "-m", "context_pipe.server"]
 }
 ```
 
 ### C. Extended Schema (Cline / Roo Code)
 ```json
-"semantic-sift": {
+"context-pipe": {
   "command": "python",
-  "args": ["server.py"],
-  "autoApprove": ["sift_read_file", "sift_analyze_file", "sift_logs", "sift_chat"]
+  "args": ["-m", "context_pipe.server"],
+  "autoApprove": ["pipe_read_file", "pipe_analyze_file", "pipe_run", "get_pipe_stats"]
 }
 ```
 
-### D. TOML Schema (Codex CLI)
-```toml
-[mcp_servers.semantic-sift]
-command = "python"
-args = ["server.py"]
-```
-
-### E. Unified Schema (Continue, Windsurf)
+### D. Unified Schema (Continue, Windsurf)
 ```json
-"semantic-sift": {
+"context-pipe": {
   "type": "stdio",
   "command": "python",
-  "args": ["server.py"]
+  "args": ["-m", "context_pipe.server"]
 }
 ```
+
+---
+*Building High-Fidelity Infrastructure for the Studio of Two.*
