@@ -5,7 +5,7 @@ import json
 import time
 import hashlib
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from .platforms import detect_client_id, extract_content, inject_content
 from .orchestrator import run_pipe, resolve_pipe_from_context, CPP_SIGNATURE
 from .telemetry import log_telemetry, generate_audit_header
@@ -89,12 +89,13 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
         # 6. Telemetry (Accounting per node)
         latency_per_node = latency_ms / max(1, len(trace))
         for entry in trace:
-            if "error" in entry: continue
+            if "error" in entry:
+                continue
             log_telemetry(
                 pipe_name=pipe_name,
-                tool_name=f"{entry['node']}:{tool_name}",
-                original_size=entry['input_size'],
-                final_size=entry['output_size'],
+                tool_name=f"{entry.get('node', 'unknown')}:{tool_name}",
+                original_size=entry.get('input_size', 0),
+                final_size=entry.get('output_size', 0),
                 latency_ms=latency_per_node,
                 platform=platform,
                 agent_label=agent_label

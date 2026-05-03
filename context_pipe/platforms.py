@@ -71,8 +71,10 @@ def extract_content(data: Dict, platform: str) -> tuple[str, Optional[str], Opti
     if platform == "Cursor":
         res = data.get("result", "")
         if isinstance(res, str):
-            if res.startswith("[Explore]"): agent_label = "Explore"
-            elif res.startswith("[Bash]"): agent_label = "Bash"
+            if res.startswith("[Explore]"):
+                agent_label = "Explore"
+            elif res.startswith("[Bash]"):
+                agent_label = "Bash"
     elif platform == "Gemini CLI":
         agent_label = data.get("hookSpecificOutput", {}).get("threadLabel")
     

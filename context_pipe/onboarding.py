@@ -5,8 +5,7 @@ import os
 import json
 import re
 import sys
-import psutil
-from typing import List, Dict, Any, Optional
+from typing import List
 
 def build_runtime_hook_command() -> str:
     """Builds the absolute command string to invoke the context-pipe wrapper."""
@@ -45,7 +44,8 @@ def discover_agent_configs(target_dir: str) -> List[str]:
 
     for root, _, files in os.walk(target_dir):
         depth = root[len(target_dir):].count(os.sep)
-        if depth > 3: continue
+        if depth > 3:
+            continue
         if "AGENTS.md" in files and root != target_dir:
             found_paths.append(os.path.join(root, "AGENTS.md"))
 
@@ -54,7 +54,8 @@ def discover_agent_configs(target_dir: str) -> List[str]:
 def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | None = None) -> bool:
     """Safely merges a new hook into a JSON configuration file."""
     data: dict = {"hooks": {}}
-    if version: data["version"] = version
+    if version:
+        data["version"] = version
     
     if os.path.exists(path):
         try:
@@ -63,7 +64,8 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
         except (OSError, json.JSONDecodeError):
             pass
 
-    if "hooks" not in data: data["hooks"] = {}
+    if "hooks" not in data:
+        data["hooks"] = {}
     hooks_list = data["hooks"].get(hook_key, [])
 
     # Prevent duplicates
@@ -165,17 +167,21 @@ prompt = \"\"\"
         oc_path = os.path.join(target_dir, "opencode.json")
         if os.path.exists(oc_path):
             try:
-                with open(oc_path, "r") as f: oc_data = json.load(f)
-                if "commands" not in oc_data: oc_data["commands"] = {}
+                with open(oc_path, "r") as f:
+                    oc_data = json.load(f)
+                if "commands" not in oc_data:
+                    oc_data["commands"] = {}
                 oc_data["commands"]["/pipe-stats"] = {
                     "description": "View Context-Pipe ROI",
                     "action": "run_mcp_tool",
                     "server": "context-pipe",
                     "tool": "get_pipe_stats"
                 }
-                with open(oc_path, "w") as f: json.dump(oc_data, f, indent=2)
+                with open(oc_path, "w") as f:
+                    json.dump(oc_data, f, indent=2)
                 actions.append("Injected /pipe-stats into opencode.json.")
-            except Exception: pass
+            except Exception:
+                pass
 
     # 5. Windsurf Security Gateway
     if "windsurf" in env_lower:
@@ -230,7 +236,7 @@ echo '{"cancel": false}'
         with open(cline_bash_path, "w", encoding="utf-8", newline="\n") as f:
             f.write(cline_bash_content)
         try:
-            os.chmod(cline_bash_path, 0o755)
+            os.chmod(cline_bash_path, 0o755)  # nosec B103
         except OSError:
             pass
         actions.append("Injected Security Gateway into Cline hooks (Bash).")
@@ -300,7 +306,7 @@ export default function (api) {{
         os.makedirs(kilo_rule_dir, exist_ok=True)
         kilo_rule_path = os.path.join(kilo_rule_dir, "context.md")
         with open(kilo_rule_path, "w", encoding="utf-8") as f:
-            f.write(f"# Context-Pipe Kilo Code Constraints\n\nEnsure that all raw file reads use the `pipe_read_file` tool to prevent context flooding.")
+            f.write("# Context-Pipe Kilo Code Constraints\n\nEnsure that all raw file reads use the `pipe_read_file` tool to prevent context flooding.")
         actions.append("Injected Kilo Code workspace rules.")
 
     return actions

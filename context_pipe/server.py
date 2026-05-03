@@ -3,8 +3,7 @@
 
 import os
 import json
-import logging
-from typing import Any, Optional
+from typing import Optional
 from mcp.server.fastmcp import FastMCP
 from .orchestrator import run_pipe
 from .telemetry import get_balance_sheet

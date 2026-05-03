@@ -4,8 +4,7 @@
 import os
 import json
 import time
-import hashlib
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 # Telemetry Configuration
 TELEMETRY_FILE = os.environ.get("PIPE_TELEMETRY_FILE", ".pipe_telemetry.json")
@@ -22,8 +21,10 @@ def _ensure_identity_ignored() -> None:
                 content = f.read()
 
         additions = []
-        if IDENTITY_FILE not in content: additions.append(IDENTITY_FILE)
-        if TELEMETRY_FILE not in content: additions.append(TELEMETRY_FILE)
+        if IDENTITY_FILE not in content:
+            additions.append(IDENTITY_FILE)
+        if TELEMETRY_FILE not in content:
+            additions.append(TELEMETRY_FILE)
         
         if additions:
             prefix = "\n" if content and not content.endswith("\n") else ""
@@ -69,7 +70,6 @@ def log_telemetry(
     if PIPE_TELEMETRY_DISABLED:
         return
 
-    
     delta = final_size - original_size
     
     event = {
@@ -102,14 +102,17 @@ def log_telemetry(
             json.dump(events, f, indent=2)
     except OSError:
         pass
+
 def estimate_tokens(text: str) -> int:
     """Provides a fast, high-fidelity token estimate (4 chars/token)."""
-    if not text: return 0
+    if not text:
+        return 0
     return max(1, len(text) // 4)
 
 def generate_audit_header(pipe_name: str, trace: List[Dict[str, Any]], latency_ms: float) -> str:
     """Generates a Markdown audit header showing cumulative ROI and node latency."""
-    if not trace: return ""
+    if not trace:
+        return ""
 
     start_size = trace[0]["input_size"]
     end_size = trace[-1]["output_size"]
@@ -122,13 +125,12 @@ def generate_audit_header(pipe_name: str, trace: List[Dict[str, Any]], latency_m
         f"--- [Context-Pipe: {pipe_name}] ---",
         f"📊 Context: {reduction_label} ({start_size/1024:.1f}KB -> {end_size/1024:.1f}KB)",
         f"⚡ Latency: {latency_ms:.1f}ms",
-        "Nodes: " + " → ".join([n["node"] for n in trace]),
+        "Nodes: " + " → ".join([n["node"] for n in trace if "node" in n]),
         "-----------------------------\n"
     ]
     return "\n".join(header)
 
 def get_balance_sheet() -> Dict[str, Any]:
-...
     """Calculates context ROI as a Balance Sheet of signal vs noise."""
     if not os.path.exists(TELEMETRY_FILE):
         return {"signal_added": 0, "noise_removed": 0, "net_change": 0, "events": 0}

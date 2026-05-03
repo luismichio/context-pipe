@@ -5,6 +5,7 @@ import json
 import subprocess
 import argparse
 import re
+import os
 from typing import List, Dict, Any, Optional
 
 # Metadata Signatures
@@ -13,16 +14,16 @@ CPP_SIGNATURE = "--- [Context-Pipe: Native Execution] ---"
 def resolve_pipe_from_context(config: Dict[str, Any], tool_name: str, content_len: int) -> Optional[str]:
     """Resolves a pipe name based on mapping triggers."""
     mappings = config.get("mappings", [])
-
+    
     for m in mappings:
         trigger = m.get("trigger", "")
-
+        
         # 1. Tool Trigger (tool:regex)
         if trigger.startswith("tool:"):
             pattern = trigger.replace("tool:", "")
             if re.search(pattern, tool_name, re.IGNORECASE):
                 return m["pipe"]
-
+                
         # 2. Size Trigger (size:>num)
         if trigger.startswith("size:>"):
             try:
@@ -31,11 +32,11 @@ def resolve_pipe_from_context(config: Dict[str, Any], tool_name: str, content_le
                     return m["pipe"]
             except ValueError:
                 continue
-
+                
         # 3. Default Trigger
         if trigger == "default":
             return m["pipe"]
-
+            
     return None
 
 def run_pipe(pipe_config: Dict[str, Any], input_data: str) -> tuple[str, List[Dict[str, Any]]]:
@@ -94,9 +95,9 @@ def run_pipe(pipe_config: Dict[str, Any], input_data: str) -> tuple[str, List[Di
             "output_size": end_size,
             "delta": end_size - start_size
         })
-
+        
         current_input = stdout
-
+        
     return current_input, trace
 
 def main():
