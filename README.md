@@ -43,6 +43,41 @@ Universal hooks that automatically apply your context pipes to *any* MCP tool ca
 
 ---
 
+## 💻 Terminal Usage
+
+Context-Pipe follows the **Unix Philosophy**. You can use it as a standalone utility or inside existing bash chains.
+
+```bash
+# Sift a log file through the 'standard-distill' pipe
+cat app.log | context-pipe run standard-distill
+
+# Process a document through a multi-node refinery
+cat spec.pdf | context-pipe run full-refinery > distilled_spec.md
+
+# Pre-distill code for manual copy-pasting
+cat server.py | context-pipe run semantic-refinery | clip
+```
+
+---
+
+## 🔗 Advanced Node Types
+
+Context-Pipe supports more than just simple binaries. You can chain standard OS tools and expert mandates.
+
+### 1. Bash Nodes (`shell: true`)
+Execute arbitrary shell commands as part of your pipe.
+```json
+{ "cmd": "grep 'ERROR'", "shell": true }
+```
+
+### 2. Skill Nodes
+Apply an "Expert Lens" to the context by injecting specialized skill mandates.
+```json
+{ "cmd": "context-pipe-skill", "args": ["security-auditor"] }
+```
+
+---
+
 ## ⚖️ Licensing
 `context-pipe` is licensed under the **Apache License 2.0**. It is an "Open Source, Closed Contribution" project maintained by the Studio of Two to ensure architectural integrity.
 

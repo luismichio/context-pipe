@@ -49,7 +49,15 @@ def run_pipe(pipe_config: Dict[str, Any], input_data: str) -> tuple[str, List[Di
     node_timeout = int(raw_timeout) / 1000.0
 
     for node in pipe_config.get("nodes", []):
-        cmd = [node["cmd"]] + node.get("args", [])
+        use_shell = node.get("shell", False)
+        
+        cmd: str | List[str]
+        if use_shell:
+            # Join cmd and args for shell execution
+            cmd = " ".join([node["cmd"]] + [str(a) for a in node.get("args", [])])
+        else:
+            cmd = [node["cmd"]] + [str(a) for a in node.get("args", [])]
+            
         start_size = len(current_input)
         
         try:
@@ -59,7 +67,8 @@ def run_pipe(pipe_config: Dict[str, Any], input_data: str) -> tuple[str, List[Di
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
+                shell=use_shell  # nosec B602
             )
             
             try:
