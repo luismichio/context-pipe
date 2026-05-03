@@ -58,6 +58,61 @@ def pipe_run(pipe_name: str, input_text: str) -> str:
     except Exception as e:
         return f"Error executing pipe: {str(e)}"
 
+def _resolve_safe_path(path: str) -> str:
+    """Validates the path is within the allowed workspace."""
+    import os
+    allow_global = os.environ.get("SIFT_ALLOW_GLOBAL_READS", "false").lower() == "true"
+    resolved_path = os.path.realpath(path)
+    
+    if allow_global:
+        return resolved_path
+        
+    workspace_root = os.environ.get("SIFT_WORKSPACE_ROOT", os.getcwd())
+    if not resolved_path.startswith(os.path.realpath(workspace_root)):
+        raise PermissionError(f"Access denied for path: {path}. Use a file path inside the current workspace or set SIFT_ALLOW_GLOBAL_READS=true to override.")
+        
+    return resolved_path
+
+@mcp.tool()
+def pipe_read_file(path: str, pipe_name: str = "standard-distill") -> str:
+    """
+    Reads a local file safely and streams it directly through a context pipe.
+    Use this instead of native file readers to prevent context window flooding.
+    
+    Args:
+        path: Absolute or relative path to the file.
+        pipe_name: The name of the pipe to run (e.g., 'standard-distill', 'full-refinery').
+    """
+    try:
+        resolved_path = _resolve_safe_path(path)
+        with open(resolved_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except Exception as e:
+        return f"Error reading file: {str(e)}"
+        
+    return pipe_run(pipe_name, content)
+
+@mcp.tool()
+def pipe_analyze_file(path: str) -> str:
+    """
+    Analyzes a file's size and structure to recommend the optimal context pipe,
+    without flooding the context window.
+    
+    Args:
+        path: Absolute or relative path to the file.
+    """
+    try:
+        resolved_path = _resolve_safe_path(path)
+        size = os.path.getsize(resolved_path)
+    except Exception as e:
+        return f"Error analyzing file: {str(e)}"
+        
+    recommendation = "standard-distill"
+    if size > 10000:
+        recommendation = "semantic-refinery"
+        
+    return f"File: {os.path.basename(path)}\nSize: {size} bytes\nRecommendation: Use pipe_read_file with pipe_name='{recommendation}'."
+
 @mcp.tool()
 def get_pipe_stats() -> str:
     """Returns the Context Balance Sheet (ROI) for the entire pipeline ecosystem."""

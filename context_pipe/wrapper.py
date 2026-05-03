@@ -60,6 +60,14 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     if CPP_SIGNATURE in str(raw_content):
         return raw_json
         
+    # 2.5 Structured Data Exemption
+    # Do not pipe valid JSON dictionaries or lists (e.g., Serena outputs)
+    try:
+        if isinstance(json.loads(str(raw_content)), (dict, list)):
+            return raw_json
+    except (json.JSONDecodeError, TypeError):
+        pass
+        
     # 3. Guard: Echo Detection (Disk-Based)
     if check_echo(str(raw_content)):
         return raw_json

@@ -9,13 +9,52 @@ from typing import Dict, Any, Optional
 
 # Telemetry Configuration
 TELEMETRY_FILE = os.environ.get("PIPE_TELEMETRY_FILE", ".pipe_telemetry.json")
+IDENTITY_FILE = ".pipe_identity"
+PIPE_TELEMETRY_DISABLED = os.environ.get("PIPE_TELEMETRY_DISABLED", "false").lower() == "true"
+
+def _ensure_identity_ignored() -> None:
+    """Proactively ensures .pipe_identity and .pipe_telemetry.json are in .gitignore."""
+    gitignore_path = os.path.join(os.getcwd(), ".gitignore")
+    try:
+        content = ""
+        if os.path.exists(gitignore_path):
+            with open(gitignore_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+
+        additions = []
+        if IDENTITY_FILE not in content: additions.append(IDENTITY_FILE)
+        if TELEMETRY_FILE not in content: additions.append(TELEMETRY_FILE)
+        
+        if additions:
+            prefix = "\n" if content and not content.endswith("\n") else ""
+            with open(gitignore_path, "a", encoding="utf-8") as f:
+                f.write(prefix + "\n".join(additions) + "\n")
+    except OSError:
+        pass
 
 def get_machine_id() -> str:
-    """Generates a stable, anonymous ID for this machine."""
-    import socket
+    """Generates a stable, anonymous ID for this machine, ensuring it isn't committed."""
+    if PIPE_TELEMETRY_DISABLED:
+        return "anonymous-user"
+        
+    _ensure_identity_ignored()
+    
+    path = os.path.join(os.getcwd(), IDENTITY_FILE)
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                return f.read().strip()
+        except OSError:
+            pass
+            
     import uuid
-    identity = f"{socket.gethostname()}:{uuid.getnode()}"
-    return hashlib.sha256(identity.encode()).hexdigest()[:12]
+    new_id = str(uuid.uuid4())
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(new_id)
+    except OSError:
+        pass
+    return new_id
 
 def log_telemetry(
     pipe_name: str,
@@ -27,6 +66,9 @@ def log_telemetry(
     agent_label: Optional[str] = None
 ) -> None:
     """Records a context transformation event (reduction or augmentation)."""
+    if PIPE_TELEMETRY_DISABLED:
+        return
+
     
     delta = final_size - original_size
     
