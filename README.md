@@ -27,10 +27,10 @@ Universal hooks that automatically apply your context pipes to *any* MCP tool ca
 ## 🏗️ Getting Started
 
 1. **Install the Orchestrator:**
-   `pip install context-pipe`
+   `pip install context-pipe` (or `pip install context-pipe[multi-modal]` for PDF support)
 
 2. **Connect a Refinery:**
-   `cargo install semantic-sift-core`
+   `pip install semantic-sift` (Hybrid Engine) or `cargo install semantic-sift-core` (Native Sidecar)
 
 3. **Configure your first Pipe:**
    Edit `pipes.json` to define your high-fidelity context streams.

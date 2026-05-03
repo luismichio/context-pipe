@@ -31,9 +31,9 @@ The system resolves the optimal pipe name based on three prioritized triggers:
 
 ### Pipe Templates
 Instead of bundling code, Context-Pipe provides **Recipes**. Templates demonstrate how to chain external refineries:
-- **`standard-distill`**: Routes to `sift-core logs`.
-- **`semantic-refinery`**: Routes to `sift-core semantic`.
-- **`full-refinery`**: Routes to `markitdown | sift-core`.
+- **`standard-distill`**: Routes to `semantic-sift-cli logs`.
+- **`semantic-refinery`**: Routes to `semantic-sift-cli semantic`.
+- **`full-refinery`**: Routes to `context-pipe-ingest | semantic-sift-cli`.
 
 ---
 

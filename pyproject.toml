@@ -28,6 +28,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+multi-modal = [
+  "markitdown>=0.1"
+]
 dev = [
   "pytest",
   "ruff",
@@ -37,6 +40,7 @@ dev = [
 [project.scripts]
 context-pipe = "context_pipe.orchestrator:main"
 context-pipe-server = "context_pipe.server:main"
+context-pipe-ingest = "context_pipe.ingest:main"
 
 [tool.setuptools]
 packages = ["context_pipe"]
