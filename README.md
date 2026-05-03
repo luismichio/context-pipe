@@ -2,6 +2,12 @@
 
 **The Universal Standard for Context Engineering.**
 
+[![CI](https://github.com/luismichio/context-pipe/actions/workflows/ci.yml/badge.svg)](https://github.com/luismichio/context-pipe/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/Tests-2%20Passing-brightgreen)](tests/)
+[![Python](https://img.shields.io/pypi/pyversions/context-pipe)](https://pypi.org/project/context-pipe/)
+[![License](https://img.shields.io/badge/License-Apache--2.0-blue)](LICENSE.md)
+[![OSI](https://img.shields.io/badge/OSI-Approved-brightgreen)](https://opensource.org/licenses/Apache-2.0)
+
 `context-pipe` is a high-performance orchestration layer designed to bring the **Unix Philosophy** to the AI context window. It allows you to connect AI tools (Spokes) into a series of **Streams**, ensuring that data is refined, distilled, and noise-free before it ever reaches the LLM.
 
 ---
