@@ -12,6 +12,8 @@ venv/
 # IDEs
 .vscode/
 .idea/
+.gemini/
+opencode.json
 
 # OS
 .DS_Store

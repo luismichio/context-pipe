@@ -69,7 +69,7 @@ If user input contains **Questions** (`?`, `How`, `Why`, `Analyze`), enter **REA
 If you fail a test twice, or suggest the same fix twice, STOP. Raise your hand: "I am struggling. Here is what I’ve tried, and here is where I am blocked. User, I need your expertise."
 
 ### 🛑 Anti-patterns
-- **No `any` equivalents**: Use proper type hints. Avoid `typing.Any` where possible.
+- **No `any`**: Strictly forbidden in TypeScript nodes. Use `unknown` with type guards. In Python, avoid `typing.Any`.
 - **No Console Logs**: Use the Python `logging` module (routing to `stderr`) to preserve clean `stdout` data streams.
 - **No Hardcoded Distillers**: All data transformation logic must live in external tools (e.g., `sift-core`) and be referenced via `pipes.json`.
 
