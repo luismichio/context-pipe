@@ -7,20 +7,20 @@
       "description": "The flagship log sifting template.",
       "nodes": [
         {
-          "cmd": "sift-core",
+          "cmd": "semantic-sift-cli",
           "args": ["logs"],
-          "help_msg": "sift-core not found. Please install the Rust refinery via 'cargo install semantic-sift-core'."
+          "help_msg": "semantic-sift-cli not found. Please install the Python orchestrator via 'pip install semantic-sift'."
         }
       ]
     },
     {
       "name": "semantic-refinery",
-      "description": "High-intelligence neural distillation template.",
+      "description": "High-intelligence neural distillation template (Hybrid Engine).",
       "nodes": [
         {
-          "cmd": "sift-core",
+          "cmd": "semantic-sift-cli",
           "args": ["semantic", "--rate", "0.5"],
-          "help_msg": "sift-core not found. Please install the Rust refinery via 'cargo install semantic-sift-core'."
+          "help_msg": "semantic-sift-cli not found. Please install the Python orchestrator via 'pip install semantic-sift'."
         }
       ]
     },
@@ -29,14 +29,14 @@
       "description": "Complete ingestion and distillation chain template.",
       "nodes": [
         {
-          "cmd": "markitdown",
-          "args": ["-"],
-          "help_msg": "markitdown not found. Please install via 'pip install markitdown' to enable multi-modal support."
+          "cmd": "context-pipe-ingest",
+          "args": [],
+          "help_msg": "Multi-modal ingestion failed. Please run 'pip install context-pipe[multi-modal]'."
         },
         {
-          "cmd": "sift-core",
+          "cmd": "semantic-sift-cli",
           "args": ["semantic", "--rate", "0.3"],
-          "help_msg": "sift-core not found. Please install the Rust refinery via 'cargo install semantic-sift-core'."
+          "help_msg": "semantic-sift-cli not found. Please install the Python orchestrator via 'pip install semantic-sift'."
         }
       ]
     },
