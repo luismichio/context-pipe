@@ -90,6 +90,14 @@ Apply an "Expert Lens" to the context by injecting specialized skill mandates.
 
 ---
 
+## 🔗 The Ecosystem (Studio of Two)
+
+Context-Pipe is a foundational member of the **Studio of Two** infrastructure. It is designed to work in high-fidelity harmony with:
+
+*   **[Semantic-Sift](https://github.com/luismichio/semantic-sift)**: The intelligent refinery for agentic context. Sift is the flagship distillation engine for Context-Pipe, providing the mathematical and neural sifting nodes used in our standard templates.
+
+---
+
 ## ⚖️ Licensing
 `context-pipe` is licensed under the **Apache License 2.0**. It is an "Open Source, Closed Contribution" project maintained by the Studio of Two to ensure architectural integrity.
 
