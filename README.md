@@ -43,6 +43,18 @@ Universal hooks that automatically apply your context pipes to *any* MCP tool ca
 
 ---
 
+## 📚 Documentation
+
+Detailed documentation is available in the [`doc/`](./doc) directory.
+
+*   **[doc/INDEX.md](doc/INDEX.md)**: The navigational roadmap for the documentation ecosystem.
+*   **[doc/OPERATOR_GUIDE.md](doc/OPERATOR_GUIDE.md)**: Definitive guide for setup, terminal mastery, and `pipes.json` configuration.
+*   **[doc/ARCHITECTURE.md](doc/ARCHITECTURE.md)**: Technical specifications of the orchestration spine and switchboard.
+*   **[doc/CONTEXT_PIPE_PROTOCOL.md](doc/CONTEXT_PIPE_PROTOCOL.md)**: The language-agnostic standard for tool interoperability.
+*   **[doc/INTEGRATION_ENCYCLOPEDIA.md](doc/INTEGRATION_ENCYCLOPEDIA.md)**: Master Compatibility Matrix for Cursor, VS Code, Gemini, and Claude.
+
+---
+
 ## 💻 Terminal Usage
 
 Context-Pipe follows the **Unix Philosophy**. You can use it as a standalone utility or inside existing bash chains.

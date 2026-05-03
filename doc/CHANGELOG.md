@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### ✨ High-Fidelity Foundation
 - **Initial Release**: The official birth of the **Context-Pipe Protocol (CPP)**.
 - **Universal Orchestrator**: Python-based engine (`orchestrator.py`) capable of streaming data through multi-node Unix pipelines using standard `stdin`/`stdout`.
+- **Bash Node Support**: Added the ability to execute arbitrary shell commands (e.g., `grep`, `sed`, `awk`) directly within a context pipe using the `shell: true` flag.
+- **Skill Node Wrapper**: Implemented `context-pipe-skill`, a specialized node type that allows agents to apply "Expert Lenses" (specialized instruction sets) to the context stream.
+- **Terminal CLI Mastery**: Established `context-pipe run` as the definitive terminal standard for context engineering, supporting standalone file sifting and complex bash chaining.
 - **Agnostic Routing Engine**: Implemented a dynamic `mappings` system in `pipes.json`. The system now automatically routes data to the optimal pipe based on:
     - **Tool Triggers**: Regex-based matching for tool names (e.g., `search|grep|find`).
     - **Size Triggers**: Automatic scaling of distillation based on character count thresholds.
