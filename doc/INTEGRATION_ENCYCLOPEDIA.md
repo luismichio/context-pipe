@@ -56,20 +56,27 @@ To install the Context-Pipe server, find your software in the matrix below and c
 ### A. Standard Schema (JSON Object)
 ```json
 "context-pipe": {
-  "command": "C:/path/to/python.exe",
+  "command": "C:/Users/luism/Workbench/GitHub/context-pipe/venv/Scripts/python.exe",
   "args": ["-m", "context_pipe.server"],
   "env": {
-    "PIPE_CONFIG_PATH": "C:/path/to/your/pipes.json",
+    "PIPE_CONFIG_PATH": "C:/Users/luism/Workbench/GitHub/context-pipe/pipes.json",
     "PIPE_NODE_TIMEOUT_MS": "10000"
   }
 }
 ```
 
-### B. Local Array Schema (OpenCode, Kilo Code)
+### B. Local Array Schema (OpenCode)
 ```json
 "context-pipe": {
   "type": "local",
-  "command": ["C:/path/to/python.exe", "-m", "context_pipe.server"]
+  "command": [
+    "C:/Users/luism/Workbench/GitHub/context-pipe/venv/Scripts/python.exe", 
+    "-m", 
+    "context_pipe.server"
+  ],
+  "environment": {
+    "PIPE_CONFIG_PATH": "C:/Users/luism/Workbench/GitHub/context-pipe/pipes.json"
+  }
 }
 ```
 

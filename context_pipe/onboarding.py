@@ -169,6 +169,19 @@ prompt = \"\"\"
             try:
                 with open(oc_path, "r") as f:
                     oc_data = json.load(f)
+                
+                # 4.1 Update MCP entry
+                if "mcp" not in oc_data:
+                    oc_data["mcp"] = {}
+                oc_data["mcp"]["context-pipe"] = {
+                    "type": "local",
+                    "command": [os.path.abspath(sys.executable), "-m", "context_pipe.server"],
+                    "environment": {
+                        "PIPE_CONFIG_PATH": os.path.abspath(os.path.join(target_dir, "pipes.json"))
+                    }
+                }
+                
+                # 4.2 Update Commands
                 if "commands" not in oc_data:
                     oc_data["commands"] = {}
                 oc_data["commands"]["/pipe-stats"] = {
@@ -177,11 +190,43 @@ prompt = \"\"\"
                     "server": "context-pipe",
                     "tool": "get_pipe_stats"
                 }
+                
                 with open(oc_path, "w") as f:
                     json.dump(oc_data, f, indent=2)
-                actions.append("Injected /pipe-stats into opencode.json.")
-            except Exception:
-                pass
+                actions.append("Updated Context-Pipe MCP and /pipe-stats in opencode.json.")
+                
+                # 4.3 Native Plugin
+                oc_plugin_dir = os.path.join(target_dir, ".opencode", "plugins")
+                os.makedirs(oc_plugin_dir, exist_ok=True)
+                oc_plugin_path = os.path.join(oc_plugin_dir, "context-pipe.ts")
+                
+                oc_plugin_content = f"""/**
+ * Context-Pipe Native OpenCode Plugin
+ */
+export default function (api: any) {{
+  api.on("tool.execute.after", async (event: any) => {{
+    const rawContent = event.result;
+    if (typeof rawContent !== 'string' || rawContent.length < 500) return;
+    if (rawContent.includes("--- [Context-Pipe: Native Execution] ---")) return;
+    try {{
+      const pythonExe = "{os.path.abspath(sys.executable)}";
+      const payload = {{ hook_event_name: "AfterTool", tool_name: event.toolName, result: rawContent }};
+      const {{ execSync }} = require('child_process');
+      const response = execSync(`"${{pythonExe}}" -m context_pipe.orchestrator wrap`, {{ input: JSON.stringify(payload), encoding: 'utf-8' }});
+      const siftedData = JSON.parse(response);
+      if (siftedData?.result) {{
+         event.result = siftedData.result;
+      }}
+    }} catch (error) {{ console.error("[Context-Pipe Plugin] failed:", error); }}
+  }});
+}};
+"""
+                with open(oc_plugin_path, "w", encoding="utf-8") as f:
+                    f.write(oc_plugin_content)
+                actions.append("Configured OpenCode native plugin.")
+                
+            except Exception as e:
+                actions.append(f"Failed to update opencode.json: {str(e)}")
 
     # 5. Windsurf Security Gateway
     if "windsurf" in env_lower:
