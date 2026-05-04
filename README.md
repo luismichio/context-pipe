@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/luismichio/context-pipe/actions/workflows/ci.yml/badge.svg)](https://github.com/luismichio/context-pipe/actions/workflows/ci.yml)
 [![Tests](https://img.shields.io/badge/Tests-2%20Passing-brightgreen)](tests/)
-[![Python](https://img.shields.io/pypi/pyversions/context-pipe)](https://pypi.org/project/context-pipe/)
+[![Python](https://img.shields.io/pypi/pyversions/mcp-context-pipe)](https://pypi.org/project/mcp-context-pipe/)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue)](LICENSE.md)
 [![OSI](https://img.shields.io/badge/OSI-Approved-brightgreen)](https://opensource.org/licenses/Apache-2.0)
 
