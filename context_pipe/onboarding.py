@@ -155,7 +155,7 @@ def inject_hooks(target_dir: str, environment: str) -> List[str]:
         os.makedirs(gemini_dir, exist_ok=True)
         stats_cmd = """description = "View Context-Pipe ROI Balance Sheet"
 prompt = \"\"\"
-!{context-pipe-server get_pipe_stats}
+!{context-pipe get_pipe_stats}
 \"\"\"
 """
         with open(os.path.join(gemini_dir, "pipe-stats.toml"), "w") as f:
