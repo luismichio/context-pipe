@@ -102,4 +102,54 @@ Without CPP, the agent gets overwhelmed by the sheer volume of code and misses s
 **The Result:** Your LLM transforms from a generic coding assistant into a highly specialized security auditor, guided by deterministic local tools.
 
 ---
+
+## 5. The Multi-Stage Refinery (Double Sifting)
+*Scenario: Analyzing a massive, mixed-format CI/CD failure log that contains both raw machine hex codes and verbose developer tracebacks.*
+
+Sometimes data is so noisy you need both a machete and a scalpel. You can chain different modes of Sift within the exact same pipe.
+
+**The Pipe (`ci-cd-autopsy`)**:
+1.  **Refinery Node (`semantic-sift-cli logs`)**: First, use the ultra-fast heuristic sieve (the machete) to instantly strip out thousands of timestamps, IP addresses, and progress bars.
+2.  **Skill Node (`build-engineer`)**: Inject instructions to focus strictly on dependency conflicts and linking errors.
+3.  **Refinery Node (`semantic-sift-cli semantic`)**: Finally, use the neural engine (the scalpel) to semantically compress the remaining verbose developer tracebacks.
+
+```json
+{
+  "name": "ci-cd-autopsy",
+  "nodes": [
+    { "cmd": "semantic-sift-cli", "args": ["logs"] },
+    { "cmd": "context-pipe-skill", "args": ["build-engineer"] },
+    { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.4"] }
+  ]
+}
+```
+**The Result:** A 10MB mixed-format build log is structurally sanitized, then semantically pruned, returning only the core reasoning behind the build failure.
+
+---
+
+## 6. The Visual QA Bot (Playwright SPA Crawler)
+*Scenario: Your agent needs to review a complex Single Page Application (SPA) for Accessibility (a11y) violations, but the raw HTML is generated dynamically by React/Vue/Svelte.*
+
+A standard `curl` fails here because the DOM hasn't rendered. You need a headless browser.
+
+**The Pipe (`spa-a11y-reviewer`)**:
+1.  **Bash Node (`node dump_dom.js`)**: A tiny local script uses Playwright to launch a headless browser, wait for JS hydration, and dump the fully rendered HTML Accessibility Tree to `stdout`.
+2.  **Node (`markitdown`)**: Converts the massive rendered HTML DOM into clean, structured Markdown.
+3.  **Skill Node (`a11y-auditor`)**: Injects strict WCAG (Web Content Accessibility Guidelines) instructions.
+4.  **Refinery Node (`semantic-sift-cli semantic`)**: Compresses the DOM, focusing the LLM's attention purely on missing ARIA labels and structural flaws.
+
+```json
+{
+  "name": "spa-a11y-reviewer",
+  "nodes": [
+    { "cmd": "node", "args": ["scripts/dump_dom.js"], "shell": true },
+    { "cmd": "python", "args": ["-m", "markitdown"] },
+    { "cmd": "context-pipe-skill", "args": ["a11y-auditor"] },
+    { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.5"] }
+  ]
+}
+```
+**The Result:** The LLM effortlessly audits highly dynamic web applications without choking on megabytes of React hydration boilerplate.
+
+---
 *Building High-Fidelity Infrastructure for the Studio of Two.*
