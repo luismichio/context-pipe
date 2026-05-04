@@ -56,8 +56,19 @@ Executes arbitrary shell commands. Ideal for using standard Unix utilities.
 
 ### C. Skill Nodes
 Applies an "Expert Lens" by injecting specialized mandates.
+
+**Example: React Expert Chain**
+This chain uses OS bash to auto-format the code with `eslint`, injects React 19 expert instructions from the MCP Market via a Skill Node, and then semantically condenses the result. The LLM receives pre-reviewed, compliant code.
+
 ```json
-{ "cmd": "context-pipe-skill", "args": ["security-auditor"] }
+{
+  "name": "react-expert-chain",
+  "nodes": [
+    { "cmd": "npx", "args": ["eslint", "--stdin", "--fix-dry-run"], "shell": true },
+    { "cmd": "context-pipe-skill", "args": ["react-code-fix-linter"] },
+    { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.6"] }
+  ]
+}
 ```
 
 ### D. Bring Your Own Parser (BYOP)

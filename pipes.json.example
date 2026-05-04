@@ -87,7 +87,7 @@
     },
     {
       "name": "the-god-pipe",
-      "description": "Extreme chaining: Fetch -> Extract -> Grep -> Mask -> Sift -> Rank.",
+      "description": "Extreme chaining: Fetch -> Extract -> Grep -> Mask -> Sift",
       "nodes": [
         {
           "cmd": "curl",
@@ -106,6 +106,25 @@
         {
           "cmd": "semantic-sift-cli",
           "args": ["semantic", "--rate", "0.2"]
+        }
+      ]
+    },
+    {
+      "name": "react-expert-chain",
+      "description": "Pre-processes code through a linter and an expert instruction lens before sifting.",
+      "nodes": [
+        {
+          "cmd": "npx",
+          "args": ["eslint", "--stdin", "--fix-dry-run"],
+          "shell": true
+        },
+        {
+          "cmd": "context-pipe-skill",
+          "args": ["react-code-fix-linter"]
+        },
+        {
+          "cmd": "semantic-sift-cli",
+          "args": ["semantic", "--rate", "0.6"]
         }
       ]
     }
