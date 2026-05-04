@@ -23,3 +23,7 @@
 ## ⚪ Phase 4: Distribution
 - [ ] **PyPI Publishing**: `pip install context-pipe`.
 - [ ] **Slash Command Injection**: Universal `/pipe` commands for agentic CLIs.
+
+## 🟣 Phase 5: A2A (Agent-to-Agent) Orchestration
+- [ ] **Multi-Agent Interception**: Position Context-Pipe as the definitive "Data Bus" for A2A frameworks (e.g., CrewAI, Google ADK). Allow Agent A's output to be piped through a distillation refinery before reaching Agent B's context window.
+- [ ] **Stream Splitting (T-Pipes)**: Allow a single upstream tool to output to multiple downstream nodes (e.g., logging a raw stream to disk while piping the distilled stream to the LLM).
