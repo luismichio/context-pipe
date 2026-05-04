@@ -37,11 +37,86 @@
           "args": ["logs"]
         }
       ]
+    },
+    {
+      "name": "error-focus-chain",
+      "description": "Extracts only error lines via OS Bash, then compresses them.",
+      "nodes": [
+        {
+          "cmd": "grep",
+          "args": ["-i", "error\\|exception"],
+          "shell": true
+        },
+        {
+          "cmd": "semantic-sift-cli",
+          "args": ["semantic", "--rate", "0.6"]
+        }
+      ]
+    },
+    {
+      "name": "architectural-review",
+      "description": "Applies security and architecture lenses, then sifts.",
+      "nodes": [
+        {
+          "cmd": "context-pipe-skill",
+          "args": ["security-auditor"]
+        },
+        {
+          "cmd": "context-pipe-skill",
+          "args": ["performance-auditor"]
+        },
+        {
+          "cmd": "semantic-sift-cli",
+          "args": ["auto", "--rate", "0.4"]
+        }
+      ]
+    },
+    {
+      "name": "advanced-ingestion-chain",
+      "description": "Bring your own parser: Custom LlamaIndex/MarkItDown parser piped directly into the native Rust sidecar.",
+      "nodes": [
+        {
+          "cmd": "python",
+          "args": ["-m", "my_custom_parser"]
+        },
+        {
+          "cmd": "sift-core",
+          "args": ["semantic", "--rate", "0.4"]
+        }
+      ]
+    },
+    {
+      "name": "the-god-pipe",
+      "description": "Extreme chaining: Fetch -> Extract -> Grep -> Mask -> Sift -> Rank.",
+      "nodes": [
+        {
+          "cmd": "curl",
+          "args": ["-s", "https://raw.githubusercontent.com/kubernetes/kubernetes/master/CHANGELOG/CHANGELOG-1.30.md"],
+          "shell": true
+        },
+        {
+          "cmd": "grep",
+          "args": ["-i", "API"],
+          "shell": true
+        },
+        {
+          "cmd": "context-pipe-skill",
+          "args": ["pii-masker"]
+        },
+        {
+          "cmd": "semantic-sift-cli",
+          "args": ["semantic", "--rate", "0.2"]
+        }
+      ]
     }
   ],
   "mappings": [
     {
-      "trigger": "tool:search|grep|find",
+      "trigger": "tool:web_search|web_fetch|google_web_search",
+      "pipe": "semantic-refinery"
+    },
+    {
+      "trigger": "tool:search_code|grep_search|glob|find_symbol",
       "pipe": "semantic-refinery"
     },
     {

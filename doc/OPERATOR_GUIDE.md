@@ -60,6 +60,39 @@ Applies an "Expert Lens" by injecting specialized mandates.
 { "cmd": "context-pipe-skill", "args": ["security-auditor"] }
 ```
 
+### D. Bring Your Own Parser (BYOP)
+Context-Pipe enables extreme decoupling. If you prefer to use **LlamaIndex** or a standalone **MarkItDown** parser instead of the Hybrid Engine, you can chain your custom parser directly into the native Rust Sidecar (`sift-core`).
+
+**Comparison: Hybrid Engine vs. BYOP Chain**
+*   **The Hybrid Path (`semantic-sift-cli auto`)**: The Python MCP handles both ingestion (MarkItDown) and semantic sifting in one step. Best for simplicity.
+*   **The BYOP Path (`my_parser | sift-core`)**: You write a tiny Python script to parse the PDF, then pipe its `stdout` directly into the `sift-core` Rust binary. Best for maximum control and zero-VRAM sifting.
+
+```json
+{
+  "name": "advanced-ingestion-chain",
+  "nodes": [
+    { "cmd": "python", "args": ["-m", "my_custom_llamaindex_parser"] },
+    { "cmd": "sift-core", "args": ["semantic", "--rate", "0.4"] }
+  ]
+}
+```
+
+### E. Extreme Chaining (The God Pipe)
+Because Context-Pipe is simply OS-level `stdin`/`stdout`, there is no theoretical limit to how many transformations you can chain. You can combine web fetching, bash filtering, skill masking, and neural compression into a single stream.
+
+```json
+{
+  "name": "the-god-pipe",
+  "description": "Fetch -> Extract -> Grep -> Mask -> Sift",
+  "nodes": [
+    { "cmd": "curl", "args": ["-s", "https://raw.githubusercontent.com/kubernetes/kubernetes/master/CHANGELOG/CHANGELOG-1.30.md"], "shell": true },
+    { "cmd": "grep", "args": ["-i", "API"], "shell": true },
+    { "cmd": "context-pipe-skill", "args": ["pii-masker"] },
+    { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.2"] }
+  ]
+}
+```
+
 ---
 
 ## 4. Understanding Triggers (Mappings)
@@ -67,7 +100,8 @@ Applies an "Expert Lens" by injecting specialized mandates.
 Mappings allow the Switchboard to decide the best distillation strategy automatically.
 
 1.  **Tool Trigger (`tool:regex`)**: Matches the name of the MCP tool being called.
-    *   Example: `{"trigger": "tool:grep|search", "pipe": "semantic-refinery"}`
+    *   Web Example: `{"trigger": "tool:web_search|web_fetch|google_web_search", "pipe": "semantic-refinery"}`
+    *   Code Example: `{"trigger": "tool:search_code|grep_search|glob|find_symbol", "pipe": "semantic-refinery"}`
 2.  **Size Trigger (`size:>num`)**: Activates when the payload exceeds a specific character count.
     *   Example: `{"trigger": "size:>20000", "pipe": "heavy-distill"}`
 3.  **Default**: The fallback pipe used when no other triggers match.
