@@ -5,6 +5,26 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **`discover_sift_executable()`** (`onboarding.py`): Multi-stage discovery algorithm that locates `semantic-sift-cli` across the current venv, system PATH, pipx, sibling venv directories (up to 4 levels deep), and user home venvs. Eliminates the requirement for both packages to share the same virtual environment.
+- **`resolve_pipes_config()`** (`onboarding.py`): Rewrites `semantic-sift-cli` nodes in `pipes.json` with the discovered absolute path. Idempotent. Called automatically during `pipe_onboard` for all environments.
+- **`verify_installation()`** (`onboarding.py`): Structured health check covering context-pipe importability, `pipes.json` validity, sift CLI discovery and version response, and per-node PATH resolution.
+- **`pipe_verify` MCP tool** (`server.py`): Surfaces `verify_installation` results as a formatted markdown report with per-component status icons and actionable fix instructions. Also auto-runs `resolve_pipes_config` before reporting.
+
+### Fixed
+- **OpenCode `command` schema** (`onboarding.py`, `opencode.json`): The `pipe_onboard` OpenCode path was writing an invalid `"commands"` key with unsupported `action/server/tool` fields. Corrected to use the `"command"` (singular) key with a `"template"` string per the OpenCode spec.
+- **`opencode.json` typo** (`semantic-sift/opencode.json`): `external_directory` permission was set to `context-pie/**` instead of `context-pipe/**`.
+- **Documentation accuracy pass** (`INTEGRATION_ENCYCLOPEDIA.md`, `README.md`, `OPERATOR_GUIDE.md`): Corrected OpenCode-specific claims across all docs — config path (`~/.opencode.json` → `<project-root>/opencode.json`), plugin interception capability (active → placeholder pending upstream fix), Section 5 wrapper logic (removed OpenCode from `AfterTool` extraction list), and onboarding description (clarified plugin generates placeholder only). All references now link to [sst/opencode#21149](https://github.com/sst/opencode/issues/21149) and explain the interim `AGENTS.md` SOP strategy.
+- **Installation sequence documented** (`README.md`, `OPERATOR_GUIDE.md` Section 0): Added the **Sovereign Dual-Repo Pattern** — the actual setup in use. Documents that `context-pipe/venv` is the master venv holding both packages (via `pip install -e ../semantic-sift`), that `semantic-sift/venv312` is the ML-only runtime (Python 3.12, torch/CUDA), that `semantic-sift-cli` lives in `context-pipe/venv/Scripts/`, and that both `pipes.json` files reference that single absolute path. Removed misleading "venv table" and standalone `pip install .` instructions that did not reflect the cross-install pattern. The `tool.execute.after` hook is declared in the OpenCode plugin `Hooks` interface but is **never triggered** by the OpenCode runtime (confirmed via full source audit of `session/processor.ts`, `session/llm.ts`, `tool/registry.ts`, `agent.ts`, and all v2 session files). The plugin's output mutation code (`output.output = parsed.result`) was silently a no-op. The plugin is now a documented placeholder with the mutation handler commented out. The real interception point remains the `pipe_read_file` MCP tool per the AGENTS.md SOP. Issue filed upstream: [sst/opencode#25918](https://github.com/sst/opencode/issues/25918).
+
+### Changed
+- **`inject_hooks()`** (`onboarding.py`): Step 0b now runs `resolve_pipes_config` for all environments so `pipe_onboard` always attempts to auto-link sift regardless of IDE target.
+- **`README.md`**: Removed `pip install mcp-context-pipe[multi-modal]` instruction (markitdown is a semantic-sift concern, not context-pipe). Added `pipe_verify` step to Getting Started. Updated refinery install instructions.
+- **`OPERATOR_GUIDE.md`**: Expanded section 7 (Auto-Onboarding) with refinery auto-link detail. Added new section 8 (Verifying the Installation) with `pipe_verify` output example and supported install pattern matrix.
+- **`ARCHITECTURE.md`**: Added section 5 documenting the onboarding/discovery/verification subsystem.
+
 ## [0.1.0] - 2026-05-03
 
 ### ✨ High-Fidelity Foundation
@@ -16,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Agnostic Routing Engine**: Implemented a dynamic `mappings` system in `pipes.json`. The system now automatically routes data to the optimal pipe based on:
     - **Tool Triggers**: Regex-based matching for tool names (e.g., `search|grep|find`).
     - **Size Triggers**: Automatic scaling of distillation based on character count thresholds.
-- **Universal Context Hook**: A platform-aware interceptor (`pipe_hook.py`) that subconsciously applies context pipes to tools in **Cursor, VS Code, Gemini CLI, Claude Desktop, and OpenCode**.
+- **Universal Context Hook**: A platform-aware interceptor (`pipe_hook.py`) that subconsciously applies context pipes to tools in **Cursor, VS Code, Gemini CLI, and Claude Desktop**. OpenCode uses a TypeScript plugin scaffold and `AGENTS.md` SOP mandate instead (see [sst/opencode#21149](https://github.com/sst/opencode/issues/21149)).
 
 ### 📊 Context Accounting & ROI
 - **Context Balance Sheet**: Advanced telemetry engine that tracks "Signal Injected" (Augmentation) vs. "Noise Incinerated" (Reduction) across the entire supply chain.

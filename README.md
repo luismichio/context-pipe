@@ -26,7 +26,7 @@ A language-agnostic standard based on `stdin` and `stdout`. If a tool can read t
 A lightweight orchestrator that manages multi-node data streams (e.g., `[Ingest] -> [Mask] -> [Rerank] -> [Distill]`).
 
 ### 3. Subconscious Interceptors
-Universal hooks that automatically apply your context pipes to *any* MCP tool call in IDEs like Cursor, VS Code, and Windsurf.
+Universal hooks that automatically apply your context pipes to *any* MCP tool call in IDEs like Cursor, VS Code, and Windsurf. For OpenCode, the `AGENTS.md` SOP mandate (`pipe_read_file` for all file reads) is the active strategy until transparent plugin interception is supported upstream.
 
 ---
 
@@ -37,35 +37,39 @@ Universal hooks that automatically apply your context pipes to *any* MCP tool ca
 **Option A: Quick Install (PyPI)**
 ```bash
 pip install mcp-context-pipe
+pip install semantic-sift
 ```
-*(To include MarkItDown for PDF parsing, run `pip install mcp-context-pipe[multi-modal]`)*
 
-**Option B: Sovereign Pattern (Recommended)**
-Clone the repository to maintain full control over the `pipes.json` logic:
+**Option B: Sovereign Pattern (Recommended for Studio of Two)**
+Clone both repos side-by-side. The `context-pipe` venv acts as the master environment holding both packages. See **[Section 0 of the Operator's Guide](doc/OPERATOR_GUIDE.md#0-installation-sovereign-dual-repo-pattern)** for the full sequence.
+
 ```bash
+# 1. Clone both repos
 git clone https://github.com/luismichio/context-pipe.git
+git clone https://github.com/luismichio/semantic-sift.git
+
+# 2. Master venv in context-pipe — holds both packages
 cd context-pipe
-# Dedicated environment (Recommended)
 python -m venv venv
+# Windows:
 .\venv\Scripts\activate
-pip install .
+# macOS/Linux:
+# source venv/bin/activate
+pip install -e .
+pip install -e ../semantic-sift  # semantic-sift-cli lands in context-pipe/venv/Scripts/ (Win) or venv/bin/ (Mac/Linux)
+
+# 3. ML runtime venv in semantic-sift (Python 3.12 for torch/CUDA compatibility)
+cd ../semantic-sift
+python3.12 -m venv venv312
+# Windows:
+.\venv312\Scripts\activate
+# macOS/Linux:
+# source venv312/bin/activate
+pip install mcp
+pip install -e .[neural]         # torch, transformers, llmlingua
 ```
 
-### 🐍 Python Environment Guidance
-
-Choosing the right Python path for your MCP configuration is critical for stability:
-
-| Setup Type | Path Example | Pros | Cons |
-| :--- | :--- | :--- | :--- |
-| **Dedicated Venv** | `.../context-pipe/venv/Scripts/python.exe` | **Isolated dependencies**, no version conflicts with other tools. | Slightly more disk space. |
-| **Global Python** | `C:/Users/User/AppData/Local/.../python.exe` | Shared libraries, fast setup. | High risk of version conflicts. |
-
-**Recommendation:** Always use the **Dedicated Venv** path in your `mcp_config.json` to ensure the orchestrator is fast and stable.
-
-For development tools (pytest, ruff, mypy):
-```bash
-pip install .[dev]
-```
+> **Note:** The package name on PyPI is `mcp-context-pipe` but the installed module is `context_pipe`. The `semantic-sift-cli` binary is registered only in the venv where `semantic-sift` is pip-installed (step 2 above). Both `pipes.json` files must reference that absolute path.
 
 ### 2. Connect the MCP
 
@@ -74,17 +78,18 @@ pip install .[dev]
 ### 3. Connect a Refinery
 Context-Pipe is the "Switchboard," but it needs a "Refinery" to distill data. **[Semantic-Sift](https://github.com/luismichio/semantic-sift)** is the flagship intelligence engine for this ecosystem. It uses heuristic sieves and neural models (BERT/ONNX) to incinerate noise (timestamps, boilerplate) while preserving 95% of the signal.
 
-```bash
-# Clone the Sift repository to gain access to the Rust sidecar and models
-git clone https://github.com/luismichio/semantic-sift.git
-cd semantic-sift
-pip install .[neural,multi-modal]
-```
+> **Note:** In the Sovereign Pattern, `semantic-sift` is cross-installed into `context-pipe/venv` (step 2 above). Context-Pipe will also auto-discover a separately installed `semantic-sift-cli` across all known locations (system PATH, pipx, sibling venv directories) via `pipe_onboard` or `pipe_verify`.
 
-### 4. Configure your first Pipe
+### 4. Verify the Installation
+After installing both packages, ask your AI assistant to verify the full stack:
+> *"Run `pipe_verify()` to confirm the installation."*
+
+This will report the health of every component and automatically link `semantic-sift-cli` into `pipes.json` if it was found in a separate environment.
+
+### 5. Configure your first Pipe
 Edit `pipes.json` (see `pipes.json.example`) to define your high-fidelity context streams.
 
-### 5. Auto-Onboard
+### 6. Auto-Onboard
 Once connected, ask your AI Assistant to configure your workspace:
 > *"Run `pipe_onboard(environment='Cursor')` to configure this project."*
 

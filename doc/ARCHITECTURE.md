@@ -68,4 +68,34 @@ The system records a `Trace Map` for every execution:
 To satisfy the **Expectation Effect**, the platform prepends a Markdown **Audit Header** to all processed content. This ensures the human architect and the AI partner are always aware of the context's health and ROI.
 
 ---
+
+## 5. Onboarding & Refinery Discovery (`onboarding.py`)
+
+The onboarding module is responsible for bootstrapping Context-Pipe into any IDE or CLI environment and for establishing a reliable link to external refineries like `semantic-sift`.
+
+### Refinery Discovery (`discover_sift_executable`)
+
+Because `semantic-sift` may be installed in a completely separate virtual environment, Context-Pipe uses a multi-stage discovery algorithm to locate its CLI binary at onboard time:
+
+1. **Current venv** (`sys.prefix/Scripts|bin`)
+2. **System PATH** (`shutil.which`)
+3. **pipx** (`~/.local/pipx/venvs/semantic-sift/`)
+4. **Sibling venv directories** — walks up to 4 levels to find a `../semantic-sift/venv*/` pattern
+5. **User home venvs** (`~/.venv`, `~/venv`)
+
+### Refinery Linking (`resolve_pipes_config`)
+
+Once the binary is discovered, `resolve_pipes_config` rewrites every `semantic-sift-cli` node in `pipes.json` with the resolved **absolute path**. This operation is idempotent and safe to call repeatedly. The orchestrator then uses this absolute path directly, bypassing any PATH ambiguity between isolated environments.
+
+### Installation Verification (`verify_installation`)
+
+`verify_installation` performs a structured health check:
+- Is `context_pipe.orchestrator` importable?
+- Does `pipes.json` exist and parse as valid JSON?
+- Is `semantic-sift-cli` discoverable and responsive (`--version`)?
+- Is every node command in `pipes.json` resolvable on disk or PATH?
+
+The results are surfaced via the `pipe_verify` MCP tool, which also auto-runs `resolve_pipes_config` to link sift before reporting.
+
+---
 *High-Fidelity Infrastructure for the Studio of Two.*

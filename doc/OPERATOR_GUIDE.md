@@ -4,7 +4,138 @@ Welcome to the **Context-Pipe Platform (CPP)**. This manual provides the definit
 
 ---
 
-## 1. Core Concepts
+## 0. Installation (Sovereign Dual-Repo Pattern)
+
+The recommended setup clones both repos side-by-side and uses a single **master venv** in `context-pipe` that holds both packages. `semantic-sift` gets its own venv only for the heavy ML/neural runtime (torch, transformers).
+
+```
+~/Workbench/GitHub/
+  context-pipe/       ← orchestration layer
+    venv/             ← MASTER venv (Python 3.13+, any OS)
+  semantic-sift/      ← neural distillation engine
+    venv312/          ← ML runtime venv (Python 3.12, torch/cuda)
+```
+
+### Step 1 — Clone both repos
+
+```bash
+git clone https://github.com/luismichio/context-pipe.git
+git clone https://github.com/luismichio/semantic-sift.git
+```
+
+### Step 2 — Create the master venv in context-pipe
+
+```bash
+cd context-pipe
+python -m venv venv
+
+# Windows:
+.\venv\Scripts\activate
+# macOS/Linux:
+# source venv/bin/activate
+```
+
+### Step 3 — Install context-pipe (editable)
+
+```bash
+pip install -e .
+```
+
+> The package name in `pyproject.toml` is `mcp-context-pipe` (PyPI) but installs as the `context_pipe` module. The editable install registers `context-pipe`, `context-pipe-server`, and `context-pipe-skill` CLI entry points.
+
+### Step 4 — Cross-install semantic-sift into the master venv (editable)
+
+```bash
+pip install -e ../semantic-sift
+```
+
+This installs `semantic-sift` from the sibling repo into `context-pipe/venv`. The `semantic-sift-cli` binary now lives at:
+
+| OS | Path |
+| :--- | :--- |
+| **Windows** | `context-pipe/venv/Scripts/semantic-sift-cli.exe` |
+| **macOS/Linux** | `context-pipe/venv/bin/semantic-sift-cli` |
+
+This is the path that `pipes.json` must reference.
+
+### Step 5 — Create the ML runtime venv in semantic-sift
+
+```bash
+cd ../semantic-sift
+python3.12 -m venv venv312
+
+# Windows:
+.\venv312\Scripts\activate
+# macOS/Linux:
+# source venv312/bin/activate
+
+pip install mcp
+pip install -e .[neural]        # torch, transformers, llmlingua
+```
+
+> `semantic-sift/venv312` is the **neural runtime only**. The MCP server (`server.py`) loads the `semantic_sift` package via `sys.path` from the repo root — it does not require `semantic-sift` to be pip-installed in this venv.
+
+### Step 6 — Register both MCP servers in opencode.json
+
+In each project's `opencode.json`, register both servers. The `PIPE_CONFIG_PATH` env var must point to that project's own `pipes.json`.
+
+**Windows:**
+```json
+"mcp": {
+  "semantic-sift": {
+    "type": "local",
+    "command": [
+      "C:/path/to/semantic-sift/venv312/Scripts/python.exe",
+      "C:/path/to/semantic-sift/server.py"
+    ]
+  },
+  "context-pipe": {
+    "type": "local",
+    "command": [
+      "C:/path/to/context-pipe/venv/Scripts/python.exe",
+      "-m",
+      "context_pipe.server"
+    ],
+    "environment": {
+      "PIPE_CONFIG_PATH": "C:/path/to/<this-project>/pipes.json"
+    }
+  }
+}
+```
+
+**macOS/Linux:**
+```json
+"mcp": {
+  "semantic-sift": {
+    "type": "local",
+    "command": [
+      "/path/to/semantic-sift/venv312/bin/python",
+      "/path/to/semantic-sift/server.py"
+    ]
+  },
+  "context-pipe": {
+    "type": "local",
+    "command": [
+      "/path/to/context-pipe/venv/bin/python",
+      "-m",
+      "context_pipe.server"
+    ],
+    "environment": {
+      "PIPE_CONFIG_PATH": "/path/to/<this-project>/pipes.json"
+    }
+  }
+}
+```
+
+### Step 7 — Verify `pipes.json` points to the correct sift-cli
+
+Open `pipes.json` in your project root and confirm every node `cmd` is the **absolute path** to `context-pipe/venv/Scripts/semantic-sift-cli.exe`. If it isn't, ask your AI assistant:
+> *"Run `pipe_verify()` to confirm the installation."*
+
+`pipe_verify` will auto-link sift if the path is wrong or missing.
+
+---
+
 
 To master Context-Pipe, you must understand its three foundational components:
 
@@ -167,13 +298,49 @@ Context-Pipe includes an automated engine to configure your project workspace wi
 Once you have connected the MCP server to your IDE, ask your AI assistant:
 > *"Run `pipe_onboard(environment='Cursor')`"*
 
-Replace `'Cursor'` with your active environment (e.g., `'Gemini'`, `'VSCode'`, `'Windsurf'`, `'Claude'`, `'Cline'`).
+Replace `'Cursor'` with your active environment (e.g., `'Gemini'`, `'VSCode'`, `'Windsurf'`, `'Claude'`, `'Cline'`, `'OpenCode'`).
 
 ### What Onboarding Does
 1.  **Mandate Injection**: Injects the Context-Pipe SOP into `AGENTS.md`, `.cursorrules`, and other instruction files. This forces the agent to use `pipe_read_file` for all file I/O.
-2.  **Hook Injection**: Automatically configures `.cursor/hooks.json` or `.github/hooks/` to use the `context-pipe wrap` polyfill for all other tool calls.
+2.  **Hook Injection**: Automatically configures `.cursor/hooks.json` or `.github/hooks/` to use the `context-pipe wrap` polyfill for all other tool calls. For OpenCode, generates a TypeScript plugin at `.opencode/plugins/context-pipe.ts`. **Note**: the OpenCode plugin is currently a documented placeholder — `tool.execute.after` does not fire correctly for MCP tools as of v1.14.39 ([sst/opencode#21149](https://github.com/sst/opencode/issues/21149)). The `AGENTS.md` SOP mandate is the active interception strategy in OpenCode workspaces.
 3.  **Security Gateways**: Injects blocking hooks into Windsurf and Cline to proactively prevent large native file reads.
 4.  **Subagent Shielding**: Recursively discovers specialized agent configs (e.g., in `.cursor/agents/`) and applies context protection to them.
+5.  **Refinery Auto-Link**: Discovers `semantic-sift-cli` across all known locations (current venv, system PATH, pipx, sibling venv directories) and writes its **absolute path** into `pipes.json`. This means context-pipe and semantic-sift can live in completely separate virtual environments — no manual linking required.
+
+---
+
+## 8. Verifying the Installation
+
+After onboarding, always verify the full stack is operational:
+> *"Run `pipe_verify()` to confirm the installation."*
+
+`pipe_verify` performs a health check across every component and returns a structured report:
+
+```
+## Context-Pipe Installation Report
+
+✅ context-pipe: Installed at /path/to/context_pipe/orchestrator.py
+✅ pipes.json (/path/to/pipes.json): 4 pipes defined
+✅ semantic-sift-cli: semantic-sift 0.2.2 — /path/to/venv312/Scripts/semantic-sift-cli.exe
+   > pipes.json nodes updated to use absolute path.
+
+### Pipe Node Resolution
+✅ /abs/path/to/semantic-sift-cli → `/abs/path/to/semantic-sift-cli`
+
+Overall: ✅ All systems operational.
+```
+
+If semantic-sift is not found, the report will include actionable install instructions.
+
+### Supported Install Patterns
+
+| Pattern | Works? |
+| :--- | :--- |
+| `pip install mcp-context-pipe` + `pip install semantic-sift` (same venv) | ✅ |
+| `pip install mcp-context-pipe` + `pip install semantic-sift` (separate venvs) | ✅ Auto-linked by `pipe_onboard` / `pipe_verify` |
+| `pipx install semantic-sift` | ✅ Discovered via pipx path |
+| Clone both repos with dedicated venvs | ✅ Sibling venv discovery |
+| `pip install mcp-context-pipe` only (no sift) | ✅ Graceful — pipes return helpful error |
 
 ---
 *Building Systems, not Patches.*

@@ -24,8 +24,8 @@ These environments have dedicated logic implemented in `pipe_hook.py` for payloa
     *   **Architecture**: `postToolUse` and `beforeMCPExecution` triggers via `hooks.json`.
     *   **Support**: Merges hook execution commands into `.cursor/hooks.json`. Relies on the **Echo Guard** to prevent loops.
 *   **OpenCode & OpenClaw**:
-    *   **Architecture**: Native TypeScript Plugins.
-    *   **Support**: Generates custom TypeScript wrappers at `.opencode/plugins/context-pipe.ts` or `.openclaw/plugins/context-pipe.ts`.
+    *   **Architecture**: Native TypeScript Plugins via `tool.execute.after` hook.
+    *   **Support**: Generates a TypeScript plugin at `.opencode/plugins/context-pipe.ts`. **Note**: As of OpenCode v1.14.39, `tool.execute.after` fires with the raw `CallToolResult` shape for MCP tools (not the declared `{title, output, metadata}` shape), making output mutation a no-op for all MCP tools. The generated plugin is currently a documented placeholder. Interception will be re-enabled once the upstream fix lands ([sst/opencode#21149](https://github.com/sst/opencode/issues/21149)). In the interim, the `AGENTS.md` SOP mandate (`pipe_read_file` for all file reads) is the active interception strategy.
 *   **Windsurf & Cline**:
     *   **Architecture**: Security Gateway.
     *   **Support**: Injected into `.windsurf/hooks.json` or `.clinerules/hooks/`. Automatically blocks native file readers > 1KB to force the use of `pipe_read_file`.
@@ -45,7 +45,7 @@ To install the Context-Pipe server, find your software in the matrix below and c
 | **Continue.dev** | `~/.continue/config.json` | `mcpServers` | **D** (Unified) |
 | **Zed** | `~/.config/zed/settings.json` | `context_servers` | **A** (Standard) |
 | **VS Code Copilot**| `~/.copilot/mcp-config.json` | `mcpServers` | **A** (Standard) |
-| **OpenCode** | `~/.opencode.json` | `mcpServers` | **B** (Array) |
+| **OpenCode** | `<project-root>/opencode.json` (project-level) or `%APPDATA%/opencode/opencode.json` (global) | `mcp` | **B** (Array) |
 | **Google Antigravity**| `~/.gemini/antigravity/mcp_config.json` | `mcpServers` | **A** (Standard) |
 | **Cline / Roo Code** | IDE settings menu | `mcpServers` | **C** (Extended) |
 
@@ -130,8 +130,9 @@ During onboarding, the engine performs a recursive crawl of the workspace (up to
 ## 5. Payload Structures & Interception Logic (`wrapper.py`)
 
 ### 1. Smart Hooks (CLI Agents & Plugins)
-*   **Gemini/OpenCode/OpenClaw**: Detects `AfterTool` or `Compacting` event names. Extracts `tool_response.llmContent`.
+*   **Gemini/OpenClaw**: Detects `AfterTool` or `Compacting` event names. Extracts `tool_response.llmContent`.
 *   **Reinjection**: Injects ROI metrics into Gemini's `additionalContext` or prepends the **Audit Header** to the text result.
+*   **OpenCode**: Plugin hook (`tool.execute.after`) is registered but currently inactive for MCP tools — see compatibility note in Section 1. The `AGENTS.md` SOP mandate is the active strategy.
 
 ### 2. Blind Hooks (IDEs)
 *   **VS Code & Cursor**: Scans the incoming JSON for keys like `result` or `tool_response.llmContent`.

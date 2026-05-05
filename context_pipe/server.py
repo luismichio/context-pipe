@@ -7,7 +7,7 @@ from typing import Optional
 from mcp.server.fastmcp import FastMCP
 from .orchestrator import run_pipe
 from .telemetry import get_balance_sheet
-from .onboarding import inject_hooks
+from .onboarding import inject_hooks, verify_installation, resolve_pipes_config
 
 # Initialize FastMCP server
 mcp = FastMCP("Context-Pipe")
@@ -129,6 +129,57 @@ def get_pipe_stats() -> str:
 - **Platform Events:** {sheet['total_events']}
 - **Avg Node Latency:** {sheet['avg_latency_ms']:.2f}ms
     """
+
+@mcp.tool()
+def pipe_verify() -> str:
+    """
+    Verifies the context-pipe + semantic-sift installation health.
+    Reports what is working, what is missing, and how to fix it.
+    Automatically resolves and links semantic-sift-cli in pipes.json if found.
+    """
+    # Auto-resolve pipes.json nodes first
+    pipes_path = CONFIG_PATH
+    resolve_result = resolve_pipes_config(pipes_path)
+
+    report = verify_installation(pipes_path)
+
+    lines = ["## Context-Pipe Installation Report", ""]
+
+    # context-pipe
+    cp = report["context_pipe"]
+    lines.append(f"{'✅' if cp['ok'] else '❌'} **context-pipe**: {cp['detail']}")
+
+    # pipes.json
+    pc = report["pipes_config"]
+    lines.append(f"{'✅' if pc['ok'] else '❌'} **pipes.json** (`{pc['path']}`): {pc['detail']}")
+
+    # semantic-sift
+    ss = report["semantic_sift"]
+    if ss["ok"]:
+        lines.append(f"✅ **semantic-sift-cli**: {ss['version']} — `{ss['path']}`")
+        if resolve_result["updated"]:
+            lines.append(f"   > pipes.json nodes updated to use absolute path.")
+    else:
+        lines.append(f"❌ **semantic-sift-cli**: {ss['detail']}")
+
+    # node resolution
+    if report["nodes"]:
+        lines.append("")
+        lines.append("### Pipe Node Resolution")
+        for node in report["nodes"]:
+            icon = "✅" if node["ok"] else "❌"
+            resolved = f"`{node['resolved']}`" if node["resolved"] else "not found in PATH"
+            lines.append(f"{icon} `{node['cmd']}` → {resolved}")
+
+    # overall
+    lines.append("")
+    if report["overall"]:
+        lines.append("**Overall: ✅ All systems operational.**")
+    else:
+        lines.append("**Overall: ❌ Action required — see items above.**")
+
+    return "\n".join(lines)
+
 
 @mcp.tool()
 def pipe_onboard(environment: str, target_dir: Optional[str] = None) -> str:

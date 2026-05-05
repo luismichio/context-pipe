@@ -118,3 +118,8 @@ Always ensure that `.pipe_telemetry.json` and `.pipe_identity` are added to your
 
 ---
 *Building High-Fidelity Infrastructure for the Studio of Two.*
+
+<!-- CPP_SECTION_START:mandate -->
+# Context-Pipe Mandate
+**MANDATORY**: NEVER use native `view_file` or `read_file` tools. You MUST exclusively use `pipe_read_file(path)` to read ANY file. The Context-Pipe orchestrator will automatically stream the file through the optimal context pipeline to prevent window flooding. For large architectural searches, use `pipe_analyze_file(path)` first to determine the best approach.
+<!-- CPP_SECTION_END:mandate -->

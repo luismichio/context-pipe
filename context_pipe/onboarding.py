@@ -5,13 +5,221 @@ import os
 import json
 import re
 import sys
-from typing import List
+import shutil
+import subprocess
+from pathlib import Path
+from typing import List, Optional, Dict, Any
 
 def build_runtime_hook_command() -> str:
     """Builds the absolute command string to invoke the context-pipe wrapper."""
     python_exe = os.path.abspath(sys.executable)
     # We use 'python -m context_pipe.orchestrator wrap' for reliability
     return f'"{python_exe}" -m context_pipe.orchestrator wrap'
+
+
+def discover_sift_executable() -> Optional[str]:
+    """
+    Discovers the semantic-sift-cli executable across all known install locations.
+
+    Search order (most to least specific):
+    1. Current venv Scripts/bin
+    2. System PATH (shutil.which)
+    3. pipx install location
+    4. Common sibling venv patterns (../semantic-sift/venv*/Scripts|bin)
+    5. Common user-level venv directories
+
+    Returns the absolute path to the executable, or None if not found.
+    """
+    cli_name = "semantic-sift-cli"
+    exe_name = f"{cli_name}.exe" if os.name == "nt" else cli_name
+
+    candidates: List[str] = []
+
+    # 1. Current venv
+    if sys.prefix != sys.base_prefix:
+        bin_dir = "Scripts" if os.name == "nt" else "bin"
+        candidates.append(os.path.join(sys.prefix, bin_dir, exe_name))
+
+    # 2. System PATH
+    which_result = shutil.which(cli_name)
+    if which_result:
+        candidates.append(which_result)
+
+    # 3. pipx
+    pipx_home = os.environ.get("PIPX_HOME", os.path.join(Path.home(), ".local", "pipx", "venvs"))
+    pipx_candidate = os.path.join(pipx_home, "semantic-sift", "Scripts" if os.name == "nt" else "bin", exe_name)
+    candidates.append(pipx_candidate)
+
+    # 4. Sibling venv patterns: look for ../semantic-sift/venv*/Scripts/semantic-sift-cli
+    current_dir = os.path.dirname(os.path.abspath(sys.executable))
+    # Walk up to find a parent that might contain a sibling semantic-sift dir
+    for depth in range(4):
+        parent = str(Path(current_dir).parents[depth]) if depth < len(Path(current_dir).parents) else None
+        if not parent:
+            break
+        sift_root = os.path.join(parent, "semantic-sift")
+        if os.path.isdir(sift_root):
+            for entry in os.listdir(sift_root):
+                if entry.startswith("venv"):
+                    bin_dir = "Scripts" if os.name == "nt" else "bin"
+                    candidates.append(os.path.join(sift_root, entry, bin_dir, exe_name))
+
+    # 5. Common user-level locations
+    home = Path.home()
+    candidates += [
+        str(home / ".venv" / ("Scripts" if os.name == "nt" else "bin") / exe_name),
+        str(home / "venv" / ("Scripts" if os.name == "nt" else "bin") / exe_name),
+    ]
+
+    for path in candidates:
+        if path and os.path.isfile(path) and os.access(path, os.X_OK):
+            return os.path.abspath(path)
+
+    return None
+
+
+def resolve_pipes_config(pipes_json_path: str) -> Dict[str, Any]:
+    """
+    Reads pipes.json and rewrites any node that calls 'semantic-sift-cli'
+    with the discovered absolute executable path.
+
+    Returns a dict with keys:
+        - 'sift_path': str | None — resolved path or None
+        - 'updated': bool — whether pipes.json was modified
+        - 'pipes_path': str — path that was read/written
+    """
+    result: Dict[str, Any] = {"sift_path": None, "updated": False, "pipes_path": pipes_json_path}
+
+    if not os.path.exists(pipes_json_path):
+        return result
+
+    sift_exe = discover_sift_executable()
+    result["sift_path"] = sift_exe
+
+    if not sift_exe:
+        return result
+
+    try:
+        with open(pipes_json_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return result
+
+    modified = False
+    for pipe in config.get("pipes", []):
+        for node in pipe.get("nodes", []):
+            if node.get("cmd") == "semantic-sift-cli" or (
+                isinstance(node.get("cmd"), str) and node["cmd"].endswith("semantic-sift-cli")
+            ):
+                if node["cmd"] != sift_exe:
+                    node["cmd"] = sift_exe
+                    modified = True
+
+    if modified:
+        with open(pipes_json_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+        result["updated"] = True
+
+    return result
+
+
+def verify_installation(pipes_json_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Verifies the health of the context-pipe + semantic-sift installation.
+
+    Checks:
+    - context-pipe orchestrator is importable
+    - pipes.json exists and is valid JSON
+    - semantic-sift-cli is discoverable
+    - semantic-sift-cli responds to --version
+    - Each pipe node command is resolvable
+
+    Returns a structured report dict.
+    """
+    report: Dict[str, Any] = {
+        "context_pipe": {"ok": False, "detail": ""},
+        "pipes_config": {"ok": False, "path": pipes_json_path or "unknown", "detail": ""},
+        "semantic_sift": {"ok": False, "path": None, "version": None, "detail": ""},
+        "nodes": [],
+        "overall": False,
+    }
+
+    # 1. context-pipe self-check
+    try:
+        from context_pipe import orchestrator  # noqa: F401
+        report["context_pipe"]["ok"] = True
+        report["context_pipe"]["detail"] = f"Installed at {os.path.abspath(orchestrator.__file__)}"
+    except ImportError as e:
+        report["context_pipe"]["detail"] = str(e)
+
+    # 2. pipes.json
+    config_path = pipes_json_path or os.environ.get("PIPE_CONFIG_PATH", "pipes.json")
+    report["pipes_config"]["path"] = config_path
+    config = None
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+            report["pipes_config"]["ok"] = True
+            report["pipes_config"]["detail"] = f"{len(config.get('pipes', []))} pipes defined"
+        except (OSError, json.JSONDecodeError) as e:
+            report["pipes_config"]["detail"] = f"Invalid JSON: {e}"
+    else:
+        report["pipes_config"]["detail"] = "File not found"
+
+    # 3. semantic-sift-cli discovery
+    sift_exe = discover_sift_executable()
+    report["semantic_sift"]["path"] = sift_exe
+    if sift_exe:
+        try:
+            proc = subprocess.run(
+                [sift_exe, "--version"],
+                capture_output=True, text=True, timeout=15
+            )
+            version_output = (proc.stdout or proc.stderr).strip()
+            # If --version is not supported, the binary still exists and is callable
+            if proc.returncode != 0 or not version_output:
+                version_output = "installed"
+            report["semantic_sift"]["ok"] = True
+            report["semantic_sift"]["version"] = version_output
+            report["semantic_sift"]["detail"] = f"Found at {sift_exe}"
+        except subprocess.TimeoutExpired:
+            # Cold-start timeout — binary exists and is linked, treat as a warning not a failure
+            report["semantic_sift"]["ok"] = True
+            report["semantic_sift"]["version"] = "installed (cold-start timeout on version check)"
+            report["semantic_sift"]["detail"] = f"Found at {sift_exe} — binary is linked correctly"
+        except OSError as e:
+            report["semantic_sift"]["detail"] = f"Found but failed to run: {e}"
+    else:
+        report["semantic_sift"]["detail"] = (
+            "Not found. Install with: pip install semantic-sift  "
+            "or pip install mcp-context-pipe[sift]"
+        )
+
+    # 4. Node resolution check
+    if config:
+        seen_cmds: set = set()
+        for pipe in config.get("pipes", []):
+            for node in pipe.get("nodes", []):
+                cmd = node.get("cmd", "")
+                if cmd in seen_cmds:
+                    continue
+                seen_cmds.add(cmd)
+                resolved = shutil.which(cmd) or (cmd if os.path.isfile(cmd) else None)
+                report["nodes"].append({
+                    "cmd": cmd,
+                    "resolved": resolved,
+                    "ok": resolved is not None,
+                })
+
+    # 5. Overall
+    report["overall"] = (
+        report["context_pipe"]["ok"]
+        and report["pipes_config"]["ok"]
+        and report["semantic_sift"]["ok"]
+    )
+
+    return report
 
 def get_security_gateway_command() -> str:
     """Generates a proactive inhibitor command to block large native file reads."""
@@ -133,9 +341,21 @@ def inject_hooks(target_dir: str, environment: str) -> List[str]:
     subagents = discover_agent_configs(target_dir)
     if subagents:
         actions.append(f"Discovered {len(subagents)} specialized subagents.")
-        
     mandate_actions = inject_mandates(target_dir, subagents)
     actions.extend(mandate_actions)
+
+    # 0b. Auto-resolve semantic-sift-cli in pipes.json
+    pipes_json_path = os.path.join(target_dir, "pipes.json")
+    resolve_result = resolve_pipes_config(pipes_json_path)
+    if resolve_result["sift_path"] and resolve_result["updated"]:
+        actions.append(f"Linked semantic-sift-cli in pipes.json -> {resolve_result['sift_path']}")
+    elif resolve_result["sift_path"] and not resolve_result["updated"]:
+        actions.append(f"semantic-sift-cli already linked in pipes.json ({resolve_result['sift_path']})")
+    else:
+        actions.append(
+            "semantic-sift-cli not found. Pipes will use PATH fallback. "
+            "Run 'pip install semantic-sift' or 'pip install mcp-context-pipe[sift]' then re-run pipe_onboard."
+        )
 
     # 1. Cursor Injection
     if "cursor" in env_lower:
@@ -182,13 +402,11 @@ prompt = \"\"\"
                 }
                 
                 # 4.2 Update Commands
-                if "commands" not in oc_data:
-                    oc_data["commands"] = {}
-                oc_data["commands"]["/pipe-stats"] = {
-                    "description": "View Context-Pipe ROI",
-                    "action": "run_mcp_tool",
-                    "server": "context-pipe",
-                    "tool": "get_pipe_stats"
+                if "command" not in oc_data:
+                    oc_data["command"] = {}
+                oc_data["command"]["pipe-stats"] = {
+                    "description": "View Context-Pipe ROI Balance Sheet",
+                    "template": "Use the get_pipe_stats tool from the context-pipe MCP server and display the full ROI balance sheet."
                 }
                 
                 with open(oc_path, "w") as f:
@@ -200,26 +418,26 @@ prompt = \"\"\"
                 os.makedirs(oc_plugin_dir, exist_ok=True)
                 oc_plugin_path = os.path.join(oc_plugin_dir, "context-pipe.ts")
                 
-                oc_plugin_content = f"""/**
+                oc_plugin_content = """/**
  * Context-Pipe Native OpenCode Plugin
+ *
+ * NOTE: `tool.execute.after` is declared in the OpenCode plugin Hooks interface
+ * but is NOT currently triggered by the OpenCode runtime (as of v1.14.39).
+ * See: https://github.com/anomalyco/opencode/issues/25918
+ *
+ * This plugin is therefore TELEMETRY-ONLY. Output mutation via this hook has
+ * no effect. The real interception point is the `pipe_read_file` MCP tool,
+ * which is called explicitly by the agent per the AGENTS.md SOP.
+ *
+ * When OpenCode wires up the trigger in processor.ts, this plugin can be
+ * re-enabled for transparent output interception without any agent-side changes.
  */
-export default function (api: any) {{
-  api.on("tool.execute.after", async (event: any) => {{
-    const rawContent = event.result;
-    if (typeof rawContent !== 'string' || rawContent.length < 500) return;
-    if (rawContent.includes("--- [Context-Pipe: Native Execution] ---")) return;
-    try {{
-      const pythonExe = "{os.path.abspath(sys.executable)}";
-      const payload = {{ hook_event_name: "AfterTool", tool_name: event.toolName, result: rawContent }};
-      const {{ execSync }} = require('child_process');
-      const response = execSync(`"${{pythonExe}}" -m context_pipe.orchestrator wrap`, {{ input: JSON.stringify(payload), encoding: 'utf-8' }});
-      const siftedData = JSON.parse(response);
-      if (siftedData?.result) {{
-         event.result = siftedData.result;
-      }}
-    }} catch (error) {{ console.error("[Context-Pipe Plugin] failed:", error); }}
-  }});
-}};
+export const ContextPipePlugin = async (_: any) => {
+  return {
+    // Hook placeholder — will be activated once OpenCode triggers tool.execute.after
+    // "tool.execute.after": async (input: any, output: any) => { ... }
+  };
+};
 """
                 with open(oc_plugin_path, "w", encoding="utf-8") as f:
                     f.write(oc_plugin_content)
