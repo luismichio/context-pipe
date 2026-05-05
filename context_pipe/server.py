@@ -158,7 +158,7 @@ def pipe_verify() -> str:
     if ss["ok"]:
         lines.append(f"✅ **semantic-sift-cli**: {ss['version']} — `{ss['path']}`")
         if resolve_result["updated"]:
-            lines.append(f"   > pipes.json nodes updated to use absolute path.")
+            lines.append("   > pipes.json nodes updated to use absolute path.")
     else:
         lines.append(f"❌ **semantic-sift-cli**: {ss['detail']}")
 
