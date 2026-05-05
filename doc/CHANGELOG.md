@@ -5,7 +5,7 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.1] - 2026-05-05
 
 ### Added
 - **`discover_sift_executable()`** (`onboarding.py`): Multi-stage discovery algorithm that locates `semantic-sift-cli` across the current venv, system PATH, pipx, sibling venv directories (up to 4 levels deep), and user home venvs. Eliminates the requirement for both packages to share the same virtual environment.
