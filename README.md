@@ -33,7 +33,15 @@ Universal hooks that automatically apply your context pipes to *any* MCP tool ca
 ## 🏗️ Getting Started
 
 ### 1. Installation
-Clone the repository and install the orchestrator:
+
+**Option A: Quick Install (PyPI)**
+```bash
+pip install mcp-context-pipe
+```
+*(To include MarkItDown for PDF parsing, run `pip install mcp-context-pipe[multi-modal]`)*
+
+**Option B: Sovereign Pattern (Recommended)**
+Clone the repository to maintain full control over the `pipes.json` logic:
 ```bash
 git clone https://github.com/luismichio/context-pipe.git
 cd context-pipe

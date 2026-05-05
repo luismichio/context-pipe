@@ -11,6 +11,21 @@ from typing import List, Dict, Any, Optional
 # Metadata Signatures
 CPP_SIGNATURE = "--- [Context-Pipe: Native Execution] ---"
 
+def get_env_with_venv_path() -> Dict[str, str]:
+    """Ensures the current venv's bin/Scripts directory is in the PATH for child processes."""
+    env = os.environ.copy()
+    
+    # Detect if we are running in a virtual environment
+    if sys.prefix != sys.base_prefix:
+        venv_bin = os.path.join(sys.prefix, "Scripts" if os.name == "nt" else "bin")
+        if os.path.exists(venv_bin):
+            path_sep = ";" if os.name == "nt" else ":"
+            current_path = env.get("PATH", "")
+            if venv_bin not in current_path:
+                env["PATH"] = f"{venv_bin}{path_sep}{current_path}"
+                
+    return env
+
 def resolve_pipe_from_context(config: Dict[str, Any], tool_name: str, content_len: int) -> Optional[str]:
     """Resolves a pipe name based on mapping triggers."""
     mappings = config.get("mappings", [])
@@ -44,6 +59,9 @@ def run_pipe(pipe_config: Dict[str, Any], input_data: str) -> tuple[str, List[Di
     current_input = input_data
     trace = []
     
+    # 1. Prepare Environment (Self-Aware Venv Path)
+    process_env = get_env_with_venv_path()
+    
     # Global timeout for the entire pipe execution (default 10s)
     raw_timeout = os.environ.get("PIPE_NODE_TIMEOUT_MS", "10000")
     node_timeout = int(raw_timeout) / 1000.0
@@ -68,7 +86,8 @@ def run_pipe(pipe_config: Dict[str, Any], input_data: str) -> tuple[str, List[Di
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                shell=use_shell  # nosec B602
+                shell=use_shell,  # nosec B602
+                env=process_env
             )
             
             try:
