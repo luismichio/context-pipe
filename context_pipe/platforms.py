@@ -5,6 +5,7 @@ import os
 import psutil
 from typing import Dict, Optional
 
+
 def detect_client_id() -> str:
     """
     Infers the calling IDE/CLI from environment variables and parent process name.
@@ -23,13 +24,13 @@ def detect_client_id() -> str:
         ("JETBRAINS_IDE_URL", "JetBrains"),
         ("CLINE_TASK_ID", "Cline"),
         ("CLAUDE_TOOL_NAME", "Claude Desktop"),
-        ("GEMINI_SESSION_ID", "Gemini CLI")
+        ("GEMINI_SESSION_ID", "Gemini CLI"),
     ]
-    
+
     for var, label in _ENV_MAP:
         if os.environ.get(var):
             return label
-            
+
     # 2. Parent Process Heuristics
     _PROC_MAP = [
         ("antigravity", "Google Antigravity"),
@@ -40,9 +41,9 @@ def detect_client_id() -> str:
         ("gemini", "Gemini CLI"),
         ("cline", "Cline"),
         ("jetbrains", "JetBrains"),
-        ("zed", "Zed")
+        ("zed", "Zed"),
     ]
-    
+
     try:
         proc = psutil.Process(os.getpid())
         for ancestor in [proc] + proc.parents():
@@ -55,8 +56,9 @@ def detect_client_id() -> str:
                 continue
     except Exception:
         pass
-        
+
     return "Generic CLI"
+
 
 def extract_content(data: Dict, platform: str) -> tuple[str, Optional[str], Optional[str]]:
     """
@@ -66,7 +68,7 @@ def extract_content(data: Dict, platform: str) -> tuple[str, Optional[str], Opti
     tool_name = data.get("tool_name") or data.get("tool") or "unknown"
     agent_label = None
     content = ""
-    
+
     # Platform-specific subagent detection
     if platform == "Cursor":
         res = data.get("result", "")
@@ -77,7 +79,7 @@ def extract_content(data: Dict, platform: str) -> tuple[str, Optional[str], Opti
                 agent_label = "Bash"
     elif platform == "Gemini CLI":
         agent_label = data.get("hookSpecificOutput", {}).get("threadLabel")
-    
+
     # Shape-Aware Extraction
     if "tool_response" in data and isinstance(data["tool_response"], dict):
         content = data["tool_response"].get("llmContent", "")
@@ -85,8 +87,9 @@ def extract_content(data: Dict, platform: str) -> tuple[str, Optional[str], Opti
         content = data.get("result", "")
     if not content:
         content = data.get("llmContent") or data.get("content") or ""
-        
+
     return content, tool_name, agent_label
+
 
 def inject_content(data: Dict, content: str, platform: str) -> Dict:
     """
@@ -96,17 +99,17 @@ def inject_content(data: Dict, content: str, platform: str) -> Dict:
     if "tool_response" in data and isinstance(data["tool_response"], dict):
         data["tool_response"]["llmContent"] = content
         return data
-        
+
     # 2. Cursor / Claude Desktop / CLI Shape
     if "result" in data:
         data["result"] = content
         return data
-        
+
     # 3. Fallback: if 'llmContent' exists directly
     if "llmContent" in data:
         data["llmContent"] = content
     else:
         # 4. Universal key for unrecognized shapes
         data["processed_content"] = content
-        
+
     return data

@@ -5,6 +5,20 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-05-06
+
+### ✨ New Features
+- **Descriptive Telemetry Attribution**: The orchestrator (`wrapper.py` and `orchestrator.py`) now extracts `tool_name` and `agent_label` from IDE hook payloads and passes them to downstream nodes via `SIFT_TOOL_NAME` and `SIFT_AGENT_LABEL` environment variables.
+- **CLI Stats Command**: Added a dedicated `stats` subcommand to the `context-pipe` CLI (with aliases `get_pipe_stats` and `pipe-stats`) to view the ROI Balance Sheet directly from the terminal without invoking the MCP server.
+
+### 🛡️ Graceful Resilience & Security
+- **Indestructible Orchestrator**: Wrapped the main orchestrator CLI execution in a global `try/except` block. Any fatal errors (like file corruption or parsing failures) now silently return the original input text instead of crashing the IDE hook.
+- **Unified Telemetry Configuration**: Standardized environment variables using the `CPP_` prefix (e.g., `CPP_TELEMETRY_FILE`, `CPP_TELEMETRY_DISABLED`) while preserving backward compatibility. Standardized echo detection to use `.pipe_cache`.
+
+### Fixed
+- **Persistent Hook Corruption**: Transitioned `pipe_hook.py` and `telemetry.py` to use an "Indestructible Hook" pattern and unified file paths to resolve file-system sync conflicts that were causing interleaved code corruption on some high-latency environments.
+- **Reranking Mappings**: Updated default `pipes.json` to map `search|grep|find` tools to the new `rerank-and-sift` pipe utilizing the semantic-sift CLI's `rank` command.
+
 ## [0.1.1] - 2026-05-05
 
 ### Added
