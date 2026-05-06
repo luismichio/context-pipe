@@ -11,7 +11,7 @@
           "args": [
             "logs"
           ],
-          "help_msg": "semantic-sift-cli not found. Please install the Python orchestrator via 'pip install semantic-sift'."
+          "help_msg": "semantic-sift-cli not found. Please install the Python orchestrator via 'uv tool install semantic-sift'."
         }
       ]
     },
@@ -26,7 +26,7 @@
             "--rate",
             "0.5"
           ],
-          "help_msg": "semantic-sift-cli not found. Please install the Python orchestrator via 'pip install semantic-sift'."
+          "help_msg": "semantic-sift-cli not found. Please install the Python orchestrator via 'uv tool install semantic-sift'."
         }
       ]
     },
@@ -41,7 +41,7 @@
             "--rate",
             "0.3"
           ],
-          "help_msg": "semantic-sift-cli not found. Please install the Python orchestrator via 'pip install semantic-sift'."
+          "help_msg": "semantic-sift-cli not found. Please install the Python orchestrator via 'uv tool install semantic-sift'."
         }
       ]
     },

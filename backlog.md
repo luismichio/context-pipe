@@ -21,7 +21,7 @@
 - [ ] **Adaptive Thresholding**: Dynamically adjust rates based on window pressure.
 
 ## ⚪ Phase 4: Distribution
-- [ ] **PyPI Publishing**: `pip install context-pipe`.
+- [ ] **PyPI Publishing**: `uv pip install context-pipe`.
 - [ ] **Slash Command Injection**: Universal `/pipe` commands for agentic CLIs.
 
 ## 🔵 Phase 4.5: OpenCode Native Plugin (Blocked — Upstream)

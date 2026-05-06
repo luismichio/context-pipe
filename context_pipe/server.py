@@ -3,14 +3,21 @@
 
 import os
 import json
+import time
 from typing import Optional
 from mcp.server.fastmcp import FastMCP
 from .orchestrator import run_pipe
-from .telemetry import get_balance_sheet
+from .telemetry import get_balance_sheet, log_telemetry, generate_audit_header
+from .platforms import detect_client_id
 from .onboarding import inject_hooks, verify_installation, resolve_pipes_config
 
 # Initialize FastMCP server
 mcp = FastMCP("Context-Pipe")
+
+# Session Identity
+import uuid
+SESSION_ID = f"mcp-{uuid.uuid4().hex[:8]}"
+START_TIME = time.ctime()
 
 # Configuration
 CONFIG_PATH = os.environ.get("PIPE_CONFIG_PATH", "pipes.json")
@@ -54,9 +61,28 @@ def pipe_run(pipe_name: str, input_text: str) -> str:
     if not pipe:
         return f"Error: Pipe '{pipe_name}' not found."
 
+    start_t = time.time()
     try:
         result, trace = run_pipe(pipe, input_text)
-        return result
+        latency_ms = (time.time() - start_t) * 1000
+
+        # Log Telemetry for ROI tracking
+        platform = detect_client_id()
+        log_telemetry(
+            session_id=SESSION_ID,
+            start_time=START_TIME,
+            pipe_name=pipe_name,
+            tool_name="mcp:pipe_run",
+            original_size=len(input_text),
+            final_size=len(result),
+            latency_ms=latency_ms,
+            platform=platform
+        )
+
+        # Prepend Audit Header
+        header = generate_audit_header(pipe_name, trace, latency_ms)
+        return header + result
+
     except Exception as e:
         return f"Error executing pipe: {str(e)}"
 

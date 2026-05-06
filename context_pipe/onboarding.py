@@ -191,7 +191,7 @@ def verify_installation(pipes_json_path: Optional[str] = None) -> Dict[str, Any]
             report["semantic_sift"]["detail"] = f"Found but failed to run: {e}"
     else:
         report["semantic_sift"]["detail"] = (
-            "Not found. Install with: pip install semantic-sift  or pip install mcp-context-pipe[sift]"
+            "Not found. Install with: uv tool install semantic-sift  or uv pip install mcp-context-pipe[sift]"
         )
 
     # 4. Node resolution check
@@ -286,14 +286,49 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
     return False
 
 
-def inject_mandates(target_dir: str, subagents: List[str]) -> List[str]:
+def get_env_tool_names(environment: str) -> Dict[str, str]:
+    """Maps generic tool purposes to verified, environment-specific tool names."""
+    env_lower = environment.lower()
+    
+    # Mapping ONLY for Unshielded or Gateway environments (Mandates Required)
+    if "opencode" in env_lower:
+        return {"read": "read", "search": "grep", "list": "glob", "web": "websearch/webfetch"}
+    elif "windsurf" in env_lower:
+        return {"read": "read_file", "search": "grep_search/codebase_search", "list": "list_dir", "web": "web_search"}
+    elif "cline" in env_lower:
+        return {"read": "read_file", "search": "search_files", "list": "list_files", "web": "browser_action"}
+    elif "zed" in env_lower:
+        return {"read": "read_file", "search": "search/grep", "list": "list_files", "web": "fetch"}
+    elif "continue" in env_lower:
+        return {"read": "read_file", "search": "grep_search", "list": "ls", "web": "search_web/fetch_url_content"}
+    elif "jetbrains" in env_lower or "junie" in env_lower:
+        return {"read": "read_file", "search": "search_files", "list": "list_files", "web": "/web"}
+    elif "kilocode" in env_lower:
+        return {"read": "read_file", "search": "search_files", "list": "list_files", "web": "web_search"}
+    elif "antigravity" in env_lower:
+        return {"read": "view_file", "search": "grep_search", "list": "list_directory", "web": "web_search"}
+    
+    # Shielded Environments (Cursor, Gemini CLI, Claude Code, VS Code, Qwen, Codex, OpenClaw)
+    # Their hooks work silently. Injecting mandates here contradicts the architecture.
+    return {}
+
+
+def inject_mandates(target_dir: str, subagents: List[str], environment: str = "unknown") -> List[str]:
     """Injects the Path-Native mandate into global and subagent instruction files."""
     actions = []
+    env_tools = get_env_tool_names(environment)
+    
+    if not env_tools:
+        # Environment is shielded. No text mandates needed.
+        return []
+
     block_id = "<!-- CPP_SECTION_START:mandate -->"
     block_end = "<!-- CPP_SECTION_END:mandate -->"
 
-    mandate_text = """# Context-Pipe Mandate
-**MANDATORY**: NEVER use native `view_file` or `read_file` tools. You MUST exclusively use `pipe_read_file(path)` to read ANY file. The Context-Pipe orchestrator will automatically stream the file through the optimal context pipeline to prevent window flooding. For large architectural searches, use `pipe_analyze_file(path)` first to determine the best approach."""
+    mandate_text = f"""# Context-Pipe Mandate
+**MANDATORY LOCAL I/O**: NEVER use native `{env_tools['read']}`, `{env_tools['search']}`, or `{env_tools['list']}` tools for large outputs (> 1KB). You MUST exclusively use `pipe_read_file(path)` or `pipe_analyze_file(path)`.
+**MANDATORY WEB/SEARCH**: Do not read raw outputs from `{env_tools['web']}` or GitHub/Serena searches. You MUST pipe these outputs through `rerank-and-sift` or `sift_doc`.
+**CATCH-ALL**: For ANY tool output exceeding 100 lines (logs, API responses), you must use `pipe_analyze_file(path)` first to determine the optimal context pipeline to prevent window flooding."""
 
     full_payload = f"\n{block_id}\n{mandate_text}\n{block_end}\n"
 
@@ -342,7 +377,7 @@ def inject_hooks(target_dir: str, environment: str) -> List[str]:
     subagents = discover_agent_configs(target_dir)
     if subagents:
         actions.append(f"Discovered {len(subagents)} specialized subagents.")
-    mandate_actions = inject_mandates(target_dir, subagents)
+    mandate_actions = inject_mandates(target_dir, subagents, environment=environment)
     actions.extend(mandate_actions)
 
     # 0b. Auto-resolve semantic-sift-cli in pipes.json
@@ -355,7 +390,7 @@ def inject_hooks(target_dir: str, environment: str) -> List[str]:
     else:
         actions.append(
             "semantic-sift-cli not found. Pipes will use PATH fallback. "
-            "Run 'pip install semantic-sift' or 'pip install mcp-context-pipe[sift]' then re-run pipe_onboard."
+            "Run 'uv tool install semantic-sift' or 'uv pip install mcp-context-pipe[sift]' then re-run pipe_onboard."
         )
 
     # 1. Cursor Injection

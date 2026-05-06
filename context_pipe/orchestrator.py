@@ -71,8 +71,8 @@ def run_pipe(
     if agent_label:
         process_env["SIFT_AGENT_LABEL"] = agent_label
 
-    # Global timeout for the entire pipe execution (default 10s)
-    raw_timeout = os.environ.get("PIPE_NODE_TIMEOUT_MS", "10000")
+    # Global timeout for the entire pipe execution (default 30s to allow model warmup)
+    raw_timeout = os.environ.get("PIPE_NODE_TIMEOUT_MS", "30000")
     node_timeout = int(raw_timeout) / 1000.0
 
     for node in pipe_config.get("nodes", []):

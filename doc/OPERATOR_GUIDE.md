@@ -38,7 +38,7 @@ python -m venv venv
 ### Step 3 — Install context-pipe (editable)
 
 ```bash
-pip install -e .
+uv pip install -e .
 ```
 
 > The package name in `pyproject.toml` is `mcp-context-pipe` (PyPI) but installs as the `context_pipe` module. The editable install registers `context-pipe`, `context-pipe-server`, and `context-pipe-skill` CLI entry points.
@@ -46,7 +46,7 @@ pip install -e .
 ### Step 4 — Cross-install semantic-sift into the master venv (editable)
 
 ```bash
-pip install -e ../semantic-sift
+uv pip install -e ../semantic-sift
 ```
 
 This installs `semantic-sift` from the sibling repo into `context-pipe/venv`. The `semantic-sift-cli` binary now lives at:
@@ -69,8 +69,7 @@ python3.12 -m venv venv312
 # macOS/Linux:
 # source venv312/bin/activate
 
-pip install mcp
-pip install -e .[neural]        # torch, transformers, llmlingua
+uv pip install -e .[neural]        # torch, transformers, llmlingua
 ```
 
 > `semantic-sift/venv312` is the **neural runtime only**. The MCP server (`server.py`) loads the `semantic_sift` package via `sys.path` from the repo root — it does not require `semantic-sift` to be pip-installed in this venv.
@@ -336,11 +335,16 @@ If semantic-sift is not found, the report will include actionable install instru
 
 | Pattern | Works? |
 | :--- | :--- |
-| `pip install mcp-context-pipe` + `pip install semantic-sift` (same venv) | ✅ |
-| `pip install mcp-context-pipe` + `pip install semantic-sift` (separate venvs) | ✅ Auto-linked by `pipe_onboard` / `pipe_verify` |
+| `uv pip install mcp-context-pipe` + `uv pip install semantic-sift` (same venv) | ✅ |
+| `uv pip install mcp-context-pipe` + `uv pip install semantic-sift` (separate venvs) | ✅ Auto-linked by `pipe_onboard` / `pipe_verify` |
 | `pipx install semantic-sift` | ✅ Discovered via pipx path |
 | Clone both repos with dedicated venvs | ✅ Sibling venv discovery |
-| `pip install mcp-context-pipe` only (no sift) | ✅ Graceful — pipes return helpful error |
+| `uv pip install mcp-context-pipe` only (no sift) | ✅ Graceful — pipes return helpful error |
 
 ---
 *Building Systems, not Patches.*
+*
+*
+*
+*
+*

@@ -36,8 +36,8 @@ Universal hooks that automatically apply your context pipes to *any* MCP tool ca
 
 **Option A: Quick Install (PyPI)**
 ```bash
-pip install mcp-context-pipe
-pip install semantic-sift
+uv pip install mcp-context-pipe
+uv pip install semantic-sift
 ```
 
 **Option B: Sovereign Pattern (Recommended for Studio of Two)**
@@ -55,8 +55,8 @@ python -m venv venv
 .\venv\Scripts\activate
 # macOS/Linux:
 # source venv/bin/activate
-pip install -e .
-pip install -e ../semantic-sift  # semantic-sift-cli lands in context-pipe/venv/Scripts/ (Win) or venv/bin/ (Mac/Linux)
+uv pip install -e .
+uv pip install -e ../semantic-sift  # semantic-sift-cli lands in context-pipe/venv/Scripts/ (Win) or venv/bin/ (Mac/Linux)
 
 # 3. ML runtime venv in semantic-sift (Python 3.12 for torch/CUDA compatibility)
 cd ../semantic-sift
@@ -65,8 +65,7 @@ python3.12 -m venv venv312
 .\venv312\Scripts\activate
 # macOS/Linux:
 # source venv312/bin/activate
-pip install mcp
-pip install -e .[neural]         # torch, transformers, llmlingua
+uv pip install -e .[neural]         # torch, transformers, llmlingua
 ```
 
 > **Note:** The package name on PyPI is `mcp-context-pipe` but the installed module is `context_pipe`. The `semantic-sift-cli` binary is registered only in the venv where `semantic-sift` is pip-installed (step 2 above). Both `pipes.json` files must reference that absolute path.
@@ -156,3 +155,5 @@ Context-Pipe is a foundational member of the **Studio of Two** infrastructure. I
 
 ---
 *Building High-Fidelity Infrastructure for the Intelligence Age.*
+ge.*
+ge.*

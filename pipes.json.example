@@ -9,7 +9,7 @@
         {
           "cmd": "semantic-sift-cli",
           "args": ["logs"],
-          "help_msg": "semantic-sift-cli not found. Run 'pip install semantic-sift'."
+          "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
         }
       ]
     },
@@ -20,7 +20,7 @@
         {
           "cmd": "semantic-sift-cli",
           "args": ["semantic", "--rate", "0.5"],
-          "help_msg": "semantic-sift-cli not found. Run 'pip install semantic-sift'."
+          "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
         }
       ]
     },
