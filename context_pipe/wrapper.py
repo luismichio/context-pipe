@@ -6,7 +6,7 @@ import time
 import hashlib
 import os
 import uuid
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from .platforms import detect_client_id, extract_content, inject_content
 from .orchestrator import run_pipe, resolve_pipe_from_context, CPP_SIGNATURE
 from .telemetry import log_telemetry, generate_audit_header
@@ -15,19 +15,20 @@ from .telemetry import log_telemetry, generate_audit_header
 WRAPPER_SESSION_ID = f"hook-{uuid.uuid4().hex[:8]}"
 WRAPPER_START_TIME = time.ctime()
 
+
 def check_echo(text: str) -> bool:
     """Checks if the content was processed recently to prevent loops (30s TTL)."""
     if not text or len(text) < 500:
         return False
-    
+
     # Unified with Context-Pipe (.pipe_cache)
     cache_dir = os.path.join(os.getcwd(), ".pipe_cache")
     os.makedirs(cache_dir, exist_ok=True)
-    
+
     content_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
     echo_path = os.path.join(cache_dir, f"echo_{content_hash}.tmp")
     now = time.time()
-    
+
     if os.path.exists(echo_path):
         try:
             with open(echo_path, "r") as f:
@@ -36,15 +37,16 @@ def check_echo(text: str) -> bool:
                 return True
         except (OSError, ValueError):
             pass
-            
+
     # Write new marker
     try:
         with open(echo_path, "w") as f:
             f.write(str(now + 30))
     except OSError:
         pass
-        
+
     return False
+
 
 def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     """
@@ -98,7 +100,7 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
         for entry in trace:
             if "error" in entry:
                 continue
-            
+
             # Note: We use the node-level data for high-fidelity attribution,
             # but log_telemetry is designed to handle this session-keyed schema.
             log_telemetry(

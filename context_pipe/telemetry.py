@@ -3,7 +3,6 @@
 
 import os
 import json
-import time
 import threading
 from typing import Dict, Any, List, Optional
 
@@ -13,12 +12,13 @@ TELEMETRY_FILE = os.environ.get("CPP_TELEMETRY_FILE") or os.environ.get("PIPE_TE
 
 # Privacy Kill-Switch
 PIPE_TELEMETRY_DISABLED = (
-    os.environ.get("CPP_TELEMETRY_DISABLED", "").lower() == "true" or
-    os.environ.get("PIPE_TELEMETRY_DISABLED", "false").lower() == "true"
+    os.environ.get("CPP_TELEMETRY_DISABLED", "").lower() == "true"
+    or os.environ.get("PIPE_TELEMETRY_DISABLED", "false").lower() == "true"
 )
 
 # Locks for concurrent file access
 _TELEMETRY_LOCK = threading.Lock()
+
 
 def log_telemetry(
     session_id: str,
@@ -31,7 +31,7 @@ def log_telemetry(
     platform: str = "unknown",
     agent_label: Optional[str] = None,
     pipe_name: str = "unknown",
-    tier: str = "Real-World"
+    tier: str = "Real-World",
 ) -> None:
     """Logs tool performance metrics locally using the unified session-keyed schema."""
     if PIPE_TELEMETRY_DISABLED:
@@ -53,15 +53,22 @@ def log_telemetry(
 
             # Track by tool (convention: pipe:tool)
             composite_tool = f"{pipe_name}:{tool_name}"
-            
-            tool_stats = data[session_id]["tools"].get(composite_tool, {
-                "calls": 0, "original_chars": 0, "final_chars": 0,
-                "original_tokens": 0, "final_tokens": 0,
-                "total_latency_ms": 0, "cache_hits": 0,
-                "platform": platform,
-                "agent": agent_label or "Main",
-                "tier": tier
-            })
+
+            tool_stats = data[session_id]["tools"].get(
+                composite_tool,
+                {
+                    "calls": 0,
+                    "original_chars": 0,
+                    "final_chars": 0,
+                    "original_tokens": 0,
+                    "final_tokens": 0,
+                    "total_latency_ms": 0,
+                    "cache_hits": 0,
+                    "platform": platform,
+                    "agent": agent_label or "Main",
+                    "tier": tier,
+                },
+            )
 
             orig_tokens = estimate_tokens(" " * original_size)
             final_tokens = estimate_tokens(" " * final_size)
@@ -84,11 +91,13 @@ def log_telemetry(
         # Fail silently to avoid breaking the tool execution
         pass
 
+
 def estimate_tokens(text: str) -> int:
     """Provides a fast, high-fidelity token estimate (4 chars/token)."""
     if not text:
         return 0
     return max(1, len(text) // 4)
+
 
 def generate_audit_header(pipe_name: str, trace: List[Dict[str, Any]], latency_ms: float) -> str:
     """Generates a Markdown audit header showing cumulative ROI and node latency."""
@@ -104,37 +113,26 @@ def generate_audit_header(pipe_name: str, trace: List[Dict[str, Any]], latency_m
 
     header = [
         f"--- [Context-Pipe: {pipe_name}] ---",
-        f"📊 Context: {reduction_label} ({start_size/1024:.1f}KB -> {end_size/1024:.1f}KB)",
+        f"📊 Context: {reduction_label} ({start_size / 1024:.1f}KB -> {end_size / 1024:.1f}KB)",
         f"⚡ Latency: {latency_ms:.1f}ms",
         "Nodes: " + " → ".join([n["node"] for n in trace if "node" in n]),
-        "-----------------------------\n"
+        "-----------------------------\n",
     ]
     return "\n".join(header)
+
 
 def get_balance_sheet() -> Dict[str, Any]:
     """Calculates context ROI by aggregating all sessions.
     Filters out 'node' level events to prevent double counting with 'mcp' protocol events.
     """
     if not os.path.exists(TELEMETRY_FILE):
-        return {
-            "signal_added": 0,
-            "noise_removed": 0,
-            "net_change": 0,
-            "total_events": 0,
-            "avg_latency_ms": 0.0
-        }
+        return {"signal_added": 0, "noise_removed": 0, "net_change": 0, "total_events": 0, "avg_latency_ms": 0.0}
 
     try:
         with open(TELEMETRY_FILE, "r") as f:
             data = json.load(f)
     except (json.JSONDecodeError, OSError):
-        return {
-            "signal_added": 0,
-            "noise_removed": 0,
-            "net_change": 0,
-            "total_events": 0,
-            "avg_latency_ms": 0.0
-        }
+        return {"signal_added": 0, "noise_removed": 0, "net_change": 0, "total_events": 0, "avg_latency_ms": 0.0}
 
     total_calls = 0
     total_latency = 0.0
@@ -155,11 +153,11 @@ def get_balance_sheet() -> Dict[str, Any]:
                 calls = stats.get("calls", 0)
                 total_calls += calls
                 total_latency += stats.get("total_latency_ms", 0)
-                
+
                 orig = stats.get("original_chars", 0)
                 final = stats.get("final_chars", 0)
                 delta = final - orig
-                
+
                 if delta > 0:
                     signal_added += delta
                 else:
@@ -182,5 +180,5 @@ def get_balance_sheet() -> Dict[str, Any]:
         "noise_removed": noise_removed,
         "net_change": net_change,
         "total_events": total_calls,
-        "avg_latency_ms": total_latency / total_calls if total_calls > 0 else 0
+        "avg_latency_ms": total_latency / total_calls if total_calls > 0 else 0,
     }

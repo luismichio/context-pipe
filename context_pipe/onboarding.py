@@ -289,7 +289,7 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
 def get_env_tool_names(environment: str) -> Dict[str, str]:
     """Maps generic tool purposes to verified, environment-specific tool names."""
     env_lower = environment.lower()
-    
+
     # Mapping ONLY for Unshielded or Gateway environments (Mandates Required)
     if "opencode" in env_lower:
         return {"read": "read", "search": "grep", "list": "glob", "web": "websearch/webfetch"}
@@ -307,7 +307,7 @@ def get_env_tool_names(environment: str) -> Dict[str, str]:
         return {"read": "read_file", "search": "search_files", "list": "list_files", "web": "web_search"}
     elif "antigravity" in env_lower:
         return {"read": "view_file", "search": "grep_search", "list": "list_directory", "web": "web_search"}
-    
+
     # Shielded Environments (Cursor, Gemini CLI, Claude Code, VS Code, Qwen, Codex, OpenClaw)
     # Their hooks work silently. Injecting mandates here contradicts the architecture.
     return {}
@@ -317,7 +317,7 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: str = "u
     """Injects the Path-Native mandate into global and subagent instruction files."""
     actions = []
     env_tools = get_env_tool_names(environment)
-    
+
     if not env_tools:
         # Environment is shielded. No text mandates needed.
         return []
@@ -326,8 +326,8 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: str = "u
     block_end = "<!-- CPP_SECTION_END:mandate -->"
 
     mandate_text = f"""# Context-Pipe Mandate
-**MANDATORY LOCAL I/O**: NEVER use native `{env_tools['read']}`, `{env_tools['search']}`, or `{env_tools['list']}` tools for large outputs (> 1KB). You MUST exclusively use `pipe_read_file(path)` or `pipe_analyze_file(path)`.
-**MANDATORY WEB/SEARCH**: Do not read raw outputs from `{env_tools['web']}` or GitHub/Serena searches. You MUST pipe these outputs through `rerank-and-sift` or `sift_doc`.
+**MANDATORY LOCAL I/O**: NEVER use native `{env_tools["read"]}`, `{env_tools["search"]}`, or `{env_tools["list"]}` tools for large outputs (> 1KB). You MUST exclusively use `pipe_read_file(path)` or `pipe_analyze_file(path)`.
+**MANDATORY WEB/SEARCH**: Do not read raw outputs from `{env_tools["web"]}` or GitHub/Serena searches. You MUST pipe these outputs through `rerank-and-sift` or `sift_doc`.
 **CATCH-ALL**: For ANY tool output exceeding 100 lines (logs, API responses), you must use `pipe_analyze_file(path)` first to determine the optimal context pipeline to prevent window flooding."""
 
     full_payload = f"\n{block_id}\n{mandate_text}\n{block_end}\n"

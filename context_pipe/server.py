@@ -4,6 +4,7 @@
 import os
 import json
 import time
+import uuid
 from typing import Optional
 from mcp.server.fastmcp import FastMCP
 from .orchestrator import run_pipe
@@ -15,7 +16,6 @@ from .onboarding import inject_hooks, verify_installation, resolve_pipes_config
 mcp = FastMCP("Context-Pipe")
 
 # Session Identity
-import uuid
 SESSION_ID = f"mcp-{uuid.uuid4().hex[:8]}"
 START_TIME = time.ctime()
 
@@ -76,7 +76,7 @@ def pipe_run(pipe_name: str, input_text: str) -> str:
             original_size=len(input_text),
             final_size=len(result),
             latency_ms=latency_ms,
-            platform=platform
+            platform=platform,
         )
 
         # Prepend Audit Header
