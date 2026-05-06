@@ -49,6 +49,9 @@ uv pip install -e .
 uv pip install -e ../semantic-sift
 ```
 
+> **Windows Tip (`uv` environment discovery)**: If `uv` fails to find your environment (error: *"No virtual environment found"*), explicitly point to your interpreter using the `--python` flag:
+> `uv pip install -e . --python venv/Scripts/python.exe`
+
 This installs `semantic-sift` from the sibling repo into `context-pipe/venv`. The `semantic-sift-cli` binary now lives at:
 
 | OS | Path |
