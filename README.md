@@ -35,10 +35,16 @@ Universal hooks that automatically apply your context pipes to *any* MCP tool ca
 ### 1. Installation
 
 **Option A: Quick Install (PyPI)**
+
+Because MCP servers require an explicit Python executable path in your IDE config, you must create a virtual environment first:
+
+> **ℹ️ What you get:** This installs the Context-Pipe orchestration layer and Semantic-Sift's core Python server. The `sift-core` Rust binary (for near-instant heuristic sifting) is included in the PyPI wheel — no Rust toolchain required. The `[neural]` extra adds PyTorch (~1.5 GB) for large-payload semantic compression.
+
 ```bash
 uv venv
-# Windows: .\.venv\Scripts\activate | Mac/Linux: source .venv/bin/activate
-uv pip install mcp-context-pipe semantic-sift
+# Windows: .\.venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+uv pip install mcp-context-pipe "semantic-sift[neural,multi-modal]"
 ```
 
 **Option B: Sovereign Pattern (Recommended for Studio of Two)**
@@ -49,9 +55,9 @@ Clone both repos side-by-side. The `context-pipe` venv acts as the master enviro
 git clone https://github.com/luismichio/context-pipe.git
 git clone https://github.com/luismichio/semantic-sift.git
 
-# 2. Master venv in context-pipe — holds both packages
+# 2. Master venv in context-pipe - holds both packages
 cd context-pipe
-python -m venv venv
+python3.12 -m venv venv
 # Windows:
 .\venv\Scripts\activate
 # macOS/Linux:
@@ -156,5 +162,3 @@ Context-Pipe is a foundational member of the **Studio of Two** infrastructure. I
 
 ---
 *Building High-Fidelity Infrastructure for the Intelligence Age.*
-ge.*
-ge.*

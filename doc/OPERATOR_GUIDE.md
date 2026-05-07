@@ -346,8 +346,3 @@ If semantic-sift is not found, the report will include actionable install instru
 
 ---
 *Building Systems, not Patches.*
-*
-*
-*
-*
-*

@@ -5,6 +5,14 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-05-07
+
+### Fixed
+- **`doc/INTEGRATION_ENCYCLOPEDIA.md`**: Fixed Claude Desktop config path — was Windows-only tilde syntax; now shows both Win (`%APPDATA%\Claude\...`) and Mac (`~/Library/Application Support/Claude/...`).
+- **`doc/INTEGRATION_ENCYCLOPEDIA.md`**: Fixed broken quote in Qwen CLI row (`~/.qwen/settings.json"` → correct backtick).
+- **`doc/OPERATOR_GUIDE.md`**: Removed trailing orphan `*` lines at end of file.
+- **`README.md`**: Added ℹ️ callout explaining `sift-core` Rust binary is pre-compiled in the PyPI wheel; corrected `semantic-sift` install to include `[neural,multi-modal]` extras; updated venv creation to use `python3.12`; removed trailing `ge.*` lines.
+
 ## [0.1.2] - 2026-05-06
 
 ### ✨ New Features

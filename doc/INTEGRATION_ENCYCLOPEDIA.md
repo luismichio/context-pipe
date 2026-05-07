@@ -38,9 +38,9 @@ To install the Context-Pipe server, find your software in the matrix below and c
 
 | Software | Configuration Path | Target Key | Expected Schema |
 | :--- | :--- | :--- | :--- |
-| **Claude Desktop** | `~/AppData/Roaming/Claude/claude_desktop_config.json` | `mcpServers` | **A** (Standard) |
+| **Claude Desktop** | Win: `%APPDATA%\Claude\claude_desktop_config.json` / Mac: `~/Library/Application Support/Claude/claude_desktop_config.json` | `mcpServers` | **A** (Standard) |
 | **Claude Code** | `~/.claude/settings.json` | `mcp_servers` | **A** (Standard) |
-| **Qwen CLI** | `~/.qwen/settings.json" | `mcp_servers` | **A** (Standard) |
+| **Qwen CLI** | `~/.qwen/settings.json` | `mcp_servers` | **A** (Standard) |
 | **Codex CLI** | `~/.codex/mcp-config.json` | `mcpServers` | **A** (Standard) |
 | **Continue.dev** | `~/.continue/config.json` | `mcpServers` | **D** (Unified) |
 | **Zed** | `~/.config/zed/settings.json` | `context_servers` | **A** (Standard) |
