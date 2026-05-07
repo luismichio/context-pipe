@@ -5,6 +5,11 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-05-07
+
+### Fixed
+- **`pyproject.toml`**: Added `[tool.pytest.ini_options] testpaths = ["tests"]` to prevent pytest from collecting `test_search.txt` (a binary fixture file at repo root) as a test module — this was causing the Release CI to fail with `UnicodeDecodeError` on every tag since v0.1.3.
+
 ## [0.1.4] - 2026-05-07
 
 ### Fixed
