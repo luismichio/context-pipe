@@ -36,8 +36,9 @@ Universal hooks that automatically apply your context pipes to *any* MCP tool ca
 
 **Option A: Quick Install (PyPI)**
 ```bash
-uv pip install mcp-context-pipe
-uv pip install semantic-sift
+uv venv
+# Windows: .\.venv\Scripts\activate | Mac/Linux: source .venv/bin/activate
+uv pip install mcp-context-pipe semantic-sift
 ```
 
 **Option B: Sovereign Pattern (Recommended for Studio of Two)**
