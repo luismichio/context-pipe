@@ -15,7 +15,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
@@ -28,7 +28,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        uv pip install .[dev] --system
+        uv pip install ".[dev]" --system
 
     - name: Lint with ruff
       run: ruff check .
@@ -36,5 +36,13 @@ jobs:
     - name: Type check with mypy
       run: mypy context_pipe
 
-    - name: Test with pytest
-      run: pytest tests/
+    - name: Test with pytest (+ coverage gate)
+      run: pytest --tb=short -q --cov=context_pipe --cov=pipe_hook --cov-report=term-missing --cov-fail-under=24
+
+    - name: Upload coverage report
+      if: matrix.python-version == '3.12'
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: .coverage
+        retention-days: 7

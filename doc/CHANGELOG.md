@@ -5,6 +5,43 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### 🔒 Security
+- **Removed `shell: true` node support** (`orchestrator.py`): The `shell: true` option in `pipes.json` node configs has been removed. All subprocess invocations now use `shell=False` unconditionally, eliminating the command injection surface that would have become a live vulnerability once Phase 6 dynamic pipe execution was introduced. The `# nosec B602` suppression comment has been removed accordingly.
+
+### 🐛 Fixed
+- **Runtime path resolution for pipe nodes** (`orchestrator.py`): Added `resolve_node_cmd()` function that resolves bare command names (e.g. `"semantic-sift-cli"`) to full executable paths at runtime, using a 4-stage fallback: (1) absolute path on disk, (2) `shutil.which()` PATH lookup, (3) `~/.local/bin` and `PIPX_BIN_DIR` user locations, (4) bare name passthrough for graceful `FileNotFoundError` via `help_msg`. This replaces the previous pattern of committing hardcoded absolute paths into `pipes.json`.
+- **`pipes.json`**: Replaced all hardcoded absolute paths (`C:\Users\luism\.local\bin\semantic-sift-cli.exe`) with bare command names (`"semantic-sift-cli"`). The file is now portable across all users and operating systems.
+- **`pipes.json.example`**: Removed `"shell": true` nodes and replaced with standard process-based invocations. Added `_note` field warning against committing hardcoded paths.
+
+### 🧹 Chore
+- **Deleted stale repo artifacts**: Removed `task.md` (stale work tracker), `large_data.txt` (test fixture), and `test_search.txt` (test fixture) from the repository root.
+- **`.gitignore`**: Added `large_data.txt` and `test_search.txt` patterns under a new `# Test Artifacts` section to prevent re-commitment.
+
+### 🧪 Tests
+- **`tests/test_orchestrator.py`**: Added four new unit tests for `resolve_node_cmd()`: absolute path passthrough, missing absolute path fallback, PATH-based resolution, and unknown command bare-name return.
+
+### Phase 2 — CI Coverage Gate & New Tests
+
+### 🔧 Changed
+- **`pyproject.toml`**: Added `pytest-cov` to `[dev]` dependencies. Added `[tool.coverage.run]` and `[tool.coverage.report]` sections with `source = ["context_pipe", "pipe_hook"]`, `show_missing = true`, and `fail_under = 60`.
+- **`.github/workflows/ci.yml`**: Updated `pytest` step to run with `--cov --cov-report=term-missing --cov-fail-under=60`. Added `actions/upload-artifact` step to upload `.coverage` as a CI artifact for the `3.12` matrix job.
+
+### 🧪 Tests
+- **`tests/test_pipe_hook.py`** [NEW]: Unit tests for the `pipe_hook.py` root entrypoint — covers empty stdin, config-absent passthrough, successful transform delegation, and the safety fallback on `wrap_payload` exception.
+- **`tests/test_telemetry.py`** [NEW]: Unit tests for `telemetry.py` — covers session writes, call accumulation, the no-raw-content guarantee, disabled no-op, `get_balance_sheet` aggregation, `generate_audit_header` format, and `estimate_tokens`.
+- **`tests/test_wrapper.py`** [NEW]: Unit tests for `wrapper.py` — covers invalid JSON passthrough, no-pipe-match passthrough, CPP signature bypass, structured JSON exemption, tool trigger routing, size trigger routing, and `run_pipe` exception fallback.
+- **`semantic-sift/tests/test_cpp_integration.py`** [NEW]: CPP contract integration tests spawning `semantic-sift-cli` as a subprocess — validates exit codes, audit header presence, compression guarantees, clean-content pass-through, UTF-8 safety, stderr hygiene, and `--version` check. Auto-skips if CLI not installed.
+
+### 📚 Documentation
+- **`doc/ARCHITECTURE.md`**: Added Section 6 documenting the `skills.py` / `context-pipe-skill` entry point — explains its purpose as a Skill Lens Node, execution flow, difference from `server.py`, current prototype limitations, and the Phase 5 SLM roadmap. Confirms the entry point is *not* vestigial.
+
+### Phase 3 — Security & Privacy Hardening
+
+### 🔒 Security
+- **Opt-In Telemetry (3.1)**: Flipped `PIPE_TELEMETRY_DISABLED` gate from opt-out to **opt-in**. Telemetry is now a no-op unless `CPP_TELEMETRY_OPTED_IN=true` is explicitly set. Legacy `CPP_TELEMETRY_DISABLED=true` kill-switch is retained for backward compatibility. Aligns with GDPR/CCPA enterprise requirements.
+
 ## [0.1.5] - 2026-05-07
 
 ### Fixed

@@ -5,6 +5,7 @@ __pycache__/
 venv/
 .venv/
 .env
+.coverage
 
 # Context-Pipe Cache
 .pipe_cache/
@@ -19,6 +20,13 @@ opencode.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Agent Plans (local only)
+plans/
+
+# Test Artifacts (binary fixtures — do not commit)
+large_data.txt
+test_search.txt
 
 # Project Secrets
 .sift_identity

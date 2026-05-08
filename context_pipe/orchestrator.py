@@ -6,6 +6,8 @@ import subprocess
 import argparse
 import re
 import os
+import shutil
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 # Metadata Signatures
@@ -26,6 +28,40 @@ def get_env_with_venv_path() -> Dict[str, str]:
                 env["PATH"] = f"{venv_bin}{path_sep}{current_path}"
 
     return env
+
+
+def resolve_node_cmd(cmd: str) -> str:
+    """
+    Resolves a pipe node command to an executable path at runtime.
+
+    Resolution order (most specific to least):
+    1. Absolute path that already exists on disk — used as-is.
+    2. shutil.which() — resolves from the active PATH (covers venv Scripts/bin, system PATH).
+    3. Common user-level install locations (~/.local/bin, pipx).
+    4. Bare command returned unchanged — FileNotFoundError surfaces naturally via Popen,
+       and the node's help_msg is shown to the user.
+    """
+    # 1. Already an absolute path that exists
+    if os.path.isabs(cmd) and os.path.isfile(cmd):
+        return cmd
+
+    # 2. PATH lookup (covers venv Scripts/bin injected by get_env_with_venv_path)
+    which_result = shutil.which(cmd)
+    if which_result:
+        return which_result
+
+    # 3. Common user-level locations (uv tool install, pipx)
+    exe_name = f"{cmd}.exe" if os.name == "nt" else cmd
+    user_candidates = [
+        Path.home() / ".local" / "bin" / exe_name,
+        Path(os.environ.get("PIPX_BIN_DIR", str(Path.home() / ".local" / "bin"))) / exe_name,
+    ]
+    for candidate in user_candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+
+    # 4. Return bare command — Popen will raise FileNotFoundError, help_msg surfaces the error
+    return cmd
 
 
 def resolve_pipe_from_context(config: Dict[str, Any], tool_name: str, content_len: int) -> Optional[str]:
@@ -76,26 +112,21 @@ def run_pipe(
     node_timeout = int(raw_timeout) / 1000.0
 
     for node in pipe_config.get("nodes", []):
-        use_shell = node.get("shell", False)
-
-        cmd: str | List[str]
-        if use_shell:
-            # Join cmd and args for shell execution
-            cmd = " ".join([node["cmd"]] + [str(a) for a in node.get("args", [])])
-        else:
-            cmd = [node["cmd"]] + [str(a) for a in node.get("args", [])]
+        # Resolve bare command names to full paths at runtime (fixes hardcoded path issue)
+        resolved_cmd = resolve_node_cmd(node["cmd"])
+        cmd: List[str] = [resolved_cmd] + [str(a) for a in node.get("args", [])]
 
         start_size = len(current_input)
 
         try:
-            # High-Fidelity OS Piping
+            # High-Fidelity OS Piping (shell=False enforced — no injection surface)
             process = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                shell=use_shell,  # nosec B602
+                shell=False,
                 env=process_env,
             )
 

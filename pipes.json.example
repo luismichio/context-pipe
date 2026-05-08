@@ -1,6 +1,7 @@
 {
   "version": "1.0",
   "description": "High-fidelity context pipe template for the Studio of Two.",
+  "_note": "All 'cmd' values should be bare command names (e.g. 'semantic-sift-cli'). The orchestrator resolves full paths at runtime via PATH lookup. Do NOT commit hardcoded absolute paths.",
   "pipes": [
     {
       "name": "standard-distill",
@@ -40,16 +41,18 @@
     },
     {
       "name": "error-focus-chain",
-      "description": "Extracts only error lines via OS Bash, then compresses them.",
+      "description": "Extracts only error lines via grep, then compresses them.",
+      "_note": "Use bare 'grep' — PATH resolution handles the full path at runtime.",
       "nodes": [
         {
           "cmd": "grep",
-          "args": ["-i", "error\\|exception"],
-          "shell": true
+          "args": ["-i", "error"],
+          "help_msg": "grep not found. On Windows, use 'findstr' with args [\"error\"]."
         },
         {
           "cmd": "semantic-sift-cli",
-          "args": ["semantic", "--rate", "0.6"]
+          "args": ["semantic", "--rate", "0.6"],
+          "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
         }
       ]
     },
@@ -67,7 +70,8 @@
         },
         {
           "cmd": "semantic-sift-cli",
-          "args": ["auto", "--rate", "0.4"]
+          "args": ["auto", "--rate", "0.4"],
+          "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
         }
       ]
     },
@@ -81,50 +85,23 @@
         },
         {
           "cmd": "sift-core",
-          "args": ["semantic", "--rate", "0.4"]
-        }
-      ]
-    },
-    {
-      "name": "the-god-pipe",
-      "description": "Extreme chaining: Fetch -> Extract -> Grep -> Mask -> Sift",
-      "nodes": [
-        {
-          "cmd": "curl",
-          "args": ["-s", "https://raw.githubusercontent.com/kubernetes/kubernetes/master/CHANGELOG/CHANGELOG-1.30.md"],
-          "shell": true
-        },
-        {
-          "cmd": "grep",
-          "args": ["-i", "API"],
-          "shell": true
-        },
-        {
-          "cmd": "context-pipe-skill",
-          "args": ["pii-masker"]
-        },
-        {
-          "cmd": "semantic-sift-cli",
-          "args": ["semantic", "--rate", "0.2"]
+          "args": ["semantic", "--rate", "0.4"],
+          "help_msg": "sift-core not found. Run 'uv tool install semantic-sift' (includes sift-core binary)."
         }
       ]
     },
     {
       "name": "react-expert-chain",
-      "description": "Pre-processes code through a linter and an expert instruction lens before sifting.",
+      "description": "Pre-processes code through an expert instruction lens before sifting.",
       "nodes": [
-        {
-          "cmd": "npx",
-          "args": ["eslint", "--stdin", "--fix-dry-run"],
-          "shell": true
-        },
         {
           "cmd": "context-pipe-skill",
           "args": ["react-code-fix-linter"]
         },
         {
           "cmd": "semantic-sift-cli",
-          "args": ["semantic", "--rate", "0.6"]
+          "args": ["semantic", "--rate", "0.6"],
+          "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
         }
       ]
     }

@@ -10,11 +10,15 @@ from typing import Dict, Any, List, Optional
 # Primary: CPP_TELEMETRY_FILE, Fallback: .pipe_telemetry.json
 TELEMETRY_FILE = os.environ.get("CPP_TELEMETRY_FILE") or os.environ.get("PIPE_TELEMETRY_FILE", ".pipe_telemetry.json")
 
-# Privacy Kill-Switch
-PIPE_TELEMETRY_DISABLED = (
+# Telemetry Consent Gate (Opt-In by Default)
+# Telemetry runs ONLY when CPP_TELEMETRY_OPTED_IN=true is explicitly set.
+# Legacy kill-switch CPP_TELEMETRY_DISABLED=true is still respected for backward compat.
+_OPTED_IN = os.environ.get("CPP_TELEMETRY_OPTED_IN", "").lower() == "true"
+_LEGACY_DISABLED = (
     os.environ.get("CPP_TELEMETRY_DISABLED", "").lower() == "true"
-    or os.environ.get("PIPE_TELEMETRY_DISABLED", "false").lower() == "true"
+    or os.environ.get("PIPE_TELEMETRY_DISABLED", "").lower() == "true"
 )
+PIPE_TELEMETRY_DISABLED = not _OPTED_IN or _LEGACY_DISABLED
 
 # Locks for concurrent file access
 _TELEMETRY_LOCK = threading.Lock()

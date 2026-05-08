@@ -34,3 +34,15 @@
 ## 🟣 Phase 5: A2A (Agent-to-Agent) Orchestration
 - [ ] **Multi-Agent Interception**: Position Context-Pipe as the definitive "Data Bus" for A2A frameworks (e.g., CrewAI, Google ADK). Allow Agent A's output to be piped through a distillation refinery before reaching Agent B's context window.
 - [ ] **Stream Splitting (T-Pipes)**: Allow a single upstream tool to output to multiple downstream nodes (e.g., logging a raw stream to disk while piping the distilled stream to the LLM).
+
+## 🟠 Phase 6: Dynamic Shadow Ecosystem (RAG for Tools)
+- [ ] **Dynamic Pipe Execution**: Expose `pipe_run_dynamic` MCP tool to allow AI agents to construct Unix pipes on the fly (e.g., `[{"cmd": "jq"}, {"cmd": "semantic-sift-cli"}]`).
+- [ ] **The `mcp-pipe` CLI**: A lightweight wrapper to execute isolated "Shadow MCP" servers natively in the terminal without IDE context bloat.
+- [ ] **Shadow Tool Discovery**: Implement `pipe_list_shadow_tools` to serve as a just-in-time "RAG for Tools," letting the AI pull capabilities only when needed.
+- [ ] **Standalone Configuration**: Introduce `~/.mcp-pipe.json` (and support for direct CLI args) to configure local (`stdio`) and remote (`sse`) MCP servers outside the IDE's purview.
+- [ ] **Bash/Shell Synergy**: Enable arbitrary shell command integration (e.g., `bash`, `awk`, `grep`) within dynamic pipes, bounded by the final `semantic-sift` node to guarantee context safety.
+
+## 🟤 Phase 7: The "Studio of Two" Endgame (Rust Core)
+- [ ] **Rust Rewrite**: Port the core stream orchestrator to Rust, achieving ultimate native speed and zero Python/Node memory bloat.
+- [ ] **Tauri Synergy**: Integrate the Rust crate directly into Meechi/Side-Hustle as a native cognitive ingestion engine, eliminating the need for standalone sidecars.
+- [ ] **Universal CLI (`cpipe`)**: Expose the Rust engine as a pure CLI tool for developers, allowing stream processing completely independent of AI or IDE environments.

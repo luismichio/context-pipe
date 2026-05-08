@@ -7,11 +7,11 @@
       "description": "The flagship log sifting template.",
       "nodes": [
         {
-          "cmd": "C:\\Users\\luism\\Workbench\\GitHub\\context-pipe\\venv\\Scripts\\semantic-sift-cli.exe",
+          "cmd": "semantic-sift-cli",
           "args": [
             "logs"
           ],
-          "help_msg": "semantic-sift-cli not found. Please install the Python orchestrator via 'uv tool install semantic-sift'."
+          "help_msg": "semantic-sift-cli not found. Please install via: uv tool install semantic-sift"
         }
       ]
     },
@@ -20,13 +20,13 @@
       "description": "High-intelligence neural distillation template (Hybrid Engine).",
       "nodes": [
         {
-          "cmd": "C:\\Users\\luism\\Workbench\\GitHub\\context-pipe\\venv\\Scripts\\semantic-sift-cli.exe",
+          "cmd": "semantic-sift-cli",
           "args": [
             "semantic",
             "--rate",
             "0.5"
           ],
-          "help_msg": "semantic-sift-cli not found. Please install the Python orchestrator via 'uv tool install semantic-sift'."
+          "help_msg": "semantic-sift-cli not found. Please install via: uv tool install semantic-sift"
         }
       ]
     },
@@ -35,13 +35,13 @@
       "description": "Complete ingestion and distillation chain (Smart Sift).",
       "nodes": [
         {
-          "cmd": "C:\\Users\\luism\\Workbench\\GitHub\\context-pipe\\venv\\Scripts\\semantic-sift-cli.exe",
+          "cmd": "semantic-sift-cli",
           "args": [
             "auto",
             "--rate",
             "0.3"
           ],
-          "help_msg": "semantic-sift-cli not found. Please install the Python orchestrator via 'uv tool install semantic-sift'."
+          "help_msg": "semantic-sift-cli not found. Please install via: uv tool install semantic-sift"
         }
       ]
     },
@@ -50,32 +50,35 @@
       "description": "Search optimization chain (Rank -> Sift).",
       "nodes": [
         {
-          "cmd": "C:\\Users\\luism\\Workbench\\GitHub\\context-pipe\\venv\\Scripts\\semantic-sift-cli.exe",
+          "cmd": "semantic-sift-cli",
           "args": [
             "rank",
             "--top-n",
             "5"
-          ]
+          ],
+          "help_msg": "semantic-sift-cli not found. Please install via: uv tool install semantic-sift"
         },
         {
-          "cmd": "C:\\Users\\luism\\Workbench\\GitHub\\context-pipe\\venv\\Scripts\\semantic-sift-cli.exe",
+          "cmd": "semantic-sift-cli",
           "args": [
             "semantic",
             "--rate",
             "0.6"
-          ]
+          ],
+          "help_msg": "semantic-sift-cli not found. Please install via: uv tool install semantic-sift"
         }
       ]
     },
     {
       "name": "test-pipe",
-      "description": "Verification pipe using findstr.",
+      "description": "Verification pipe using findstr (Windows) or grep (Unix).",
       "nodes": [
         {
           "cmd": "findstr",
           "args": [
             "SIGNAL"
-          ]
+          ],
+          "help_msg": "findstr not found. On Unix, use 'grep' instead."
         }
       ]
     }

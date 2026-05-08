@@ -97,5 +97,33 @@ Once the binary is discovered, `resolve_pipes_config` rewrites every `semantic-s
 
 The results are surfaced via the `pipe_verify` MCP tool, which also auto-runs `resolve_pipes_config` to link sift before reporting.
 
+
+---
+
+## 6. The Skill Node (`skills.py`)
+
+The `context-pipe-skill` CLI entry point exposes a **Skill Lens Node**: a pipe-composable wrapper that prepends a user-defined mandate (instruction set) to the data stream before routing it to a downstream refinery.
+
+### Purpose
+Skills let users inject domain-specific expert context — a security auditor persona, a React linting guide, or a specific coding style mandate — into the pipeline *without modifying the orchestrator*. The skill node is just another `stdin → stdout` transformer that adheres to the CPP standard.
+
+### Execution Flow
+1. **Read** stdin (the upstream node's output).
+2. **Locate** the mandate file: looks for `<skill-name>.md` in `$PIPE_SKILL_DIR` (default: `.gemini/skills/`), then falls back to `cwd`.
+3. **Inject** the mandate as a header above the data: `--- [Skill Lens: <name>] ---\n<mandate>\n\n[Content]\n<data>`.
+4. **Write** to stdout for the next node.
+
+### Difference from `server.py`
+| | `skills.py` (`context-pipe-skill`) | `server.py` (`context-pipe-server`) |
+|---|---|---|
+| **Transport** | `stdin` / `stdout` (CPP pipe node) | MCP protocol over `stdio` |
+| **Purpose** | Instruction injection node | MCP tool host (balance sheet, verification) |
+| **Usage** | Embedded in `pipes.json` node chain | Registered as an MCP server in the IDE |
+
+### Current Limitations & Roadmap
+- **Prototype-quality**: The current implementation is a proof-of-concept. The mandate is prepended as raw Markdown, relying on the LLM's in-context reasoning to apply the lens. There is no local SLM invocation yet.
+- **Phase 5 (Future)**: Skills will be upgraded to drive a local SLM for true structural rewriting (e.g., via `llama.cpp` sidecar), making the lens semantically precise rather than instruction-injected.
+- **No Removal Planned**: `context-pipe-skill` is an active, documented entry point and is *not* vestigial. It is retained for future SLM-backed skill execution.
+
 ---
 *High-Fidelity Infrastructure for the Studio of Two.*
