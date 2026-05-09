@@ -15,7 +15,7 @@ The orchestrator utilizes `subprocess.Popen` to create memory-resident pipes bet
 - **`stderr` (The Error Stream)**: Redirected to a trace map to ensure node failures are reported without polluting the data stream.
 
 ### The Timeout Guard
-Every node execution is wrapped in a **Timeout Guard** (default: 10s). If a node hangs (e.g., a stalled network fetch or a heavy neural model), the orchestrator kills the process, prevents an IDE freeze, and returns a structured `--- [Context-Pipe: Timeout] ---` response.
+Every node execution is wrapped in a **Timeout Guard** (default: 30s, configurable via `PIPE_NODE_TIMEOUT_MS`). If a node hangs (e.g., a stalled network fetch or a heavy neural model), the orchestrator kills the process, prevents an IDE freeze, and returns a structured `--- [Context-Pipe: Timeout] ---` response.
 
 ---
 
@@ -37,7 +37,7 @@ Instead of bundling code, Context-Pipe provides **Recipes**. Templates demonstra
 
 ---
 
-## 3. The Universal Switchboard (`pipe_hook.py`)
+## 3. The Universal Switchboard (`context_pipe/wrapper.py` + `pipe_hook.py`)
 
 The platform includes a "Subconscious Interceptor" that acts as a universal polyfill for AI agents.
 
@@ -124,6 +124,140 @@ Skills let users inject domain-specific expert context — a security auditor pe
 - **Prototype-quality**: The current implementation is a proof-of-concept. The mandate is prepended as raw Markdown, relying on the LLM's in-context reasoning to apply the lens. There is no local SLM invocation yet.
 - **Phase 5 (Future)**: Skills will be upgraded to drive a local SLM for true structural rewriting (e.g., via `llama.cpp` sidecar), making the lens semantically precise rather than instruction-injected.
 - **No Removal Planned**: `context-pipe-skill` is an active, documented entry point and is *not* vestigial. It is retained for future SLM-backed skill execution.
+
+---
+
+## 7. T-Pipes — Stream Splitting (`orchestrator.py`)
+
+T-Pipes allow a single stream to be **saved to disk at any node boundary** without interrupting the main chain. This is the Unix `tee` pattern applied to the context pipeline.
+
+### Schema
+
+A node in `pipes.json` may declare an optional `tee` object:
+
+```json
+{
+  "cmd": "semantic-sift-cli",
+  "args": ["logs"],
+  "tee": {
+    "sink": "file",
+    "path": "logs/{tool_name}_{iso_date}.log",
+    "mode": "append"
+  }
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `sink` | string | — | `"file"` (only supported sink in v0.3.0) |
+| `path` | string | — | Destination path. Supports `{iso_date}` and `{tool_name}` tokens. |
+| `mode` | string | `"append"` | `"append"` or `"overwrite"` |
+
+### Execution Order
+
+The tee fires **before** `subprocess.Popen` — raw node input is persisted even if the node itself crashes. Written content is the raw input plus a separator:
+
+```
+--- [Context-Pipe: Tee @ <node_cmd> | <iso_timestamp>] ---
+```
+
+### Safety Guarantee
+
+`_write_tee()` wraps all I/O in `try/except Exception`. Any failure (disk full, bad path, permissions error) is silently swallowed. The main chain always continues.
+
+### Trace Extension
+
+When a tee fires, the node's trace entry gains a `"tee_path"` key with the resolved path. Absent when no tee is configured.
+
+---
+
+## 8. A2A Agent Handoff (`context_pipe/a2a.py`)
+
+The A2A module provides a **framework-agnostic bridge** for distilling Agent A's output before it enters Agent B's context window.
+
+### Design Principle
+
+Explicit call — no monkey-patching. Any A2A framework (CrewAI, Google ADK, LangGraph) calls `pipe_agent_handoff()` at the handoff point. Context-Pipe acts as a dumb pipe; zero framework coupling.
+
+### Execution Flow
+
+1. `from_agent` label forwarded as `tool_name` to `api.pipe()` for trigger matching and telemetry attribution.
+2. `api.pipe()` resolves the pipe via `pipe_name` (explicit) or `pipes.json` mappings (auto).
+3. `run_pipe()` executes the node chain.
+4. A telemetry event is logged with input/output sizes and agent labels (no content).
+5. On any error, the original output is returned unchanged — the agent chain is never interrupted.
+
+### MCP Surface
+
+`pipe_agent_handoff` is registered as an MCP tool in `server.py`, making it directly invocable by AI assistants without Python code changes.
+
+---
+
+## 9. Dynamic Pipe Engine (`context_pipe/dynamic.py`)
+
+`run_dynamic_pipe()` executes an ad-hoc node list supplied at call-time rather than from `pipes.json`. It is exposed as the `pipe_run_dynamic` MCP tool and the `mcp-pipe run-dynamic` CLI subcommand.
+
+### Security Boundary — `SHELL_UTILITY_ALLOWLIST`
+
+By default, shell nodes are **disabled** in dynamic pipes. Enabling them requires passing `allow_shell=True` explicitly (or setting the `allow_shell` flag in the MCP tool call). Even then, only the 21 tools in `SHELL_UTILITY_ALLOWLIST` are permitted:
+
+```
+bash, sh, zsh, fish, python, python3, node, npx, curl, wget,
+grep, awk, sed, cut, sort, uniq, wc, head, tail, cat, echo
+```
+
+Any node whose command is not in the allowlist AND has `shell: true` raises a `ValueError` and the pipe is rejected before any subprocess is spawned.
+
+### Sift-Terminal Guard (`_SIFT_TERMINAL_CMDS`)
+
+Dynamic pipes that include shell nodes **must** end with a `semantic-sift` terminal command (e.g., `semantic-sift-cli`, `sift`). The guard enforces this constraint to guarantee context safety: raw shell output can never reach the LLM without passing through a sifting node.
+
+---
+
+## 10. Global Configuration (`context_pipe/config_loader.py`)
+
+`load_pipes_config()` merges two sources with **local precedence**:
+
+1. **Local**: `pipes.json` in the project root (or `PIPE_CONFIG_PATH`).
+2. **Global**: `~/.mcp-pipe.json` — a user-level config containing shared pipe definitions reusable across all projects.
+
+Keys present in the local file always win over the global file. The global config is silently skipped if it does not exist.
+
+### Schema Compatibility
+Both files share the same `pipes.json` schema (`version`, `pipes`, `mappings`). Pipe definitions from both files are merged into a single list; mapping entries from the local file are prepended (higher priority).
+
+---
+
+## 11. Slash Command Injection (`context_pipe/onboarding.py`)
+
+Phase 4 of the CPP roadmap injects four slash commands as first-class commands into IDE runtimes that support them:
+
+| Command | IDE | Mechanism | Path |
+|---|---|---|---|
+| `/pipe-run` | Cursor, Gemini, OpenCode | `.mdc` rule / `.toml` command / `opencode.json` | Executes a named pipe on selected content |
+| `/pipe-stats` | Cursor, Gemini, OpenCode | `.mdc` rule / `.toml` command / `opencode.json` | Prints the Context Balance Sheet |
+| `/pipe-dynamic` | Cursor, Gemini, OpenCode | `.mdc` rule / `.toml` command / `opencode.json` | `pipe_list_shadow_tools` → build node graph → `pipe_run_dynamic` |
+| `/pipe-handoff` | Cursor, Gemini, OpenCode | `.mdc` rule / `.toml` command / `opencode.json` | `pipe_agent_handoff` at a named A2A boundary |
+
+Injection is idempotent — `inject_hooks()` checks for existing marker blocks before writing. The slash command injection is **distinct** from the Phase 2 Standard Shell Aliases (which targets POSIX/PowerShell profiles) and the Phase 2 `inject_shell_aliases()` function.
+
+### Shell Alias Injection (`inject_shell_aliases` / `remove_shell_aliases`)
+
+`inject_shell_aliases()` writes platform-aware marker blocks into `~/.bashrc`, `~/.zshrc`, or the PowerShell profile:
+
+```bash
+# POSIX
+alias mcp-pipe='python -m context_pipe.cli'
+alias cpipe='python -m context_pipe.cli'
+```
+
+```powershell
+# PowerShell
+Set-Alias -Name mcp-pipe -Value python -m context_pipe.cli
+Set-Alias -Name cpipe -Value python -m context_pipe.cli
+```
+
+`remove_shell_aliases()` removes the marker block idempotently. Both operations are exposed as `pipe_install_aliases` / `pipe_remove_aliases` MCP tools and `mcp-pipe aliases install/remove` CLI subcommands.
 
 ---
 *High-Fidelity Infrastructure for the Studio of Two.*

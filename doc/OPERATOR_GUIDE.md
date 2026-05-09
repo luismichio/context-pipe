@@ -173,7 +173,7 @@ The `pipes.json` file is the brain of your Switchboard. It must live in your pro
 
 ## 3. Node Types
 
-Context-Pipe supports three distinct ways to execute logic:
+Context-Pipe supports five distinct node types, plus advanced chaining patterns:
 
 ### A. Binary Nodes (Default)
 Executes a standalone binary or Python script.
@@ -204,7 +204,39 @@ This chain uses OS bash to auto-format the code with `eslint`, injects React 19 
 }
 ```
 
-### D. Bring Your Own Parser (BYOP)
+### D. T-Pipe Nodes (Stream Splitting)
+Save a raw copy of the node's input to disk **before** the node processes it — without interrupting the chain. Useful for debugging pipe quality, auditing what was sifted out, and building a research archive.
+
+```json
+{
+  "cmd": "semantic-sift-cli",
+  "args": ["doc"],
+  "tee": {
+    "sink": "file",
+    "path": "logs/{tool_name}_{iso_date}.log",
+    "mode": "append"
+  }
+}
+```
+
+`path` supports `{iso_date}` (YYYY-MM-DD) and `{tool_name}` tokens. A tee failure **never** interrupts the main chain.
+
+### E. MCP Nodes *(Phase 7.5 — coming soon)*
+Call any MCP tool (web scrapers, GitHub, context-mode…) as a first-class pipe node. No wrapper scripts — the orchestrator spawns the MCP server, calls the tool, and passes the result downstream.
+
+```json
+{
+  "type": "mcp",
+  "server": "firecrawl",
+  "tool": "scrape",
+  "input_key": "url",
+  "help_msg": "Firecrawl MCP server not reachable. Check FIRECRAWL_API_KEY."
+}
+```
+
+Server definitions live in a `servers` block in `pipes.json` or `~/.mcp-pipe.json`. See [`doc/MCP_NODE_SPEC.md`](MCP_NODE_SPEC.md) for the full spec.
+
+### F. Bring Your Own Parser (BYOP)
 Context-Pipe enables extreme decoupling. If you prefer to use **LlamaIndex** or a standalone **MarkItDown** parser instead of the Hybrid Engine, you can chain your custom parser directly into the native Rust Sidecar (`sift-core`).
 
 **Comparison: Hybrid Engine vs. BYOP Chain**
@@ -221,7 +253,7 @@ Context-Pipe enables extreme decoupling. If you prefer to use **LlamaIndex** or 
 }
 ```
 
-### E. Extreme Chaining (The God Pipe)
+### G. Extreme Chaining (The God Pipe)
 Because Context-Pipe is simply OS-level `stdin`/`stdout`, there is no theoretical limit to how many transformations you can chain. You can combine web fetching, bash filtering, skill masking, and neural compression into a single stream.
 
 ```json
@@ -298,9 +330,9 @@ Context-Pipe includes an automated engine to configure your project workspace wi
 
 ### How to Onboard
 Once you have connected the MCP server to your IDE, ask your AI assistant:
-> *"Run `pipe_onboard(environment='Cursor')`"*
+> *"Run `pipe_onboard(environment='Cursor')` to configure this project."*
 
-Replace `'Cursor'` with your active environment (e.g., `'Gemini'`, `'VSCode'`, `'Windsurf'`, `'Claude'`, `'Cline'`, `'OpenCode'`).
+Replace `'Cursor'` with your active environment (e.g., `'Gemini'`, `'VSCode'`, `'Windsurf'`, `'Claude'`, `'Cline'`, `'OpenCode'`). If `environment` is omitted, `pipe_onboard` **auto-detects** your IDE by inspecting environment variables and parent-process names across 12+ platforms.
 
 ### What Onboarding Does
 1.  **Mandate Injection**: Injects the Context-Pipe SOP into `AGENTS.md`, `.cursorrules`, and other instruction files. This forces the agent to use `pipe_read_file` for all file I/O.
@@ -308,6 +340,41 @@ Replace `'Cursor'` with your active environment (e.g., `'Gemini'`, `'VSCode'`, `
 3.  **Security Gateways**: Injects blocking hooks into Windsurf and Cline to proactively prevent large native file reads.
 4.  **Subagent Shielding**: Recursively discovers specialized agent configs (e.g., in `.cursor/agents/`) and applies context protection to them.
 5.  **Refinery Auto-Link**: Discovers `semantic-sift-cli` across all known locations (current venv, system PATH, pipx, sibling venv directories) and writes its **absolute path** into `pipes.json`. This means context-pipe and semantic-sift can live in completely separate virtual environments — no manual linking required.
+6.  **Slash Command Injection** *(Phase 4)*: Injects `/pipe-stats` and `/pipe-run` as first-class slash commands into IDEs that support them:
+    - **Gemini CLI**: writes `.gemini/commands/pipe-stats.md` and `pipe-run.md`.
+    - **OpenCode**: adds entries to the `commands` block in `opencode.json`.
+    - **Cursor**: adds an `onInit` hook in `.cursor/mcp.json`.
+    All injections are idempotent (marker-block pattern) and safe to re-run.
+
+---
+
+## 7b. Shell Aliases (Optional — Phase 2)
+
+For terminal-first workflows, Context-Pipe can install convenient shell aliases so `mcp-pipe` and `cpipe` work from any directory without activating the venv.
+
+### Install
+```
+Ask your AI: "Run pipe_install_aliases()"
+# or via CLI:
+mcp-pipe aliases install
+```
+
+This writes a marker block into your shell profile:
+
+| Shell | Profile |
+|---|---|
+| **bash** | `~/.bashrc` |
+| **zsh** | `~/.zshrc` |
+| **PowerShell** | `$PROFILE` |
+
+### Remove
+```
+Ask your AI: "Run pipe_remove_aliases()"
+# or via CLI:
+mcp-pipe aliases remove
+```
+
+The remove operation is idempotent and leaves no residue in your profile.
 
 ---
 
@@ -343,6 +410,61 @@ If semantic-sift is not found, the report will include actionable install instru
 | `pipx install semantic-sift` | ✅ Discovered via pipx path |
 | Clone both repos with dedicated venvs | ✅ Sibling venv discovery |
 | `uv pip install mcp-context-pipe` only (no sift) | ✅ Graceful — pipes return helpful error |
+
+---
+
+## 9. Agent SOP — Full Capability Reference
+
+After onboarding, the agent has access to the following tools and knows when to use each one. This section documents the complete decision tree injected into `AGENTS.md` and all slash command templates.
+
+### Decision Tree
+
+```
+Incoming content or task
+        │
+        ├── Reading a file?
+        │     ├── Unsure of size/type → pipe_analyze_file(path)
+        │     └── Know the pipe → pipe_read_file(path, pipe_name)
+        │
+        ├── Large tool output (logs, API response, search results > 100 lines)?
+        │     └── pipe_run("standard-distill", raw_output)
+        │
+        ├── Named pipe exists for this content type?
+        │     └── list_pipes() → pipe_run(pipe_name, input_text)
+        │
+        ├── No named pipe fits — need a one-off graph?
+        │     └── pipe_list_shadow_tools()
+        │           → construct nodes_json (must end with semantic-sift-cli)
+        │           → pipe_run_dynamic(nodes_json, input_text, allow_shell=<bool>)
+        │
+        ├── Passing output to another agent?
+        │     └── pipe_agent_handoff(output, from_agent="X", to_agent="Y")
+        │
+        └── Want to see ROI?
+              └── get_pipe_stats()
+```
+
+### Tool Reference for Agents
+
+| Tool | When to call | Key rule |
+|---|---|---|
+| `pipe_analyze_file(path)` | Before `pipe_read_file` when unsure of pipe | Returns recommended `pipe_name` |
+| `pipe_read_file(path, pipe_name)` | Instead of any native file read > 1KB | Default pipe: `standard-distill` |
+| `list_pipes()` | Before `pipe_run` to see available named pipes | — |
+| `pipe_run(pipe_name, input_text)` | When a named pipe matches the content type | Produces audit header |
+| `pipe_list_shadow_tools()` | Always before `pipe_run_dynamic` | Discover available nodes |
+| `pipe_run_dynamic(nodes_json, input_text)` | One-off graphs with no named pipe | Must end with `semantic-sift-cli` |
+| `pipe_agent_handoff(output, ...)` | At every A2A boundary | Pass `pipe_name` if content type known |
+| `get_pipe_stats()` | Anytime; proactively after heavy sessions | Reports cumulative ROI |
+
+### Slash Commands (injected by `pipe_onboard`)
+
+| Command | IDE | What the agent does |
+|---|---|---|
+| `/pipe-stats` | Cursor, Gemini, OpenCode | Calls `get_pipe_stats`, displays Balance Sheet |
+| `/pipe-run` | Cursor, Gemini, OpenCode | `list_pipes` → user picks → `pipe_run` |
+| `/pipe-dynamic` | Cursor, Gemini, OpenCode | `pipe_list_shadow_tools` → build graph → confirm → `pipe_run_dynamic` |
+| `/pipe-handoff` | Cursor, Gemini, OpenCode | `pipe_agent_handoff` at named A2A boundary |
 
 ---
 *Building Systems, not Patches.*

@@ -326,9 +326,44 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: str = "u
     block_end = "<!-- CPP_SECTION_END:mandate -->"
 
     mandate_text = f"""# Context-Pipe Mandate
-**MANDATORY LOCAL I/O**: NEVER use native `{env_tools["read"]}`, `{env_tools["search"]}`, or `{env_tools["list"]}` tools for large outputs (> 1KB). You MUST exclusively use `pipe_read_file(path)` or `pipe_analyze_file(path)`.
-**MANDATORY WEB/SEARCH**: Do not read raw outputs from `{env_tools["web"]}` or GitHub/Serena searches. You MUST pipe these outputs through `rerank-and-sift` or `sift_doc`.
-**CATCH-ALL**: For ANY tool output exceeding 100 lines (logs, API responses), you must use `pipe_analyze_file(path)` first to determine the optimal context pipeline to prevent window flooding."""
+
+## 1. File & Large-Output I/O (MANDATORY)
+- NEVER use native `{env_tools["read"]}`, `{env_tools["search"]}`, or `{env_tools["list"]}` for outputs > 1KB.
+- ALWAYS use `pipe_read_file(path)` to read files — it streams through a sifting pipe automatically.
+- For files where you are unsure of the best pipe, call `pipe_analyze_file(path)` first — it recommends the optimal `pipe_name` to pass to `pipe_read_file`.
+- NEVER read raw outputs from `{env_tools["web"]}` or search tools. Pipe them through `pipe_run("rerank-and-sift", raw_output)`.
+- For ANY tool output exceeding 100 lines (logs, API responses, search results), route through a context pipe before presenting to the user.
+
+## 2. Named Pipes — When to Use `pipe_run`
+- Call `list_pipes()` first to see all available named pipes in this project.
+- Use `pipe_run(pipe_name, input_text)` when:
+  - A named pipe exists that matches the content type (e.g. `semantic-refinery` for code, `standard-distill` for logs).
+  - You want a reproducible, audited transformation that is tracked in the Balance Sheet.
+- After every `pipe_run`, the audit header shows compression ratio and latency — include this in your response to the user.
+
+## 3. Dynamic Pipes — When to Use `pipe_run_dynamic`
+- Use `pipe_run_dynamic` when no named pipe fits and you need to compose a one-off processing graph.
+- **Workflow** (always follow this sequence):
+  1. Call `pipe_list_shadow_tools()` to discover available nodes (configured pipes + PATH tools like `jq`, `rg`, `markitdown`).
+  2. Construct a `nodes_json` array from those capabilities.
+  3. Call `pipe_run_dynamic(nodes_json, input_text)`.
+- **Rules**:
+  - Every `nodes_json` array MUST end with `{{"cmd": "semantic-sift-cli", "args": ["semantic"]}}` or equivalent sifting node.
+  - Shell utilities (`grep`, `awk`, `jq`, `rg`, etc.) require `allow_shell=True` — only use when the final node is a sifter.
+  - Never put shell metacharacters (`|`, `;`, `&`, `$`) in a `cmd` value — use `args` instead.
+- **Example** — extract ERROR lines then distil:
+  ```json
+  [{{"cmd": "grep", "args": ["ERROR"]}}, {{"cmd": "semantic-sift-cli", "args": ["logs"]}}]
+  ```
+
+## 4. A2A Agent Handoff — When to Use `pipe_agent_handoff`
+- ALWAYS call `pipe_agent_handoff(output, from_agent="X", to_agent="Y")` when passing one agent's output to another agent's context window.
+- This prevents context flooding at multi-agent boundaries regardless of framework (CrewAI, ADK, LangGraph, custom).
+- If you know the content type, pass `pipe_name` explicitly (e.g. `pipe_name="semantic-refinery"`). Otherwise omit it and routing is automatic.
+
+## 5. Observability — Balance Sheet
+- Call `get_pipe_stats()` at any time to see cumulative ROI: chars saved, chars added, avg latency, total events.
+- After significant processing sessions, proactively report the Balance Sheet to the user so they can see the value delivered."""
 
     full_payload = f"\n{block_id}\n{mandate_text}\n{block_end}\n"
 
@@ -367,6 +402,187 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: str = "u
     return actions
 
 
+
+# ---------------------------------------------------------------------------
+# Shell alias injection (Phase 2 — Standard Shell Aliases)
+# ---------------------------------------------------------------------------
+
+#: Marker written on either side of the managed alias block so it can be
+#: idempotently updated or removed without touching surrounding user config.
+_ALIAS_MARKER_START = "# >>> cpipe (context-pipe) initialize >>>"
+_ALIAS_MARKER_END = "# <<< cpipe (context-pipe) initialize <<<"
+
+#: The alias block written into POSIX profile files.
+_POSIX_ALIAS_BLOCK = """\
+{start}
+# Added by mcp-pipe / context-pipe.  To remove: delete the block below.
+alias cpipe='mcp-pipe'
+{end}
+""".format(start=_ALIAS_MARKER_START, end=_ALIAS_MARKER_END)
+
+#: The alias block written into PowerShell profile files.
+_PWSH_ALIAS_BLOCK = """\
+{start}
+# Added by mcp-pipe / context-pipe.  To remove: delete the block below.
+Set-Alias -Name cpipe -Value mcp-pipe -Scope Global
+{end}
+""".format(start=_ALIAS_MARKER_START, end=_ALIAS_MARKER_END)
+
+#: Candidate POSIX profile files, in preference order.
+_POSIX_PROFILES: List[str] = [
+    "~/.bashrc",
+    "~/.zshrc",
+    "~/.profile",
+    "~/.bash_profile",
+]
+
+#: Candidate PowerShell profile files, in preference order.
+_PWSH_PROFILES: List[str] = [
+    "~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1",
+    "~/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1",
+    "~/.config/powershell/Microsoft.PowerShell_profile.ps1",
+]
+
+
+def _alias_block_present(content: str) -> bool:
+    """Return True when the managed alias block is already in *content*."""
+    return _ALIAS_MARKER_START in content
+
+
+def _upsert_alias_block(path: str, block: str) -> str:
+    """
+    Idempotently writes *block* into the file at *path*.
+
+    - If the marker is absent the block is appended.
+    - If the marker is present the existing block is replaced (handles
+      re-runs after a ``mcp-pipe`` upgrade).
+
+    Returns one of: ``"added"``, ``"updated"``, ``"skipped"`` (on error).
+    """
+    expanded = os.path.expanduser(path)
+    try:
+        os.makedirs(os.path.dirname(expanded) or ".", exist_ok=True)
+        existing = ""
+        if os.path.exists(expanded):
+            with open(expanded, "r", encoding="utf-8", errors="replace") as fh:
+                existing = fh.read()
+
+        if _alias_block_present(existing):
+            # Replace the existing managed block in-place.
+            import re as _re
+            pattern = _re.compile(
+                _re.escape(_ALIAS_MARKER_START) + r".*?" + _re.escape(_ALIAS_MARKER_END),
+                _re.DOTALL,
+            )
+            new_content = pattern.sub(block.rstrip("\n"), existing)
+            if new_content == existing:
+                return "skipped"
+            with open(expanded, "w", encoding="utf-8") as fh:
+                fh.write(new_content)
+            return "updated"
+        else:
+            # Append a blank-line separator then the block.
+            with open(expanded, "a", encoding="utf-8") as fh:
+                if existing and not existing.endswith("\n"):
+                    fh.write("\n")
+                fh.write("\n" + block)
+            return "added"
+    except OSError:
+        return "skipped"
+
+
+def inject_shell_aliases(shells: Optional[List[str]] = None) -> List[str]:
+    """
+    Installs ``cpipe`` shell aliases into detected profile files.
+
+    ``cpipe`` is a convenience alias for ``mcp-pipe`` (the Python CLI entry
+    point).  When the Phase 8 Rust ``cpipe`` binary is installed the alias is
+    simply removed; the binary takes over the name.
+
+    Args:
+        shells: Optional explicit list of shell names to target
+                (``"bash"``, ``"zsh"``, ``"pwsh"``).  When *None* all
+                applicable profiles for the current platform are tried.
+
+    Returns:
+        List of human-readable action strings (empty when nothing changed).
+    """
+    actions: List[str] = []
+    platform = sys.platform
+
+    want_posix = shells is None or any(s in (shells or []) for s in ("bash", "zsh", "sh"))
+    want_pwsh = shells is None or "pwsh" in (shells or [])
+
+    # On Windows only target PowerShell by default; on POSIX only target POSIX shells.
+    if platform == "win32":
+        want_posix = False
+    else:
+        want_pwsh = False
+
+    # --- POSIX profiles ---
+    if want_posix:
+        for profile in _POSIX_PROFILES:
+            expanded = os.path.expanduser(profile)
+            # Only write to profiles that already exist, except ~/.bashrc which
+            # we create if absent (most common default shell profile).
+            if not os.path.exists(expanded) and profile != "~/.bashrc":
+                continue
+            result = _upsert_alias_block(expanded, _POSIX_ALIAS_BLOCK)
+            if result == "added":
+                actions.append(f"Added cpipe alias to {profile}.")
+            elif result == "updated":
+                actions.append(f"Updated cpipe alias in {profile}.")
+
+    # --- PowerShell profiles ---
+    if want_pwsh:
+        for profile in _PWSH_PROFILES:
+            expanded = os.path.expanduser(profile)
+            if not os.path.exists(expanded) and profile != _PWSH_PROFILES[0]:
+                continue
+            result = _upsert_alias_block(expanded, _PWSH_ALIAS_BLOCK)
+            if result == "added":
+                actions.append(f"Added cpipe alias to {profile}.")
+            elif result == "updated":
+                actions.append(f"Updated cpipe alias in {profile}.")
+
+    return actions
+
+
+def remove_shell_aliases() -> List[str]:
+    """
+    Removes the managed ``cpipe`` alias block from all known profile files.
+
+    Safe to call when the Phase 8 Rust ``cpipe`` binary is installed.
+
+    Returns:
+        List of human-readable action strings.
+    """
+    import re as _re
+
+    actions: List[str] = []
+    pattern = _re.compile(
+        _re.escape(_ALIAS_MARKER_START) + r".*?" + _re.escape(_ALIAS_MARKER_END) + r"\n?",
+        _re.DOTALL,
+    )
+
+    for profile in _POSIX_PROFILES + _PWSH_PROFILES:
+        expanded = os.path.expanduser(profile)
+        if not os.path.exists(expanded):
+            continue
+        try:
+            with open(expanded, "r", encoding="utf-8", errors="replace") as fh:
+                content = fh.read()
+            if not _alias_block_present(content):
+                continue
+            cleaned = pattern.sub("", content)
+            with open(expanded, "w", encoding="utf-8") as fh:
+                fh.write(cleaned)
+            actions.append(f"Removed cpipe alias from {profile}.")
+        except OSError:
+            pass
+
+    return actions
+
 def inject_hooks(target_dir: str, environment: str) -> List[str]:
     """Automates the injection of Context-Pipe hooks into various IDEs/CLIs."""
     actions = []
@@ -399,6 +615,80 @@ def inject_hooks(target_dir: str, environment: str) -> List[str]:
         if merge_hook_json(cursor_path, "postToolUse", {"command": cmd_str}, version=1):
             actions.append("Injected Context-Pipe into Cursor hooks.")
 
+        # 1b. Cursor Slash Commands — injected as .cursor/rules/*.mdc agent rules
+        cursor_rules_dir = os.path.join(target_dir, ".cursor", "rules")
+        os.makedirs(cursor_rules_dir, exist_ok=True)
+
+        pipe_stats_mdc = """\
+---
+description: View Context-Pipe ROI Balance Sheet
+globs: []
+alwaysApply: false
+---
+
+Call `get_pipe_stats` from the `context-pipe` MCP server.
+Display the full Balance Sheet: chars saved, chars added, avg latency per node, total events, and net ROI.
+If net savings > 0, summarise the top contributing pipe by name.
+"""
+        pipe_run_mdc = """\
+---
+description: Run a named Context-Pipe on the current context
+globs: []
+alwaysApply: false
+---
+
+1. Call `list_pipes()` from the `context-pipe` MCP server to show available pipes.
+2. If the user has not specified a pipe name, ask them to choose from the list.
+3. Ask the user to confirm or paste the input text to process, or use the current conversation context.
+4. Call `pipe_run(pipe_name, input_text)`.
+5. Display the audit header (compression ratio, latency) and the distilled result.
+"""
+        pipe_dynamic_mdc = """\
+---
+description: Build and run an ad-hoc Context-Pipe from available tools
+globs: []
+alwaysApply: false
+---
+
+1. Call `pipe_list_shadow_tools()` from the `context-pipe` MCP server to discover available nodes
+   (configured pipes + PATH tools like jq, rg, markitdown, pandoc).
+2. Based on the user's goal, construct a `nodes_json` array. Rules:
+   - Every array MUST end with a sifting node: `{"cmd": "semantic-sift-cli", "args": ["semantic"]}`.
+   - Shell utilities (grep, awk, jq, rg) require `allow_shell=True`.
+   - Never put shell metacharacters (|, ;, &, $) in a `cmd` value — use `args` instead.
+3. Show the user the proposed node graph and confirm before executing.
+4. Call `pipe_run_dynamic(nodes_json, input_text, allow_shell=<bool>)`.
+5. Display the audit header and distilled result.
+"""
+        pipe_handoff_mdc = """\
+---
+description: Distil agent output before passing it to another agent
+globs: []
+alwaysApply: false
+---
+
+Use this at any agent-to-agent handoff boundary to prevent context flooding.
+
+1. Identify the output text from Agent A and the name of Agent B that will consume it.
+2. Call `pipe_agent_handoff(output, from_agent="<A>", to_agent="<B>")` from the `context-pipe` MCP server.
+   - If you know the content type, pass `pipe_name` explicitly (e.g. `pipe_name="semantic-refinery"`).
+   - Otherwise omit `pipe_name` and routing is determined automatically by pipes.json mappings.
+3. Pass the returned distilled text as the input to Agent B.
+"""
+        stats_path = os.path.join(cursor_rules_dir, "pipe-stats.mdc")
+        run_path = os.path.join(cursor_rules_dir, "pipe-run.mdc")
+        dynamic_path = os.path.join(cursor_rules_dir, "pipe-dynamic.mdc")
+        handoff_path = os.path.join(cursor_rules_dir, "pipe-handoff.mdc")
+        for path, content in [
+            (stats_path, pipe_stats_mdc),
+            (run_path, pipe_run_mdc),
+            (dynamic_path, pipe_dynamic_mdc),
+            (handoff_path, pipe_handoff_mdc),
+        ]:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+        actions.append("Added /pipe-stats, /pipe-run, /pipe-dynamic, /pipe-handoff rules to Cursor (.cursor/rules/).")
+
     # 2. VS Code / GitHub Injection
     if "vscode" in env_lower or "github" in env_lower:
         vscode_path = os.path.join(target_dir, ".github", "hooks", "context-pipe.json")
@@ -409,14 +699,34 @@ def inject_hooks(target_dir: str, environment: str) -> List[str]:
     if "gemini" in env_lower:
         gemini_dir = os.path.join(target_dir, ".gemini", "commands")
         os.makedirs(gemini_dir, exist_ok=True)
-        stats_cmd = """description = "View Context-Pipe ROI Balance Sheet"
-prompt = \"\"\"
-!{context-pipe get_pipe_stats}
-\"\"\"
-"""
-        with open(os.path.join(gemini_dir, "pipe-stats.toml"), "w") as f:
-            f.write(stats_cmd)
-        actions.append("Added /pipe-stats command to Gemini CLI.")
+        gemini_commands = {
+            "pipe-stats.toml": (
+                "View Context-Pipe ROI Balance Sheet",
+                "Call get_pipe_stats from the context-pipe MCP server. "
+                "Display chars saved, chars added, avg latency, total events, and net ROI.",
+            ),
+            "pipe-run.toml": (
+                "Run a named Context-Pipe on the current context",
+                "Call list_pipes() to show available pipes. Ask the user to choose one and confirm the input text. "
+                "Then call pipe_run(pipe_name, input_text) and display the audit header and distilled result.",
+            ),
+            "pipe-dynamic.toml": (
+                "Build and run an ad-hoc Context-Pipe from available tools",
+                "Call pipe_list_shadow_tools() to discover available nodes. "
+                "Construct a nodes_json array ending with a semantic-sift-cli node. "
+                "Show the user the proposed graph, confirm, then call pipe_run_dynamic(nodes_json, input_text).",
+            ),
+            "pipe-handoff.toml": (
+                "Distil agent output before passing it to another agent",
+                "Call pipe_agent_handoff(output, from_agent='A', to_agent='B') from the context-pipe MCP server "
+                "to prevent context flooding at A2A handoff boundaries.",
+            ),
+        }
+        for filename, (description, prompt) in gemini_commands.items():
+            content = f'description = "{description}"\nprompt = """\n{prompt}\n"""\n'
+            with open(os.path.join(gemini_dir, filename), "w") as f:
+                f.write(content)
+        actions.append("Added /pipe-stats, /pipe-run, /pipe-dynamic, /pipe-handoff commands to Gemini CLI.")
 
     # 4. OpenCode Injection
     if "opencode" in env_lower:
@@ -440,12 +750,33 @@ prompt = \"\"\"
                     oc_data["command"] = {}
                 oc_data["command"]["pipe-stats"] = {
                     "description": "View Context-Pipe ROI Balance Sheet",
-                    "template": "Use the get_pipe_stats tool from the context-pipe MCP server and display the full ROI balance sheet.",
+                    "template": "Call get_pipe_stats from the context-pipe MCP server. "
+                    "Display chars saved, chars added, avg latency, total events, and net ROI. "
+                    "If net savings > 0, name the top contributing pipe.",
+                }
+                oc_data["command"]["pipe-run"] = {
+                    "description": "Run a named pipe from pipes.json on the current context",
+                    "template": "Call list_pipes() to show available pipes. "
+                    "Ask the user to choose a pipe name and confirm the input text. "
+                    "Then call pipe_run(pipe_name, input_text) and display the audit header and distilled result.",
+                }
+                oc_data["command"]["pipe-dynamic"] = {
+                    "description": "Build and run an ad-hoc Context-Pipe from available tools",
+                    "template": "Call pipe_list_shadow_tools() to discover available nodes (configured pipes + PATH tools). "
+                    "Construct a nodes_json array ending with semantic-sift-cli. "
+                    "Show the proposed node graph to the user, confirm, then call pipe_run_dynamic(nodes_json, input_text). "
+                    "Use allow_shell=True if the graph includes shell utilities (grep, awk, jq, rg).",
+                }
+                oc_data["command"]["pipe-handoff"] = {
+                    "description": "Distil agent output before passing it to another agent",
+                    "template": "Call pipe_agent_handoff(output, from_agent='<A>', to_agent='<B>') "
+                    "from the context-pipe MCP server to prevent context flooding at A2A handoff boundaries. "
+                    "Pass pipe_name explicitly if you know the content type (e.g. 'semantic-refinery').",
                 }
 
                 with open(oc_path, "w") as f:
                     json.dump(oc_data, f, indent=2)
-                actions.append("Updated Context-Pipe MCP and /pipe-stats in opencode.json.")
+                actions.append("Updated Context-Pipe MCP and /pipe-stats, /pipe-run, /pipe-dynamic, /pipe-handoff in opencode.json.")
 
                 # 4.3 Native Plugin
                 oc_plugin_dir = os.path.join(target_dir, ".opencode", "plugins")

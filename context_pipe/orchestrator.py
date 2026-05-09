@@ -7,6 +7,7 @@ import argparse
 import re
 import os
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -93,6 +94,47 @@ def resolve_pipe_from_context(config: Dict[str, Any], tool_name: str, content_le
     return None
 
 
+def _write_tee(tee_config: Dict[str, Any], data: str, node_cmd: str, tool_name: Optional[str]) -> Optional[str]:
+    """
+    Writes data to a local-file tee sink before the node processes it.
+
+    Supports path tokens: {iso_date} (YYYY-MM-DD), {tool_name} (sanitised tool name).
+    Mode: "append" (default) or "overwrite".
+
+    Returns the resolved path on success, None on any failure.
+    Errors are silently swallowed — a tee failure must never interrupt the main chain.
+    """
+    try:
+        sink = tee_config.get("sink", "file")
+        if sink != "file":
+            return None  # Only local-file sinks supported in v0.3.0
+
+        raw_path: str = tee_config.get("path", "")
+        if not raw_path:
+            return None
+
+        # Token substitution
+        iso_date = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+        safe_tool = re.sub(r"[^\w\-]", "_", tool_name or "unknown")
+        resolved_path = raw_path.replace("{iso_date}", iso_date).replace("{tool_name}", safe_tool)
+
+        mode_str = tee_config.get("mode", "append")
+        file_mode = "w" if mode_str == "overwrite" else "a"
+
+        os.makedirs(os.path.dirname(os.path.abspath(resolved_path)), exist_ok=True)
+
+        timestamp = datetime.now(tz=timezone.utc).isoformat()
+        separator = f"\n--- [Context-Pipe: Tee @ {node_cmd} | {timestamp}] ---\n"
+
+        with open(resolved_path, file_mode, encoding="utf-8") as f:
+            f.write(data)
+            f.write(separator)
+
+        return resolved_path
+    except Exception:
+        return None
+
+
 def run_pipe(
     pipe_config: Dict[str, Any], input_data: str, tool_name: Optional[str] = None, agent_label: Optional[str] = None
 ) -> tuple[str, List[Dict[str, Any]]]:
@@ -117,6 +159,12 @@ def run_pipe(
         cmd: List[str] = [resolved_cmd] + [str(a) for a in node.get("args", [])]
 
         start_size = len(current_input)
+
+        # T-Pipe: write raw input to sink before node processes it
+        tee_path: Optional[str] = None
+        tee_config = node.get("tee")
+        if tee_config:
+            tee_path = _write_tee(tee_config, current_input, node["cmd"], tool_name)
 
         try:
             # High-Fidelity OS Piping (shell=False enforced — no injection surface)
@@ -151,13 +199,48 @@ def run_pipe(
             return error_text, trace
 
         end_size = len(stdout)
-        trace.append(
-            {"node": node["cmd"], "input_size": start_size, "output_size": end_size, "delta": end_size - start_size}
-        )
+        entry: Dict[str, Any] = {
+            "node": node["cmd"],
+            "input_size": start_size,
+            "output_size": end_size,
+            "delta": end_size - start_size,
+        }
+        if tee_path is not None:
+            entry["tee_path"] = tee_path
+        trace.append(entry)
 
         current_input = stdout
 
     return current_input, trace
+
+
+def load_config(config_path: str = "pipes.json") -> Dict[str, Any]:
+    """
+    Loads ``pipes.json`` with a two-location fallback.
+
+    Resolution order:
+    1. ``config_path`` as given (absolute or relative to CWD).
+    2. The package root directory (parent of ``context_pipe/``), which is
+       where ``pipes.json`` lives in both installed and editable layouts.
+
+    Returns an empty scaffold ``{"pipes": [], "mappings": []}`` if the file
+    is not found or is not valid JSON.
+    """
+    config: Dict[str, Any] = {"pipes": [], "mappings": []}
+    search_paths = [config_path]
+    if not os.path.isabs(config_path):
+        search_paths.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), config_path))
+
+    for path in search_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                break
+            except (json.JSONDecodeError, OSError):
+                continue
+
+    return config
 
 
 def main():
@@ -195,23 +278,9 @@ def main():
 
         args = parser.parse_args()
 
-        # Load Config with relative/absolute fallback
-        config = {"pipes": [], "mappings": []}
+        # Load Config
         config_path = getattr(args, "config", "pipes.json")
-
-        # Try finding config in current dir, then in the orchestrator's parent dir
-        search_paths = [config_path]
-        if not os.path.isabs(config_path):
-            search_paths.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), config_path))
-
-        for path in search_paths:
-            if os.path.exists(path):
-                try:
-                    with open(path, "r", encoding="utf-8") as f:
-                        config = json.load(f)
-                    break
-                except (json.JSONDecodeError, OSError):
-                    continue
+        config = load_config(config_path)
 
         if args.command == "run":
             if not raw_input:
@@ -247,6 +316,8 @@ def main():
             print(f"Net Context {net_label}: {abs(sheet['net_change']):,} chars")
             print(f"Platform Events:   {sheet['total_events']}")
             print(f"Avg Node Latency:  {sheet['avg_latency_ms']:.2f}ms")
+            if sheet.get("fallback_events", 0) > 0:
+                print(f"⚠️  Hook Fallbacks: {sheet['fallback_events']} (pipe failed; raw input passed through)")
             print("-----------------------------------------\n")
 
     except Exception:

@@ -125,18 +125,63 @@ def generate_audit_header(pipe_name: str, trace: List[Dict[str, Any]], latency_m
     return "\n".join(header)
 
 
+def log_fallback_event(tool_name: str, reason: str) -> None:
+    """
+    Records a hook fallback event — fired when ``pipe_hook.py`` catches an
+    unexpected exception and returns raw input to the agent unchanged.
+
+    Events are stored under the reserved ``"__fallbacks__"`` session key so
+    they never pollute tool-level ROI accounting.  They are surfaced as a
+    warning count in the Balance Sheet.
+    """
+    if PIPE_TELEMETRY_DISABLED:
+        return
+
+    try:
+        with _TELEMETRY_LOCK:
+            data: Dict[str, Any] = {}
+            if os.path.exists(TELEMETRY_FILE):
+                try:
+                    with open(TELEMETRY_FILE, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    data = {}
+
+            fb = data.setdefault("__fallbacks__", {"events": []})
+            fb["events"].append({"tool": tool_name, "reason": reason})
+
+            with open(TELEMETRY_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+    except Exception:
+        pass
+
+
 def get_balance_sheet() -> Dict[str, Any]:
     """Calculates context ROI by aggregating all sessions.
     Filters out 'node' level events to prevent double counting with 'mcp' protocol events.
     """
     if not os.path.exists(TELEMETRY_FILE):
-        return {"signal_added": 0, "noise_removed": 0, "net_change": 0, "total_events": 0, "avg_latency_ms": 0.0}
+        return {
+            "signal_added": 0,
+            "noise_removed": 0,
+            "net_change": 0,
+            "total_events": 0,
+            "avg_latency_ms": 0.0,
+            "fallback_events": 0,
+        }
 
     try:
         with open(TELEMETRY_FILE, "r") as f:
             data = json.load(f)
     except (json.JSONDecodeError, OSError):
-        return {"signal_added": 0, "noise_removed": 0, "net_change": 0, "total_events": 0, "avg_latency_ms": 0.0}
+        return {
+            "signal_added": 0,
+            "noise_removed": 0,
+            "net_change": 0,
+            "total_events": 0,
+            "avg_latency_ms": 0.0,
+            "fallback_events": 0,
+        }
 
     total_calls = 0
     total_latency = 0.0
@@ -167,15 +212,20 @@ def get_balance_sheet() -> Dict[str, Any]:
                 else:
                     noise_removed += abs(delta)
     elif isinstance(data, list):
-        # Fallback for old flat format
-        for e in data:
-            total_calls += 1
-            total_latency += e.get("latency_ms", 0)
-            delta = e.get("delta", 0)
-            if delta > 0:
-                signal_added += delta
-            else:
-                noise_removed += abs(delta)
+            # Fallback for old flat format
+            for e in data:
+                total_calls += 1
+                total_latency += e.get("latency_ms", 0)
+                delta = e.get("delta", 0)
+                if delta > 0:
+                    signal_added += delta
+                else:
+                    noise_removed += abs(delta)
+
+    # Count hook fallback events (stored under __fallbacks__ sentinel key)
+    fallback_count = 0
+    if isinstance(data, dict):
+        fallback_count = len(data.get("__fallbacks__", {}).get("events", []))
 
     net_change = signal_added - noise_removed
 
@@ -185,4 +235,5 @@ def get_balance_sheet() -> Dict[str, Any]:
         "net_change": net_change,
         "total_events": total_calls,
         "avg_latency_ms": total_latency / total_calls if total_calls > 0 else 0,
+        "fallback_events": fallback_count,
     }

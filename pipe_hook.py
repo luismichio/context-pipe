@@ -29,8 +29,14 @@ def main():
         result = wrap_payload(raw_input, config)
         sys.stdout.write(result)
 
-    except Exception:
+    except Exception as e:
         # SAFETY FALLBACK: Never crash the hook.
+        # Log the failure type for observability in the Balance Sheet.
+        try:
+            from context_pipe.telemetry import log_fallback_event
+            log_fallback_event(tool_name="unknown", reason=type(e).__name__)
+        except Exception:
+            pass
         sys.stdout.write(raw_input)
 
 

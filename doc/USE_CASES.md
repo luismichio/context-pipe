@@ -57,25 +57,35 @@ Without CPP, the context window floods instantly, the LLM hallucinates, or the r
 ## 3. The Research Synthesizer (Web to Knowledge)
 *Scenario: Your agent fetches a competitor's 100-page API documentation website to learn how to integrate it.*
 
-Without CPP, the agent downloads raw HTML, flooding its context with CSS, JavaScript, and navigation menus.
+Without CPP, the agent downloads raw HTML, flooding its context with CSS, JavaScript, and navigation menus. With a Shadow MCP server like Firecrawl registered in `pipes.json` but hidden from the IDE tool list, the agent never sees the bloat — it sees only the distilled knowledge.
 
 **The Pipe (`web-researcher`)**:
-1.  **Bash Node (`curl`)**: Fetches the raw HTML.
-2.  **Node (`markitdown` or `pandoc`)**: Converts the messy HTML into clean Markdown.
-3.  **Skill Node (`technical-writer`)**: Injects instructions telling the LLM to focus only on API endpoints and authentication methods.
-4.  **Refinery Node (`semantic-sift-cli doc`)**: Performs a heavy semantic compression (`rate: 0.3`), stripping away marketing fluff and keeping only the core technical concepts.
+1.  **MCP Node (`firecrawl/scrape`) *(Phase 7.5)***: Fetches the live page as clean text via the Firecrawl MCP server — no curl, no raw HTML. The server is registered in `pipes.json` `servers` block but not exposed to the IDE as a standalone tool.
+2.  **Node (`markitdown` or `pandoc`)**: Converts the result into structured Markdown.
+3.  **Skill Node (`api-integration-expert`)**: Injects instructions to focus only on API endpoints and authentication methods.
+4.  **Refinery Node (`semantic-sift-cli doc`)**: Performs heavy semantic compression (`rate: 0.3`), stripping marketing fluff and retaining only core technical concepts.
 
 ```json
 {
   "name": "web-researcher",
   "nodes": [
-    { "cmd": "python", "args": ["-m", "markitdown"] },
+    {
+      "type": "mcp",
+      "server": "firecrawl",
+      "tool": "scrape",
+      "input_key": "url",
+      "help_msg": "Firecrawl MCP server not reachable. Check FIRECRAWL_API_KEY."
+    },
+    { "cmd": "markitdown" },
     { "cmd": "context-pipe-skill", "args": ["api-integration-expert"] },
     { "cmd": "semantic-sift-cli", "args": ["doc", "--rate", "0.3"] }
   ]
 }
 ```
-**The Result:** The LLM reads a highly concentrated, technically dense summary of the API, costing pennies instead of dollars in API tokens.
+
+> **Note:** The `firecrawl` server entry lives in the `servers` block of `pipes.json` (or `~/.mcp-pipe.json`) and is never registered in your IDE — keeping it shadow. Until Phase 7.5 ships, replace the MCP node with `{ "cmd": "markitdown" }` and pipe a pre-fetched HTML file through stdin.
+
+**The Result:** The LLM reads a highly concentrated, technically dense summary of the API, costing pennies instead of dollars in API tokens — with the web scraper remaining invisible to the agent's tool list.
 
 ---
 
