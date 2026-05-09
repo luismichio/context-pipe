@@ -5,6 +5,16 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] — 2026-05-09
+
+### ✨ Fidelity & Safety Upgrade
+- **Test Suite Hardening**: Initiated a technical test audit and closed the logic "blind spots." Added `tests/test_server.py` to verify the MCP server layer.
+- **Coverage Ratchet**: Project-wide test coverage raised from **73% to 83.7%**, satisfying the mandatory architectural quality gate.
+- **Bug Fix — `server.py`**: Fixed a critical bug in the `pipe_read_file` MCP tool where it was returning a raw coroutine object instead of waiting for the distilled text. The tool is now properly `async` and awaited.
+- **Improved Isolation**: Refined sandbox testing patterns using `tmp_path` to ensure zero side effects on the developer's machine during local test runs.
+
+---
+
 ## [0.2.1] — 2026-05-09
 
 ### Changed

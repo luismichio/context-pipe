@@ -1,0 +1,310 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 Luis Kobayashi. All rights reserved.
+"""Tests for context_pipe.server — closing the 0% coverage gap."""
+
+import os
+import json
+import pytest
+from unittest.mock import patch
+
+from context_pipe import server
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
+@pytest.fixture
+def mock_config(tmp_path):
+    config = {
+        "pipes": [
+            {"name": "standard-distill", "description": "Fast log sifting", "nodes": [{"cmd": "sift"}]}
+        ],
+        "mappings": []
+    }
+    config_file = tmp_path / "pipes.json"
+    config_file.write_text(json.dumps(config))
+    return str(config_file)
+
+
+# ---------------------------------------------------------------------------
+# 1. Basic Tool Listing
+# ---------------------------------------------------------------------------
+
+def test_list_pipes_returns_formatted_summary(mock_config):
+    with patch("context_pipe.server.CONFIG_PATH", mock_config):
+        result = server.list_pipes()
+    assert "standard-distill" in result
+    assert "Fast log sifting" in result
+
+
+def test_list_pipes_handles_empty_config(tmp_path):
+    empty_file = tmp_path / "empty.json"
+    empty_file.write_text(json.dumps({"pipes": []}))
+    with patch("context_pipe.server.CONFIG_PATH", str(empty_file)):
+        result = server.list_pipes()
+    assert "No pipes configured" in result
+
+
+# ---------------------------------------------------------------------------
+# 2. Pipe Execution
+# ---------------------------------------------------------------------------
+
+@pytest.mark.anyio
+async def test_pipe_run_executes_orchestrator(mock_config):
+    with patch("context_pipe.server.CONFIG_PATH", mock_config):
+        with patch("context_pipe.server.run_pipe", return_value=("output", [])) as mock_run:
+            result = await server.pipe_run("standard-distill", "input data")
+            
+    assert "output" in result
+    mock_run.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_pipe_run_unknown_pipe_returns_error(mock_config):
+    with patch("context_pipe.server.CONFIG_PATH", mock_config):
+        result = await server.pipe_run("nonexistent", "data")
+    assert "Error: Pipe 'nonexistent' not found" in result
+
+
+@pytest.mark.anyio
+async def test_pipe_run_exception_returns_error_string(mock_config):
+    with patch("context_pipe.server.CONFIG_PATH", mock_config):
+        with patch("context_pipe.server.run_pipe", side_effect=RuntimeError("crash")):
+            result = await server.pipe_run("standard-distill", "data")
+    assert "Error executing pipe: crash" in result
+
+
+# ---------------------------------------------------------------------------
+# 3. File Operations & Security
+# ---------------------------------------------------------------------------
+
+def test_resolve_safe_path_allowed_in_workspace(tmp_path):
+    os.environ["SIFT_WORKSPACE_ROOT"] = str(tmp_path)
+    safe_file = tmp_path / "safe.txt"
+    safe_file.touch()
+    
+    resolved = server._resolve_safe_path(str(safe_file))
+    assert os.path.exists(resolved)
+
+
+def test_resolve_safe_path_denies_outside_workspace(tmp_path):
+    os.environ["SIFT_WORKSPACE_ROOT"] = str(tmp_path)
+    # Use a clearly outside path
+    outside_path = "/etc/passwd" if os.name != "nt" else "C:/Windows/System32/drivers/etc/hosts"
+    with pytest.raises(PermissionError):
+        server._resolve_safe_path(outside_path)
+
+
+def test_resolve_safe_path_allows_global_when_env_set(tmp_path):
+    os.environ["SIFT_ALLOW_GLOBAL_READS"] = "true"
+    # Should not raise
+    path = "/tmp/test" if os.name != "nt" else "C:/temp/test"
+    assert server._resolve_safe_path(path)
+    os.environ["SIFT_ALLOW_GLOBAL_READS"] = "false"
+
+
+@pytest.mark.anyio
+async def test_pipe_analyze_file_returns_recommendation(tmp_path):
+    os.environ["SIFT_WORKSPACE_ROOT"] = str(tmp_path)
+    f = tmp_path / "test.txt"
+    f.write_text("a" * 500) # Small file
+    
+    result = server.pipe_analyze_file(str(f))
+    assert "standard-distill" in result
+    
+    f.write_text("a" * 15000) # Large file
+    result = server.pipe_analyze_file(str(f))
+    assert "semantic-refinery" in result
+
+
+@pytest.mark.anyio
+async def test_pipe_analyze_file_error_handling(tmp_path):
+    os.environ["SIFT_WORKSPACE_ROOT"] = str(tmp_path)
+    result = server.pipe_analyze_file(str(tmp_path / "nonexistent"))
+    assert "Error analyzing file" in result
+
+
+@pytest.mark.anyio
+async def test_pipe_read_file_success(tmp_path, mock_config):
+    os.environ["SIFT_WORKSPACE_ROOT"] = str(tmp_path)
+    f = tmp_path / "read.txt"
+    f.write_text("file content")
+    
+    with patch("context_pipe.server.CONFIG_PATH", mock_config):
+        with patch("context_pipe.server.run_pipe", return_value=("distilled", [])):
+            result = await server.pipe_read_file(str(f), "standard-distill")
+            
+    assert "distilled" in result
+
+
+@pytest.mark.anyio
+async def test_pipe_read_file_error_handling(tmp_path):
+    os.environ["SIFT_WORKSPACE_ROOT"] = str(tmp_path)
+    result = await server.pipe_read_file(str(tmp_path / "nonexistent"))
+    assert "Error reading file" in result
+
+
+# ---------------------------------------------------------------------------
+# 4. Diagnostics & Onboarding
+# ---------------------------------------------------------------------------
+
+def test_get_pipe_stats_returns_balance_sheet():
+    fake_sheet = {
+        "signal_added": 10,
+        "noise_removed": 20,
+        "net_change": -10,
+        "total_events": 5,
+        "avg_latency_ms": 1.0
+    }
+    with patch("context_pipe.server.get_balance_sheet", return_value=fake_sheet):
+        result = server.get_pipe_stats()
+    assert "Balance Sheet" in result
+    assert "+10" in result
+    assert "Saved" in result
+
+
+def test_pipe_verify_returns_report():
+    mock_report = {
+        "context_pipe": {"ok": True, "detail": "installed"},
+        "pipes_config": {"ok": True, "detail": "valid", "path": "p.json"},
+        "semantic_sift": {"ok": True, "version": "0.1.0", "path": "/bin/sift"},
+        "nodes": [{"cmd": "sift", "ok": True, "resolved": "/bin/sift"}],
+        "overall": True
+    }
+    with patch("context_pipe.server.verify_installation", return_value=mock_report):
+        with patch("context_pipe.server.resolve_pipes_config", return_value={"updated": True}):
+            result = server.pipe_verify()
+    assert "Installation Report" in result
+    assert "✅ **context-pipe**" in result
+    assert "absolute path" in result
+    assert "### Pipe Node Resolution" in result
+
+
+def test_pipe_verify_error_report():
+    mock_report = {
+        "context_pipe": {"ok": False, "detail": "broken"},
+        "pipes_config": {"ok": False, "detail": "missing", "path": "p.json"},
+        "semantic_sift": {"ok": False, "detail": "not found"},
+        "nodes": [],
+        "overall": False
+    }
+    with patch("context_pipe.server.verify_installation", return_value=mock_report):
+        with patch("context_pipe.server.resolve_pipes_config", return_value={"updated": False}):
+            result = server.pipe_verify()
+    assert "❌ **context-pipe**" in result
+    assert "Action required" in result
+
+
+def test_pipe_onboard_calls_inject_hooks():
+    with patch("context_pipe.server.inject_hooks", return_value=["added cursor rule"]) as mock_inject:
+        result = server.pipe_onboard("Cursor")
+    assert "Onboarding Successful" in result
+    assert "added cursor rule" in result
+    mock_inject.assert_called_once()
+
+
+def test_pipe_onboard_no_targets(tmp_path):
+    with patch("context_pipe.server.inject_hooks", return_value=[]):
+        result = server.pipe_onboard("Cursor", target_dir=str(tmp_path))
+    assert "already active" in result
+
+
+# ---------------------------------------------------------------------------
+# 5. Dynamic Pipes & Shadow Tools
+# ---------------------------------------------------------------------------
+
+@pytest.mark.anyio
+async def test_pipe_run_dynamic_executes_logic():
+    nodes_json = json.dumps([{"cmd": "sift"}])
+    with patch("context_pipe.server.run_dynamic_pipe", return_value=("dyn-out", [])) as mock_dyn:
+        result = await server.pipe_run_dynamic(nodes_json, "input")
+    assert "dyn-out" in result
+    mock_dyn.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_pipe_run_dynamic_invalid_json():
+    result = await server.pipe_run_dynamic("NOT JSON", "data")
+    assert "Error: nodes_json is not valid JSON" in result
+
+
+@pytest.mark.anyio
+async def test_pipe_run_dynamic_value_error():
+    with patch("context_pipe.server.run_dynamic_pipe", side_effect=ValueError("bad nodes")):
+        result = await server.pipe_run_dynamic("[]", "data")
+    assert "Error: bad nodes" in result
+
+
+@pytest.mark.anyio
+async def test_pipe_run_dynamic_unexpected_error():
+    with patch("context_pipe.server.run_dynamic_pipe", side_effect=Exception("boom")):
+        result = await server.pipe_run_dynamic("[]", "data")
+    assert "Error executing dynamic pipe: boom" in result
+
+
+def test_pipe_list_shadow_tools_renders_table():
+    fake_tools = [
+        {"name": "jq", "source": "PATH", "description": "JSON", "nodes": ["jq"]}
+    ]
+    with patch("context_pipe.server.list_shadow_tools", return_value=fake_tools):
+        result = server.pipe_list_shadow_tools()
+    assert "| Name | Source |" in result
+    assert "jq" in result
+
+
+def test_pipe_list_shadow_tools_empty():
+    with patch("context_pipe.server.list_shadow_tools", return_value=[]):
+        result = server.pipe_list_shadow_tools()
+    assert "No context-processing tools found" in result
+
+
+# ---------------------------------------------------------------------------
+# 6. Alias Management
+# ---------------------------------------------------------------------------
+
+def test_pipe_install_aliases_calls_helper():
+    with patch("context_pipe.server.inject_shell_aliases", return_value=["updated .bashrc"]):
+        result = server.pipe_install_aliases("bash")
+    assert "cpipe alias installed" in result
+    assert ".bashrc" in result
+
+
+def test_pipe_install_aliases_no_changes():
+    with patch("context_pipe.server.inject_shell_aliases", return_value=[]):
+        result = server.pipe_install_aliases()
+    assert "already up-to-date" in result
+
+
+def test_pipe_remove_aliases_calls_helper():
+    with patch("context_pipe.server.remove_shell_aliases", return_value=["cleaned .zshrc"]):
+        result = server.pipe_remove_aliases()
+    assert "cpipe alias removed" in result
+    assert ".zshrc" in result
+
+
+def test_pipe_remove_aliases_no_changes():
+    with patch("context_pipe.server.remove_shell_aliases", return_value=[]):
+        result = server.pipe_remove_aliases()
+    assert "nothing removed" in result
+
+
+# ---------------------------------------------------------------------------
+# 7. Agent Handoff & Dashboard
+# ---------------------------------------------------------------------------
+
+def test_pipe_agent_handoff_delegates():
+    with patch("context_pipe.server._pipe_agent_handoff", return_value="distilled") as mock_handoff:
+        result = server.pipe_agent_handoff("raw", from_agent="A", to_agent="B")
+    assert result == "distilled"
+    mock_handoff.assert_called_once_with(output="raw", pipe_name=None, from_agent="A", to_agent="B")
+
+
+def test_pipe_dashboard_returns_text():
+    with patch("context_pipe.server.list_pipes", return_value="pipes-list"):
+        with patch("context_pipe.server.get_pipe_stats", return_value="stats-list"):
+            result = server.pipe_dashboard()
+    assert "Context-Pipe Dashboard" in result
+    assert "pipes-list" in result
+    assert "stats-list" in result

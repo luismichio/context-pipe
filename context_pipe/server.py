@@ -107,7 +107,7 @@ def _resolve_safe_path(path: str) -> str:
 
 
 @mcp.tool()
-def pipe_read_file(path: str, pipe_name: str = "standard-distill") -> str:
+async def pipe_read_file(path: str, pipe_name: str = "standard-distill") -> str:
     """
     Reads a local file safely and streams it directly through a context pipe.
     Use this instead of native file readers to prevent context window flooding.
@@ -123,7 +123,7 @@ def pipe_read_file(path: str, pipe_name: str = "standard-distill") -> str:
     except Exception as e:
         return f"Error reading file: {str(e)}"
 
-    return pipe_run(pipe_name, content)
+    return await pipe_run(pipe_name, content)
 
 
 @mcp.tool()
