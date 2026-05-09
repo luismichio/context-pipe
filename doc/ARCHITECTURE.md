@@ -35,6 +35,17 @@ Context-Pipe extends the terminal model to two transport modes, which compose fr
 
 The result is a unified pipe where a live web fetch, a terminal regex filter, a Rust distiller, and an MCP issue creator can sit in the same chain — each unaware of the others, each doing exactly one thing.
 
+### Extending the Terminal with `mcp-pipe`
+
+Traditional terminal piping is bounded by what is installed on `PATH`. `mcp-pipe` removes that ceiling. By exposing the full MCP ecosystem as pipe-addressable nodes, any terminal user can pipe data through richly capable MCP servers — web scrapers, code search engines, design tools, knowledge bases — without writing a single line of integration code.
+
+```bash
+echo "https://example.com" | mcp-pipe run web-research-pipe
+cat error.log | mcp-pipe run triage-pipe
+```
+
+This means the decades of compounding value locked inside the MCP ecosystem becomes directly accessible from the shell, composable with every existing terminal tool.
+
 ---
 
 
