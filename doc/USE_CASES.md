@@ -2,7 +2,7 @@
 
 To truly understand the power of the **Context-Pipe Platform (CPP)**, you have to stop thinking of it as a tool, and start thinking of it as a **Mental Supply Chain** for your AI agents. 
 
-Below are real-world, high-impact scenarios demonstrating how you can chain Bash commands, Skill Nodes, and Semantic-Sift to drastically improve your AI's performance, security, and cost.
+Below are real-world, high-impact scenarios demonstrating how you can chain Bash commands, Mandate Nodes, and Semantic-Sift to drastically improve your AI's performance, security, and cost.
 
 ---
 
@@ -13,7 +13,7 @@ Without CPP, the LLM reads raw, unformatted code, wasting reasoning tokens tryin
 
 **The Pipe (`react-pr-reviewer`)**:
 1.  **Bash Node (`eslint`)**: Pipes the raw PR diff through your local ESLint to instantly fix basic formatting and syntax issues.
-2.  **Skill Node (`senior-react-engineer`)**: Injects a specialized prompt enforcing your company's specific React 19 architecture rules.
+2.  **Mandate Node (`senior-react-engineer`)**: Injects specialized instructions enforcing your company's React 19 architecture rules.
 3.  **Refinery Node (`semantic-sift-cli`)**: Semantically condenses the diff, highlighting only the functional changes.
 
 ```json
@@ -21,7 +21,7 @@ Without CPP, the LLM reads raw, unformatted code, wasting reasoning tokens tryin
   "name": "react-pr-reviewer",
   "nodes": [
     { "cmd": "npx", "args": ["eslint", "--stdin", "--fix-dry-run"], "shell": true },
-    { "cmd": "context-pipe-skill", "args": ["senior-react-engineer"] },
+    { "type": "script", "cmd": "senior-react-engineer" },
     { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.7"] }
   ]
 }
@@ -37,7 +37,7 @@ Without CPP, the context window floods instantly, the LLM hallucinates, or the r
 
 **The Pipe (`k8s-incident-responder`)**:
 1.  **Bash Node (`grep`)**: Instantly filters the 50,000 lines down to only those containing "Error", "Exception", or "Panic".
-2.  **Skill Node (`pii-masker`)**: Scrubs the remaining logs for email addresses, IPs, or auth tokens to ensure customer data never leaves your machine.
+2.  **Mandate Node (`pii-masker`)**: Scrubs the remaining logs for email addresses, IPs, or auth tokens to ensure customer data never leaves your machine.
 3.  **Refinery Node (`semantic-sift-cli logs`)**: Uses the blazingly fast heuristic sieve to strip away repetitive timestamps and Kubernetes container IDs.
 
 ```json
@@ -45,7 +45,7 @@ Without CPP, the context window floods instantly, the LLM hallucinates, or the r
   "name": "k8s-incident-responder",
   "nodes": [
     { "cmd": "grep", "args": ["-iE", "error|exception|panic"], "shell": true },
-    { "cmd": "context-pipe-skill", "args": ["pii-masker"] },
+    { "type": "script", "cmd": "pii-masker" },
     { "cmd": "semantic-sift-cli", "args": ["logs"] }
   ]
 }
@@ -62,7 +62,7 @@ Without CPP, the agent downloads raw HTML, flooding its context with CSS, JavaSc
 **The Pipe (`web-researcher`)**:
 1.  **MCP Node (`firecrawl/scrape`) *(Phase 7.5)***: Fetches the live page as clean text via the Firecrawl MCP server — no curl, no raw HTML. The server is registered in `pipes.json` `servers` block but not exposed to the IDE as a standalone tool.
 2.  **Node (`markitdown` or `pandoc`)**: Converts the result into structured Markdown.
-3.  **Skill Node (`api-integration-expert`)**: Injects instructions to focus only on API endpoints and authentication methods.
+3.  **Mandate Node (`api-integration-expert`)**: Injects instructions to focus only on API endpoints and authentication methods.
 4.  **Refinery Node (`semantic-sift-cli doc`)**: Performs heavy semantic compression (`rate: 0.3`), stripping marketing fluff and retaining only core technical concepts.
 
 ```json
@@ -77,7 +77,7 @@ Without CPP, the agent downloads raw HTML, flooding its context with CSS, JavaSc
       "help_msg": "Firecrawl MCP server not reachable. Check FIRECRAWL_API_KEY."
     },
     { "cmd": "markitdown" },
-    { "cmd": "context-pipe-skill", "args": ["api-integration-expert"] },
+    { "type": "script", "cmd": "api-integration-expert" },
     { "cmd": "semantic-sift-cli", "args": ["doc", "--rate", "0.3"] }
   ]
 }
@@ -96,7 +96,7 @@ Without CPP, the agent gets overwhelmed by the sheer volume of code and misses s
 
 **The Pipe (`security-auditor`)**:
 1.  **Bash Node (`trufflehog` or `bandit`)**: Runs a fast, local SAST (Static Application Security Testing) tool over the code stream to flag known vulnerability patterns.
-2.  **Skill Node (`owasp-top-10`)**: Injects strict OWASP security guidelines for the LLM to evaluate the flagged code against.
+2.  **Mandate Node (`owasp-top-10`)**: Injects strict OWASP security guidelines for the LLM to evaluate the flagged code against.
 3.  **Refinery Node (`semantic-sift-cli semantic`)**: Compresses the code, retaining only the logic flow around the flagged areas.
 
 ```json
@@ -104,7 +104,7 @@ Without CPP, the agent gets overwhelmed by the sheer volume of code and misses s
   "name": "security-auditor",
   "nodes": [
     { "cmd": "bandit", "args": ["-f", "json", "-s", "B101,B102", "-"], "shell": true },
-    { "cmd": "context-pipe-skill", "args": ["owasp-security-expert"] },
+    { "type": "script", "cmd": "owasp-security-expert" },
     { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.6"] }
   ]
 }
@@ -120,7 +120,7 @@ Sometimes data is so noisy you need both a machete and a scalpel. You can chain 
 
 **The Pipe (`ci-cd-autopsy`)**:
 1.  **Refinery Node (`semantic-sift-cli logs`)**: First, use the ultra-fast heuristic sieve (the machete) to instantly strip out thousands of timestamps, IP addresses, and progress bars.
-2.  **Skill Node (`build-engineer`)**: Inject instructions to focus strictly on dependency conflicts and linking errors.
+2.  **Mandate Node (`build-engineer`)**: Inject instructions to focus strictly on dependency conflicts and linking errors.
 3.  **Refinery Node (`semantic-sift-cli semantic`)**: Finally, use the neural engine (the scalpel) to semantically compress the remaining verbose developer tracebacks.
 
 ```json
@@ -128,7 +128,7 @@ Sometimes data is so noisy you need both a machete and a scalpel. You can chain 
   "name": "ci-cd-autopsy",
   "nodes": [
     { "cmd": "semantic-sift-cli", "args": ["logs"] },
-    { "cmd": "context-pipe-skill", "args": ["build-engineer"] },
+    { "type": "script", "cmd": "build-engineer" },
     { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.4"] }
   ]
 }
@@ -145,7 +145,7 @@ A standard `curl` fails here because the DOM hasn't rendered. You need a headles
 **The Pipe (`spa-a11y-reviewer`)**:
 1.  **Bash Node (`node dump_dom.js`)**: A tiny local script uses Playwright to launch a headless browser, wait for JS hydration, and dump the fully rendered HTML Accessibility Tree to `stdout`.
 2.  **Node (`markitdown`)**: Converts the massive rendered HTML DOM into clean, structured Markdown.
-3.  **Skill Node (`a11y-auditor`)**: Injects strict WCAG (Web Content Accessibility Guidelines) instructions.
+3.  **Mandate Node (`a11y-auditor`)**: Injects strict WCAG (Web Content Accessibility Guidelines) instructions.
 4.  **Refinery Node (`semantic-sift-cli semantic`)**: Compresses the DOM, focusing the LLM's attention purely on missing ARIA labels and structural flaws.
 
 ```json
@@ -154,7 +154,7 @@ A standard `curl` fails here because the DOM hasn't rendered. You need a headles
   "nodes": [
     { "cmd": "node", "args": ["scripts/dump_dom.js"], "shell": true },
     { "cmd": "python", "args": ["-m", "markitdown"] },
-    { "cmd": "context-pipe-skill", "args": ["a11y-auditor"] },
+    { "type": "script", "cmd": "a11y-auditor" },
     { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.5"] }
   ]
 }

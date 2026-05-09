@@ -30,8 +30,8 @@
       "description": "PII Masking -> Log Distillation.",
       "nodes": [
         {
-          "cmd": "context-pipe-skill",
-          "args": ["pii-masker"]
+          "type": "script",
+          "cmd": "pii-masker"
         },
         {
           "cmd": "semantic-sift-cli",
@@ -61,12 +61,12 @@
       "description": "Applies security and architecture lenses, then sifts.",
       "nodes": [
         {
-          "cmd": "context-pipe-skill",
-          "args": ["security-auditor"]
+          "type": "script",
+          "cmd": "security-auditor"
         },
         {
-          "cmd": "context-pipe-skill",
-          "args": ["performance-auditor"]
+          "type": "script",
+          "cmd": "performance-auditor"
         },
         {
           "cmd": "semantic-sift-cli",
@@ -95,8 +95,8 @@
       "description": "Pre-processes code through an expert instruction lens before sifting.",
       "nodes": [
         {
-          "cmd": "context-pipe-skill",
-          "args": ["react-code-fix-linter"]
+          "type": "script",
+          "cmd": "react-code-fix-linter"
         },
         {
           "cmd": "semantic-sift-cli",

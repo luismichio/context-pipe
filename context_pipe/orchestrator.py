@@ -261,7 +261,7 @@ async def run_pipe(
 ) -> tuple[str, List[Dict[str, Any]]]:
     """Executes a chain of nodes and tracks context deltas with a timeout guard."""
     current_input = input_data
-    trace = []
+    trace: List[Dict[str, Any]] = []
 
     # 1. Prepare Environment (Self-Aware Venv Path + Metadata)
     process_env = get_env_with_venv_path()
@@ -282,9 +282,9 @@ async def run_pipe(
         node_type = node.get("type", "binary")
 
         if node_type == "mcp":
-            # --- MCP client path ---
+            # ... (mcp logic)
             start_size = len(current_input)
-            tee_path: Optional[str] = None  # type: ignore[no-redef]
+            tee_path: Optional[str] = None
             tee_config = node.get("tee")
             if tee_config:
                 tee_path = _write_tee(tee_config, current_input, f"mcp:{node['server']}/{node['tool']}", tool_name)
@@ -304,7 +304,7 @@ async def run_pipe(
                 return error_text, trace
 
             end_size = len(stdout)
-            entry: Dict[str, Any] = {  # type: ignore[no-redef]
+            entry: Dict[str, Any] = {
                 "node": f"mcp:{node['server']}/{node['tool']}",
                 "input_size": start_size,
                 "output_size": end_size,
@@ -316,9 +316,46 @@ async def run_pipe(
             current_input = stdout
             continue
 
-        # --- Existing subprocess path ---
-        resolved_cmd = resolve_node_cmd(node["cmd"])
-        cmd: List[str] = [resolved_cmd] + [str(a) for a in node.get("args", [])]
+        if node_type == "script":
+            # --- Local Script/Mandate path ---
+            script_name = node["cmd"]
+            script_dir = os.environ.get("PIPE_SCRIPT_DIR", ".gemini/scripts")
+            
+            # Resolution: .py -> .md (Mandate) -> raw
+            py_script = os.path.join(script_dir, f"{script_name}.py")
+            md_mandate = os.path.join(script_dir, f"{script_name}.md")
+            
+            if os.path.exists(py_script):
+                # Execute Python script
+                resolved_cmd = sys.executable
+                args = [py_script] + [str(a) for a in node.get("args", [])]
+            elif os.path.exists(md_mandate):
+                # Mandate Prepend Logic
+                with open(md_mandate, "r", encoding="utf-8") as f:
+                    mandate_text = f.read()
+                stdout = f"--- [Context-Pipe: Mandate ({script_name})] ---\n{mandate_text}\n\n[Content]\n{current_input}"
+                
+                # Mock a trace entry for the mandate
+                start_size = len(current_input)
+                end_size = len(stdout)
+                trace.append({
+                    "node": f"script:{script_name} (mandate)",
+                    "input_size": start_size,
+                    "output_size": end_size,
+                    "delta": end_size - start_size,
+                })
+                current_input = stdout
+                continue
+            else:
+                # Fallback to binary resolution if script not found
+                resolved_cmd = resolve_node_cmd(node["cmd"])
+                args = [str(a) for a in node.get("args", [])]
+            
+            cmd = [resolved_cmd] + args
+        else:
+            # --- Existing subprocess path ---
+            resolved_cmd = resolve_node_cmd(node["cmd"])
+            cmd = [resolved_cmd] + [str(a) for a in node.get("args", [])]
 
         start_size = len(current_input)
 

@@ -31,7 +31,8 @@ In the **Studio of Two** philosophy, we build **Systems, not Patches**. A patch 
 
 The result is a **context supply chain**: data enters raw, passes through a sequence of refineries (normalize → filter → compress → distil), and arrives at the LLM as dense, high-signal content. Every byte saved is accounted for in the Context Balance Sheet. Every pipe run is traceable. Every A2A handoff is protected.
 
-This is not a wrapper around `semantic-sift`. It is the orchestration layer that makes any refinery composable, observable, and production-grade. A node can be a binary, a shell command, a Python script, a **Skill** (an expert-lens mandate injected into the stream), or — coming in Phase 7.5 — a **full MCP tool** (Figma, GitHub, context-mode, or any server registered in `pipes.json`). If it reads `stdin` and writes `stdout`, it belongs in the pipe.
+This is not a wrapper around `semantic-sift`. It is the orchestration layer that makes any refinery composable, observable, and production-grade. A node can be a binary, a shell command, a Python script, a **Mandate** (an expert-lens instruction set injected into the stream), or — coming in Phase 7.5 — a **full MCP tool** (Figma, GitHub, context-mode, or any server registered in `pipes.json`). If it reads `stdin` and writes `stdout`, it belongs in the pipe.
+
 
 **Example — crawl the web, research it, save it, and ship it:**
 ```
@@ -45,7 +46,7 @@ trigger: tool:web_search | tool:web_fetch
     → prettier --parser markdown   # shell node: normalize formatting                ~3,050 tokens
     → semantic-sift-cli doc        # binary node: distil to high-signal summary        ~420 tokens
           ↳ tee → research.md      # T-pipe: save raw distilled copy to disk
-    → security-auditor skill       # skill node: inject expert security lens           ~380 tokens
+    → security-auditor mandate     # script node: inject expert security lens          ~380 tokens
     → github/create_issue          # MCP node ✦: open a tracked issue with findings
 ```
 *✦ Phase 7.5 — coming soon*
@@ -85,7 +86,7 @@ IDE hooks that apply pipes transparently after every tool call — without the a
 
 | Feature | What it does | Where |
 |---|---|---|
-| **Unix pipe model for AI** | Chain any `stdin→stdout` tool into a named pipe. Binary, shell, skill, or MCP tool — same contract. | [Advanced Node Types](#-advanced-node-types) |
+| **Unix pipe model for AI** | Chain any `stdin→stdout` tool into a named pipe. Binary, shell, mandate, or MCP tool — same contract. | [Advanced Node Types](#-advanced-node-types) |
 | **MCP Node Type** *(Phase 7.5)* | Call any MCP tool (Figma, GitHub, context-mode…) as a first-class pipe node — no wrapper scripts. | [doc/MCP_NODE_SPEC.md](doc/MCP_NODE_SPEC.md) |
 | **Dynamic Pipes** | AI agents construct and execute ad-hoc node lists at runtime via `pipe_run_dynamic` — no `pipes.json` entry required. | [Dynamic Pipes](#dynamic-pipes) |
 | **Shadow MCP Registry** | MCP servers can be installed locally or called remotely without being registered in your IDE — keeping them invisible to the agent's tool list, preventing MCP tool list bloat. `pipe_list_shadow_tools` boots and queries them on demand, routing calls through `pipe_run` or `pipe_run_dynamic`. Ideal for high-noise utility servers you never want polluting the agent's decision space: format converters (`markitdown`, `pandoc`), search tools (`rg`, `fd`), data processors (`jq`, `yq`), web scrapers (`firecrawl`), and document ingestors (`unstructured`, `tika`). One MCP tool in the IDE. Everything else stays shadow. | [Shadow MCP Registry](#shadow-mcp-registry) |
@@ -194,7 +195,7 @@ Once connected, ask your AI Assistant to configure your workspace:
 Detailed documentation is available in the [`doc/`](./doc) directory.
 
 *   **[doc/INDEX.md](doc/INDEX.md)**: The navigational roadmap for the documentation ecosystem.
-*   **[doc/USE_CASES.md](doc/USE_CASES.md)**: Real-world, high-impact scenarios demonstrating how to chain Bash, Skills, and Semantic-Sift.
+*   **[doc/USE_CASES.md](doc/USE_CASES.md)**: Real-world, high-impact scenarios demonstrating how to chain Bash, Mandates, and Semantic-Sift.
 *   **[doc/OPERATOR_GUIDE.md](doc/OPERATOR_GUIDE.md)**: Definitive guide for setup, terminal mastery, and `pipes.json` configuration.
 *   **[doc/ARCHITECTURE.md](doc/ARCHITECTURE.md)**: Technical specifications of the orchestration spine and switchboard.
 *   **[doc/CONTEXT_PIPE_PROTOCOL.md](doc/CONTEXT_PIPE_PROTOCOL.md)**: The language-agnostic standard for tool interoperability.
@@ -330,10 +331,10 @@ Execute arbitrary shell commands as part of your pipe.
 { "cmd": "grep 'ERROR'", "shell": true }
 ```
 
-### 2. Skill Nodes
-Apply an "Expert Lens" to the context by injecting specialized skill mandates.
+### 2. Script & Mandate Nodes
+Executes a project-specific script or applies an "Expert Mandate" (instruction set) to the context. Resolved from `.gemini/scripts/` (default).
 ```json
-{ "cmd": "context-pipe-skill", "args": ["security-auditor"] }
+{ "type": "script", "cmd": "security-auditor" }
 ```
 
 ### 3. T-Pipe Nodes (Stream Splitting)
@@ -412,7 +413,7 @@ The result: the agent works with a fraction of the raw token volume, every sessi
     → serena/find_symbol           # MCP node: precise code symbol — not a raw file dump
     → context-mode/search          # MCP node: retrieve related session context
     → semantic-sift-cli semantic   # binary node: compress both into a dense summary
-    → security-auditor skill       # skill node: expert lens over the result
+    → security-auditor mandate     # script node: expert lens over the result
 ```
 
 All four tools in one pipe. Each doing exactly one job.

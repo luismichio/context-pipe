@@ -25,9 +25,12 @@ tests/test_a2a.py
 tests/test_aliases.py
 tests/test_api.py
 tests/test_cli.py
+tests/test_cli_tool.py
 tests/test_config_loader.py
 tests/test_cpp_contract.py
 tests/test_dynamic.py
+tests/test_echo_guard.py
+tests/test_mcp_node.py
 tests/test_onboarding.py
 tests/test_orchestrator.py
 tests/test_pipe_hook.py

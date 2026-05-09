@@ -9,7 +9,7 @@
 ## 1. Problem Statement
 
 The current `pipes.json` node model supports only subprocess-based executables
-(`binary`, `shell`, `skill`). Every node must be a program that reads `stdin`
+(`binary`, `shell`, `script`). Every node must be a program that reads `stdin`
 and writes `stdout`.
 
 This excludes a whole class of context-processing tools that are only reachable

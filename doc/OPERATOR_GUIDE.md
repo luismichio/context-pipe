@@ -41,7 +41,7 @@ python -m venv venv
 uv pip install -e .
 ```
 
-> The package name in `pyproject.toml` is `mcp-context-pipe` (PyPI) but installs as the `context_pipe` module. The editable install registers `context-pipe`, `context-pipe-server`, and `context-pipe-skill` CLI entry points.
+> The package name in `pyproject.toml` is `mcp-context-pipe` (PyPI) but installs as the `context_pipe` module. The editable install registers `context-pipe`, `context-pipe-server`, and `context-pipe-script` CLI entry points.
 
 ### Step 4 — Cross-install semantic-sift into the master venv (editable)
 
@@ -187,22 +187,24 @@ Executes arbitrary shell commands. Ideal for using standard Unix utilities.
 { "cmd": "grep 'ERROR' | head -n 50", "shell": true }
 ```
 
-### C. Skill Nodes
-Applies an "Expert Lens" by injecting specialized mandates.
+### C. Script & Mandate Nodes
+Executes a project-specific script or applies an "Expert Mandate" (instruction set) to the context. Resolved from `.gemini/scripts/` (default).
 
 **Example: React Expert Chain**
-This chain uses OS bash to auto-format the code with `eslint`, injects React 19 expert instructions from the MCP Market via a Skill Node, and then semantically condenses the result. The LLM receives pre-reviewed, compliant code.
+This chain uses OS bash to auto-format the code with `eslint`, applies React 19 expert instructions from a Mandate Node, and then semantically condenses the result. The LLM receives pre-reviewed, compliant code.
 
 ```json
 {
   "name": "react-expert-chain",
   "nodes": [
     { "cmd": "npx", "args": ["eslint", "--stdin", "--fix-dry-run"], "shell": true },
-    { "cmd": "context-pipe-skill", "args": ["react-code-fix-linter"] },
+    { "type": "script", "cmd": "react-code-fix-linter" },
     { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.6"] }
   ]
 }
 ```
+
+The `type: "script"` node automatically resolves `react-code-fix-linter.py` (executes it) or `react-code-fix-linter.md` (prepends it as a mandate) from your local scripts folder.
 
 ### D. T-Pipe Nodes (Stream Splitting)
 Save a raw copy of the node's input to disk **before** the node processes it — without interrupting the chain. Useful for debugging pipe quality, auditing what was sifted out, and building a research archive.
@@ -262,7 +264,7 @@ Context-Pipe enables extreme decoupling. If you prefer to use **LlamaIndex** or 
 ```
 
 ### G. Extreme Chaining (The God Pipe)
-Because Context-Pipe is simply OS-level `stdin`/`stdout`, there is no theoretical limit to how many transformations you can chain. You can combine web fetching, bash filtering, skill masking, and neural compression into a single stream.
+Because Context-Pipe is simply OS-level `stdin`/`stdout`, there is no theoretical limit to how many transformations you can chain. You can combine web fetching, bash filtering, mandate injection, and neural compression into a single stream.
 
 ```json
 {
@@ -271,7 +273,7 @@ Because Context-Pipe is simply OS-level `stdin`/`stdout`, there is no theoretica
   "nodes": [
     { "cmd": "curl", "args": ["-s", "https://raw.githubusercontent.com/kubernetes/kubernetes/master/CHANGELOG/CHANGELOG-1.30.md"], "shell": true },
     { "cmd": "grep", "args": ["-i", "API"], "shell": true },
-    { "cmd": "context-pipe-skill", "args": ["pii-masker"] },
+    { "type": "script", "cmd": "pii-masker" },
     { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.2"] }
   ]
 }

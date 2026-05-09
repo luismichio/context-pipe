@@ -163,30 +163,26 @@ The results are surfaced via the `pipe_verify` MCP tool, which also auto-runs `r
 
 ---
 
-## 6. The Skill Node (`skills.py`)
+## 6. The Script & Mandate Node (`scripts.py`)
 
-The `context-pipe-skill` CLI entry point exposes a **Skill Lens Node**: a pipe-composable wrapper that prepends a user-defined mandate (instruction set) to the data stream before routing it to a downstream refinery.
+The `type: "script"` node in `pipes.json` allows for deterministic local transformations and expert instructions without the overhead of absolute binary paths. It serves as the primary extension point for project-specific automation.
 
 ### Purpose
-Skills let users inject domain-specific expert context — a security auditor persona, a React linting guide, or a specific coding style mandate — into the pipeline *without modifying the orchestrator*. The skill node is just another `stdin → stdout` transformer that adheres to the CPP standard.
+Scripts provide a safe, standardized way to run local logic (Python scripts) or apply "Mandates" (expert instruction sets) to the data stream. Unlike binary nodes, they are resolved from a dedicated `.gemini/scripts/` directory, keeping the project's transformation logic isolated and portable.
 
 ### Execution Flow
-1. **Read** stdin (the upstream node's output).
-2. **Locate** the mandate file: looks for `<skill-name>.md` in `$PIPE_SKILL_DIR` (default: `.gemini/skills/`), then falls back to `cwd`.
-3. **Inject** the mandate as a header above the data: `--- [Skill Lens: <name>] ---\n<mandate>\n\n[Content]\n<data>`.
-4. **Write** to stdout for the next node.
+1. **Resolve**: The orchestrator looks for `<cmd>.py` or `<cmd>.md` in `$PIPE_SCRIPT_DIR` (default: `.gemini/scripts/`).
+2. **Execute (Python)**: If a `.py` file is found, it is executed via the current Python interpreter (`sys.executable`).
+3. **Prepend (Mandate)**: If a `.md` file is found, its content is prepended as a structured header: `--- [Context-Pipe: Mandate (<name>)] ---\n<mandate>\n\n[Content]\n<data>`.
+4. **Fallback**: If neither is found, it falls back to a standard binary search on the system `PATH`.
 
-### Difference from `server.py`
-| | `skills.py` (`context-pipe-skill`) | `server.py` (`context-pipe-server`) |
+### Difference from Skills
+| | **Script / Mandate Node** | **Skill (A2A)** |
 |---|---|---|
-| **Transport** | `stdin` / `stdout` (CPP pipe node) | MCP protocol over `stdio` |
-| **Purpose** | Instruction injection node | MCP tool host (balance sheet, verification) |
-| **Usage** | Embedded in `pipes.json` node chain | Registered as an MCP server in the IDE |
-
-### Current Limitations & Roadmap
-- **Prototype-quality**: The current implementation is a proof-of-concept. The mandate is prepended as raw Markdown, relying on the LLM's in-context reasoning to apply the lens. There is no local SLM invocation yet.
-- **Phase 5 (Future)**: Skills will be upgraded to drive a local SLM for true structural rewriting (e.g., via `llama.cpp` sidecar), making the lens semantically precise rather than instruction-injected.
-- **No Removal Planned**: `context-pipe-skill` is an active, documented entry point and is *not* vestigial. It is retained for future SLM-backed skill execution.
+| **Scope** | Local / Single-Agent | Distributed / Multi-Agent |
+| **Logic** | Deterministic (Python/Regex) | Semantic (SLM-backed) |
+| **Transport** | Terminal `stdin` / `stdout` | A2A handoff boundary |
+| **Goal** | Structural filtering / Context tagging | Persona shift / Structural rewriting |
 
 ---
 
@@ -234,25 +230,17 @@ When a tee fires, the node's trace entry gains a `"tee_path"` key with the resol
 
 ---
 
-## 8. A2A Agent Handoff (`context_pipe/a2a.py`)
+## 8. A2A Agent Handoff & Skill Engine (`context_pipe/a2a.py`)
 
-The A2A module provides a **framework-agnostic bridge** for distilling Agent A's output before it enters Agent B's context window.
+The A2A module provides the boundary where **Active Skills** are applied.
 
 ### Design Principle
+Explicit call — no monkey-patching. Any A2A framework (CrewAI, Google ADK, LangGraph) calls `pipe_agent_handoff()` at the handoff point. Context-Pipe acts as a semantic bridge, distilling Agent A's output into the optimal persona-driven context for Agent B.
 
-Explicit call — no monkey-patching. Any A2A framework (CrewAI, Google ADK, LangGraph) calls `pipe_agent_handoff()` at the handoff point. Context-Pipe acts as a dumb pipe; zero framework coupling.
+### The Skill Engine (Phase 5 Roadmap)
+While local nodes focus on deterministic sifting, the A2A handoff is the exclusive home for the **Skill Engine**. When Agent A hands data to Agent B, the orchestrator invokes a local SLM (e.g., Llama 3 via `llama.cpp`) to semantically rewrite the content based on the "Skill" lens.
 
-### Execution Flow
-
-1. `from_agent` label forwarded as `tool_name` to `api.pipe()` for trigger matching and telemetry attribution.
-2. `api.pipe()` resolves the pipe via `pipe_name` (explicit) or `pipes.json` mappings (auto).
-3. `run_pipe()` executes the node chain.
-4. A telemetry event is logged with input/output sizes and agent labels (no content).
-5. On any error, the original output is returned unchanged — the agent chain is never interrupted.
-
-### MCP Surface
-
-`pipe_agent_handoff` is registered as an MCP tool in `server.py`, making it directly invocable by AI assistants without Python code changes.
+By scoping Skills to the A2A boundary, Context-Pipe ensures that high-latency AI transformations only happen when a semantic shift (persona change) is explicitly required, keeping local CLI and IDE operations blazingly fast.
 
 ---
 

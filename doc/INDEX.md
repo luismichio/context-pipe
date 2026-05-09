@@ -9,19 +9,19 @@ Welcome to the central hub for the **Context-Pipe Platform (CPP)**. This directo
 *   **Topics**:
     *   Installation & Sovereign Dual-Repo Pattern.
     *   Configuration logic for `pipes.json` and `~/.mcp-pipe.json`.
-    *   Node Types: Binary, Bash, Skill, T-Pipe, MCP *(Phase 7.5)*.
+    *   Node Types: Binary, Bash, Mandate, T-Pipe, MCP *(Phase 7.5)*.
     *   Terminal CLI Mastery (`mcp-pipe` + `cpipe` alias).
     *   Telemetry and ROI reporting (Context Balance Sheet).
     *   Shell Alias Injection (`inject_shell_aliases`).
     *   Agent SOP — Full Capability Reference (decision tree, tool table, slash commands).
 
 ### 2. [`doc/USE_CASES.md`](USE_CASES.md)
-*   **Intent**: Real-world examples of chaining Bash, Skills, Shadow MCP tools, and Semantic-Sift.
+*   **Intent**: Real-world examples of chaining Bash, Mandates, Shadow MCP tools, and Semantic-Sift.
 *   **Topics**:
-    *   PR Reviewer (ESLint + Skill + Sift).
-    *   K8s Responder (Grep + Skill + Sift).
-    *   Web Research Synthesizer (Firecrawl MCP + MarkItDown + Skill + Sift).
-    *   Codebase Auditor (Bandit + Skill + Sift).
+    *   PR Reviewer (ESLint + Mandate + Sift).
+    *   K8s Responder (Grep + Mandate + Sift).
+    *   Web Research Synthesizer (Firecrawl MCP + MarkItDown + Mandate + Sift).
+    *   Codebase Auditor (Bandit + Mandate + Sift).
     *   Multi-Stage Refinery (double-sifting).
     *   Visual QA Bot (Playwright SPA Crawler).
 
@@ -32,7 +32,7 @@ Welcome to the central hub for the **Context-Pipe Platform (CPP)**. This directo
     *   Dynamic Routing Engine logic.
     *   Subconscious Interceptor Hook (`wrapper.py`).
     *   Context Accounting (`telemetry.py`).
-    *   The Skill Node (`skills.py`).
+    *   The Script & Mandate Node (`scripts.py`).
     *   Onboarding & Refinery Discovery (`onboarding.py`).
     *   **T-Pipes — Stream Splitting** (`orchestrator.py` §7): `tee` node schema, token substitution, silent-failure guarantee.
     *   **A2A Agent Handoff** (`a2a.py` §8): framework-agnostic distillation bridge for multi-agent pipelines.
