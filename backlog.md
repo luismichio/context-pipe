@@ -26,11 +26,36 @@
 - [x] **Slash Command Injection**: Inject `/pipe-stats` and `/pipe-run` as first-class slash commands into agentic IDE CLIs (Gemini CLI `.gemini/commands/`, OpenCode `opencode.json` commands block, Cursor `onInit` hooks). *(Distinct from Phase 2 Standard Shell Aliases, which targets POSIX/PowerShell profiles, not IDE runtimes. The Gemini CLI injection is already implemented in `inject_hooks()`; OpenCode and Cursor complete as of (unreleased).)*
 
 ## 🔵 Phase 4.5: OpenCode Native Plugin (Blocked — Upstream)
+
+**Status**: BLOCKED (upstream)
+**Priority**: HIGH (trust / feature completeness)
+**Tracking**: [sst/opencode#21149](https://github.com/sst/opencode/issues/21149), [sst/opencode#25918](https://github.com/sst/opencode/issues/25918)
+
 - [ ] **MCP tool output interception via `tool.execute.after`**: Re-implement the plugin handler in `.opencode/plugins/context-pipe.ts` once OpenCode assembles MCP tool output **before** triggering the hook. Currently, the hook fires with the raw `CallToolResult {content:[]}` shape instead of the declared `{title, output, metadata}` shape, making `output.output` mutation a no-op for all MCP tools (including `pipe_read_file`). Native tools (bash, read, etc.) already receive the correct shape and mutations work — only MCP tools are affected.
   - **Blocked by**: [sst/opencode#21149](https://github.com/sst/opencode/issues/21149) — MCP tool text assembly must happen before the hook fires.
   - **Our upstream report**: [sst/opencode#25918](https://github.com/sst/opencode/issues/25918) — detailed analysis of both paths.
   - **When fixed**: uncomment the handler in `.opencode/plugins/context-pipe.ts` and `onboarding.py` template. The interception logic (pipe through `orchestrator wrap`, write back to `output.output`) is already written and tested — it just needs the hook to receive the right shape.
   - **Interim**: `pipe_read_file` MCP tool remains the explicit interception point per `AGENTS.md` SOP.
+
+### User Impact
+
+Users running Context-Pipe with OpenCode as their IDE will **not** have MCP tool outputs automatically piped through context refineries. The "subconscious interceptor" feature is effectively disabled for OpenCode users. This impacts any workflow that relies on automatic noise reduction of tool outputs (e.g., `read_file`, `bash`, `grep`).
+
+### Current Workaround
+
+The `AGENTS.md` SOP mandate is the active strategy:
+- All file reads use `pipe_read_file()` (an explicit MCP tool call that routes through the pipe).
+- The mandate is injected automatically by `pipe_onboard(environment='OpenCode')`.
+
+This workaround requires AI agent cooperation (the agent must follow the `AGENTS.md` SOP). It does not intercept native tool outputs transparently.
+
+### Proposed Implementation (post-unblock)
+
+Once upstream support lands:
+1. Restore the output mutation handler in `opencode.json` plugin scaffold.
+2. Update `pipe_onboard(environment='OpenCode')` to write the active (not placeholder) plugin.
+3. Add an integration test that validates hook firing end-to-end.
+4. Update `doc/INTEGRATION_ENCYCLOPEDIA.md` to mark OpenCode as fully supported.
 
 ## 🟣 Phase 5: Productionisation & Quality (In Progress)
 - [x] **Programmatic Python API** (`context_pipe/api.py`): `pipe(text, pipe_name, tool_name)` — direct integration without MCP or CLI.
@@ -63,6 +88,46 @@ First-class MCP tool invocation as a `pipes.json` node. Eliminates the need for 
 - [ ] **Phase 7.5-E — Docs & Release**: `ARCHITECTURE.md` §9, `OPERATOR_GUIDE.md` §3, `README.md` Advanced Node Types, `CHANGELOG.md` entry; `fail_under` raised.
 
 **Cross-project dependency**: `mcp>=1.0` already declared in `pyproject.toml`. No new dependencies required for stdio transport.
+
+## 🟦 Phase 7.6: `mcp-pipe tool` Subcommand (Terminal ↔ MCP Bridge)
+
+**Status**: READY FOR IMPLEMENTATION
+**Priority**: HIGH (completes the terminal piping lineage claim)
+**Depends on**: Phase 7.5-A (server registry in `config_loader`) — schema can be shared
+**Plan**: [`plan/PHASE_8_MCP_TOOL_SUBCOMMAND.md`](plan/PHASE_8_MCP_TOOL_SUBCOMMAND.md)
+
+### Vision
+
+Terminal piping has always been bounded by what is on `PATH`. Phase 7.6 removes that ceiling. A new `mcp-pipe tool <server> <tool-name>` subcommand turns any MCP server — local (context-mode, serena) or remote (GitHub, Firecrawl) — into a first-class shell pipe node, loaded on demand:
+
+```bash
+# pipe a file through context-mode index tool
+cat myfile.py | mcp-pipe tool context-mode ctx_execute
+
+# chain terminal + MCP tools freely
+cat error.log | mcp-pipe tool semantic-sift sift_logs | mcp-pipe tool github create_issue
+
+# full pipeline: terminal → MCP → terminal
+curl -s https://example.com | mcp-pipe tool firecrawl scrape | semantic-sift-cli doc
+```
+
+No wrapper scripts. No IDE required. The entire MCP ecosystem becomes composable with 50 years of Unix terminal tooling via a single subcommand.
+
+### Technical Summary
+
+- New CLI subcommand: `mcp-pipe tool <server-key> <tool-name> [--arg key=value ...]`
+- Reads `stdin`, calls the MCP tool via stdio transport, writes `stdout`
+- Server registry resolved from `pipes.json` `servers` block (shared with Phase 7.5)
+- Load-on-demand: server process spawned per call, no idle cost
+- Full timeout guard and telemetry accounting — same as any pipe node
+- `--list-tools` flag: introspects the server and prints available tools
+
+- [ ] **Phase 7.6-A**: CLI subcommand scaffold (`mcp-pipe tool`) + argument parsing + `--list-tools`
+- [ ] **Phase 7.6-B**: `_invoke_mcp_tool_stdio()` in `orchestrator.py` — spawn, call, stream stdout, timeout guard
+- [ ] **Phase 7.6-C**: Telemetry accounting + integration tests with mock FastMCP server
+- [ ] **Phase 7.6-D**: Docs — `ARCHITECTURE.md` §12, `OPERATOR_GUIDE.md`, `README.md`, `CHANGELOG.md`
+
+---
 
 ## ⚫ Phase 8: The "Studio of Two" Endgame (Rust Core)
 - [ ] **Rust Rewrite**: Port the core stream orchestrator to Rust, achieving ultimate native speed and zero Python/Node memory bloat.

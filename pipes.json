@@ -81,20 +81,33 @@
           "help_msg": "findstr not found. On Unix, use 'grep' instead."
         }
       ]
-    }
-  ],
-  "mappings": [
-    {
+      }
+      ],
+      "mappings": [
+      {
       "trigger": "tool:search|grep|find",
       "pipe": "rerank-and-sift"
-    },
-    {
+      },
+      {
       "trigger": "size:>10000",
       "pipe": "semantic-refinery"
-    },
-    {
+      },
+      {
       "trigger": "default",
       "pipe": "standard-distill"
-    }
-  ]
-}
+      }
+      ],
+      "servers": {
+      "_comment": "Uncomment and configure MCP servers for use as pipe nodes (Phase 7.5).",
+      "_example_firecrawl": {
+      "command": [
+        "python",
+        "-m",
+        "firecrawl_mcp.server"
+      ],
+      "env": {
+        "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
+      }
+      }
+      }
+      }

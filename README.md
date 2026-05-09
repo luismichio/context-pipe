@@ -10,7 +10,14 @@
 
 `context-pipe` is a high-performance orchestration layer directly inspired by Unix terminal piping — the same philosophy that made `cmd1 | cmd2 | cmd3` the most durable composition primitive in computing. Just as the terminal chains processes through `stdin`/`stdout` byte streams, Context-Pipe chains AI tool calls through context streams: each node does one thing, passes its output to the next, and the LLM only sees the final, refined signal.
 
-This is not a metaphor — it is a literal extension. Context-Pipe supports both **MCP piping** (chaining MCP tool calls through the orchestrator) and **terminal piping** (any binary, shell command, or script that reads `stdin` and writes `stdout` is a valid node). The two modes compose freely in a single pipe definition. And through the `mcp-pipe` CLI, it extends the terminal itself: any MCP server — web scrapers, code search engines, design tools, knowledge bases — becomes directly pipeable from the shell, giving every terminal user access to the full compounding value of the MCP ecosystem without any integration code.
+This is not a metaphor — it is a literal extension. Context-Pipe supports both **MCP piping** (chaining MCP tool calls through the orchestrator) and **terminal piping** (any binary, shell command, or script that reads `stdin` and writes `stdout` is a valid node). The two modes compose freely in a single pipe definition. And through the `mcp-pipe` CLI, it extends the terminal itself: the `mcp-pipe tool` subcommand (Phase 7.6) makes any MCP server — context-mode, serena, GitHub, Firecrawl, or any server registered in `pipes.json` — directly pipeable from the shell, loading on demand, with no wrapper scripts and no IDE required:
+
+```bash
+cat error.log | mcp-pipe tool semantic-sift sift_logs | rg "CRITICAL"
+curl -s https://example.com | mcp-pipe tool firecrawl scrape | mcp-pipe run semantic-refinery
+```
+
+Today, `mcp-pipe run <pipe>` already gives the terminal first-class access to any named pipe defined in `pipes.json`, composing terminal binaries through the same orchestrator used by the IDE.
 
 ---
 

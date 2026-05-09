@@ -17,6 +17,8 @@ Example::
 
 from typing import Optional
 
+import asyncio
+
 from .orchestrator import load_config, resolve_pipe_from_context, run_pipe
 
 
@@ -66,7 +68,7 @@ def pipe(
         return text
 
     try:
-        result, _ = run_pipe(pipe_config, text, tool_name=tool_name or None)
+        result, _ = asyncio.run(run_pipe(pipe_config, text, tool_name=tool_name or None))
         return result
     except Exception:
         return text

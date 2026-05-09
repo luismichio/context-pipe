@@ -72,6 +72,18 @@ def _validate_nodes(nodes: list[dict], allow_shell: bool = False) -> None:
     """
     has_shell_utility = False
     for i, node in enumerate(nodes):
+        node_type = node.get("type", "binary")
+
+        if node_type == "mcp":
+            # Rule 1: mcp nodes require both "server" and "tool"
+            if "server" not in node:
+                raise ValueError(f"MCP node at index {i} is missing required key 'server'.")
+            if "tool" not in node:
+                raise ValueError(f"MCP node at index {i} is missing required key 'tool'.")
+            # Rule 2: mcp nodes are exempt from shell-metachar check (no cmd to validate)
+            # Rule 3: mcp nodes do NOT count as shell utility nodes for the sift-terminal guard
+            continue
+
         if "cmd" not in node:
             raise ValueError(f"Node at index {i} is missing required key 'cmd'.")
         cmd: str = str(node["cmd"])
@@ -101,7 +113,7 @@ def _validate_nodes(nodes: list[dict], allow_shell: bool = False) -> None:
             )
 
 
-def run_dynamic_pipe(
+async def run_dynamic_pipe(
     nodes: list[dict[str, Any]],
     input_text: str,
     tool_name: str = "dynamic",
@@ -134,4 +146,4 @@ def run_dynamic_pipe(
     _validate_nodes(nodes, allow_shell=allow_shell)
 
     pipe_config: dict[str, Any] = {"name": "dynamic", "nodes": nodes}
-    return run_pipe(pipe_config, input_text, tool_name=tool_name)
+    return await run_pipe(pipe_config, input_text, tool_name=tool_name)

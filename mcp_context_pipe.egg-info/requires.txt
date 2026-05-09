@@ -3,5 +3,6 @@ psutil>=5.9
 
 [dev]
 pytest
+pytest-cov
 ruff
 mypy

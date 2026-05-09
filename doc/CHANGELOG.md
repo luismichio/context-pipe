@@ -196,7 +196,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`OPERATOR_GUIDE.md`**: Expanded section 7 (Auto-Onboarding) with refinery auto-link detail. Added new section 8 (Verifying the Installation) with `pipe_verify` output example and supported install pattern matrix.
 - **`ARCHITECTURE.md`**: Added section 5 documenting the onboarding/discovery/verification subsystem.
 
-## [0.1.0] - 2026-05-03
+## [Unreleased] — Phase 7.6: mcp-pipe tool subcommand
+
+### Added
+- `mcp-pipe tool <server> <tool>` subcommand — directly invoke any registered MCP tool from the shell.
+- Supports `--arg key=value` for static arguments, `--input-key` to override target field, and `-v` for telemetry.
+- Seamlessly pipes `stdin` to MCP tools and `stdout` to the next shell process.
+
+## [Unreleased] — Phase 7.5: MCP Node Type
+
+### Added
+- `type: "mcp"` node kind in `pipes.json` — first-class MCP tool invocation in pipe chains.
+- `servers` block in `pipes.json` / `~/.mcp-pipe.json` — declare MCP server registry with `command` and `env` (supports `${VAR}` placeholders).
+- `_run_mcp_node()` in `orchestrator.py` — async MCP client using `mcp.client.stdio`.
+- `_extract_text()` in `orchestrator.py` — robust text extraction from `CallToolResult`.
+- `_resolve_env_placeholders()` in `config_loader.py` — resolves `${VAR}` in server env dicts.
+- `run_pipe()` promoted to `async`; all call sites updated.
+- `run_dynamic_pipe()` promoted to `async`.
+- Echo Guard hash scoped to `(pipe_name, node_index, content)` — prevents false suppression in multi-sift pipes.
+- `_validate_nodes()` extended with MCP node rules (`server` + `tool` required; metachar and sift-terminal guard exemptions).
+
+### Dependencies
+- `pytest-anyio` added to `[test]` extras for async test support.
+
+## [0.2.0] - 2026-05-09
+
 
 ### ✨ High-Fidelity Foundation
 - **Initial Release**: The official birth of the **Context-Pipe Protocol (CPP)**.

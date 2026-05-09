@@ -123,5 +123,24 @@
       "trigger": "default",
       "pipe": "standard-distill"
     }
-  ]
+  ],
+  "servers": {
+    "firecrawl": {
+      "command": [
+        "python",
+        "-m",
+        "firecrawl_mcp.server"
+      ],
+      "env": {
+        "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
+      }
+    },
+    "context-mode": {
+      "command": [
+        "python",
+        "-m",
+        "context_mode.server"
+      ]
+    }
+  }
 }

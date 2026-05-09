@@ -14,7 +14,7 @@ Covers:
 """
 
 import json
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 
 from context_pipe.wrapper import wrap_payload
@@ -98,7 +98,8 @@ def test_tool_trigger_routes_to_correct_pipe():
     sifted = "cleaned output"
     mock_trace = [{"node": "semantic-sift-cli", "input_size": len(noisy_log), "output_size": len(sifted)}]
 
-    with patch("context_pipe.wrapper.run_pipe", return_value=(sifted, mock_trace)) as mock_run:
+    with patch("context_pipe.wrapper.run_pipe", new_callable=AsyncMock) as mock_run:
+        mock_run.return_value = (sifted, mock_trace)
         result = wrap_payload(payload, config)
 
     mock_run.assert_called_once()
@@ -136,7 +137,8 @@ def test_run_pipe_exception_falls_back_to_raw():
     payload = _make_payload(noisy)
     config = _make_config("standard-distill")
 
-    with patch("context_pipe.wrapper.run_pipe", side_effect=OSError("pipe broken")):
+    with patch("context_pipe.wrapper.run_pipe", new_callable=AsyncMock) as mock_run:
+        mock_run.side_effect = OSError("pipe broken")
         result = wrap_payload(payload, config)
 
     assert result == payload

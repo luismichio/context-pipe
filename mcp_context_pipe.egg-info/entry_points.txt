@@ -2,3 +2,4 @@
 context-pipe = context_pipe.orchestrator:main
 context-pipe-server = context_pipe.server:main
 context-pipe-skill = context_pipe.skills:main
+mcp-pipe = context_pipe.cli:main

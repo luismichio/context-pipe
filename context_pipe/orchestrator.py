@@ -2,14 +2,21 @@
 # Copyright (c) 2026 Luis Kobayashi. All rights reserved.
 import sys
 import json
+import hashlib
+import time
 import subprocess
 import argparse
 import re
 import os
 import shutil
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+
+from mcp.client.stdio import stdio_client, StdioServerParameters
+from mcp.client.session import ClientSession
+from .config_loader import _resolve_env_placeholders
 
 # Metadata Signatures
 CPP_SIGNATURE = "--- [Context-Pipe: Native Execution] ---"
@@ -63,6 +70,40 @@ def resolve_node_cmd(cmd: str) -> str:
 
     # 4. Return bare command — Popen will raise FileNotFoundError, help_msg surfaces the error
     return cmd
+
+
+def check_echo(text: str, pipe_name: str = "", node_index: int = 0) -> bool:
+    """Checks if the content was processed recently to prevent loops (30s TTL)."""
+    if not text or len(text) < 500:
+        return False
+
+    # Unified with Context-Pipe (.pipe_cache)
+    cache_dir = os.path.join(os.getcwd(), ".pipe_cache")
+    os.makedirs(cache_dir, exist_ok=True)
+
+    # Scoped hash: (pipe_name, node_index, content)
+    raw_key = f"{pipe_name}:{node_index}:{text}"
+    content_hash = hashlib.sha256(raw_key.encode()).hexdigest()[:16]
+    echo_path = os.path.join(cache_dir, f"echo_{content_hash}.tmp")
+    now = time.time()
+
+    if os.path.exists(echo_path):
+        try:
+            with open(echo_path, "r") as f:
+                expiry = float(f.read().strip())
+            if now < expiry:
+                return True
+        except (OSError, ValueError):
+            pass
+
+    # Write new marker
+    try:
+        with open(echo_path, "w") as f:
+            f.write(str(now + 30))
+    except OSError:
+        pass
+
+    return False
 
 
 def resolve_pipe_from_context(config: Dict[str, Any], tool_name: str, content_len: int) -> Optional[str]:
@@ -135,8 +176,88 @@ def _write_tee(tee_config: Dict[str, Any], data: str, node_cmd: str, tool_name: 
         return None
 
 
-def run_pipe(
-    pipe_config: Dict[str, Any], input_data: str, tool_name: Optional[str] = None, agent_label: Optional[str] = None
+def _extract_text(result: object) -> str:
+    """
+    Extracts text content from a CallToolResult.
+
+    Iterates result.content (list of TextContent / ImageContent / etc.),
+    concatenates all TextContent items. Falls back to str(result) if none found.
+    """
+    try:
+        parts = [item.text for item in result.content if hasattr(item, "text")]  # type: ignore[attr-defined]
+        return "\n".join(parts) if parts else str(result)
+    except Exception:
+        return str(result)
+
+
+async def _run_mcp_node(
+    node: dict,
+    stdin_data: str,
+    server_registry: dict,
+    env: dict,
+) -> str:
+    """
+    Executes a single MCP node by spawning the server, calling the tool,
+    and returning the text result.
+
+    Args:
+        node:            Node config dict (must have ``server`` and ``tool``).
+        stdin_data:      Text to pass as the tool's primary input argument.
+        server_registry: Merged servers dict from ``load_pipes_config()``.
+        env:             Resolved environment variables for child processes.
+
+    Returns:
+        Text output from the tool call.
+
+    Raises:
+        ValueError: if the server key is not found in the registry.
+        asyncio.TimeoutError: if the tool call exceeds ``PIPE_NODE_TIMEOUT_MS``.
+    """
+    server_key = node["server"]
+    tool_name = node["tool"]
+    input_key = node.get("input_key", "content")
+    static_args: dict = {k: v for k, v in node.get("args", {}).items()}
+
+    server_cfg = server_registry.get(server_key)
+    if not server_cfg:
+        raise ValueError(
+            f"MCP server '{server_key}' not found in servers registry. "
+            f"Available: {list(server_registry.keys()) or '(none)'}"
+        )
+
+    resolved_env = _resolve_env_placeholders(server_cfg.get("env", {}))
+    child_env = {**env, **resolved_env}
+
+    cmd: list[str] = server_cfg["command"]
+    if not cmd:
+        raise ValueError(f"Server '{server_key}' has an empty command list.")
+
+    server_params = StdioServerParameters(
+        command=cmd[0],
+        args=cmd[1:],
+        env=child_env,
+    )
+
+    raw_timeout = os.environ.get("PIPE_NODE_TIMEOUT_MS", "30000")
+    timeout_s = int(raw_timeout) / 1000.0
+
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            arguments = {input_key: stdin_data, **static_args}
+            result = await asyncio.wait_for(
+                session.call_tool(tool_name, arguments),
+                timeout=timeout_s,
+            )
+            return _extract_text(result)
+
+
+async def run_pipe(
+    pipe_config: Dict[str, Any],
+    input_data: str,
+    tool_name: Optional[str] = None,
+    agent_label: Optional[str] = None,
+    server_registry: Dict[str, Any] | None = None,
 ) -> tuple[str, List[Dict[str, Any]]]:
     """Executes a chain of nodes and tracks context deltas with a timeout guard."""
     current_input = input_data
@@ -153,15 +274,56 @@ def run_pipe(
     raw_timeout = os.environ.get("PIPE_NODE_TIMEOUT_MS", "30000")
     node_timeout = int(raw_timeout) / 1000.0
 
-    for node in pipe_config.get("nodes", []):
-        # Resolve bare command names to full paths at runtime (fixes hardcoded path issue)
+    for node_index, node in enumerate(pipe_config.get("nodes", [])):
+        # Echo Guard: skip node if input was recently processed by THIS node in THIS pipe
+        if check_echo(current_input, pipe_name=pipe_config.get("name", "unknown"), node_index=node_index):
+            continue
+
+        node_type = node.get("type", "binary")
+
+        if node_type == "mcp":
+            # --- MCP client path ---
+            start_size = len(current_input)
+            tee_path: Optional[str] = None  # type: ignore[no-redef]
+            tee_config = node.get("tee")
+            if tee_config:
+                tee_path = _write_tee(tee_config, current_input, f"mcp:{node['server']}/{node['tool']}", tool_name)
+            try:
+                stdout = await _run_mcp_node(node, current_input, server_registry or {}, process_env)
+            except asyncio.TimeoutError:
+                error_text = f"--- [Context-Pipe: Timeout] ---\nMCP node {node['server']}/{node['tool']} exceeded {node_timeout}s."
+                trace.append({"node": f"mcp:{node['server']}/{node['tool']}", "error": "Timeout"})
+                return error_text, trace
+            except ValueError as exc:
+                error_text = f"--- [Context-Pipe: MCP Error] ---\n{exc}"
+                trace.append({"node": f"mcp:{node['server']}/{node['tool']}", "error": str(exc)})
+                return error_text, trace
+            except Exception as exc:
+                error_text = f"--- [Context-Pipe: MCP Unexpected Error] ---\n{exc}"
+                trace.append({"node": f"mcp:{node['server']}/{node['tool']}", "error": str(exc)})
+                return error_text, trace
+
+            end_size = len(stdout)
+            entry: Dict[str, Any] = {  # type: ignore[no-redef]
+                "node": f"mcp:{node['server']}/{node['tool']}",
+                "input_size": start_size,
+                "output_size": end_size,
+                "delta": end_size - start_size,
+            }
+            if tee_path is not None:
+                entry["tee_path"] = tee_path
+            trace.append(entry)
+            current_input = stdout
+            continue
+
+        # --- Existing subprocess path ---
         resolved_cmd = resolve_node_cmd(node["cmd"])
         cmd: List[str] = [resolved_cmd] + [str(a) for a in node.get("args", [])]
 
         start_size = len(current_input)
 
         # T-Pipe: write raw input to sink before node processes it
-        tee_path: Optional[str] = None
+        tee_path: Optional[str] = None  # type: ignore[no-redef]
         tee_config = node.get("tee")
         if tee_config:
             tee_path = _write_tee(tee_config, current_input, node["cmd"], tool_name)
@@ -199,7 +361,7 @@ def run_pipe(
             return error_text, trace
 
         end_size = len(stdout)
-        entry: Dict[str, Any] = {
+        entry: Dict[str, Any] = {  # type: ignore[no-redef]
             "node": node["cmd"],
             "input_size": start_size,
             "output_size": end_size,
@@ -293,7 +455,7 @@ def main():
                 sys.exit(0)
 
             # Run the pipe
-            result, trace = run_pipe(pipe, raw_input)
+            result, trace = asyncio.run(run_pipe(pipe, raw_input))
             sys.stdout.write(result)
 
         elif args.command == "wrap":

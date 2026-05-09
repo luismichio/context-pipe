@@ -221,7 +221,7 @@ Save a raw copy of the node's input to disk **before** the node processes it —
 
 `path` supports `{iso_date}` (YYYY-MM-DD) and `{tool_name}` tokens. A tee failure **never** interrupts the main chain.
 
-### E. MCP Nodes *(Phase 7.5 — coming soon)*
+### E. MCP Nodes (Phase 7.5)
 Call any MCP tool (web scrapers, GitHub, context-mode…) as a first-class pipe node. No wrapper scripts — the orchestrator spawns the MCP server, calls the tool, and passes the result downstream.
 
 ```json
@@ -234,7 +234,15 @@ Call any MCP tool (web scrapers, GitHub, context-mode…) as a first-class pipe 
 }
 ```
 
-Server definitions live in a `servers` block in `pipes.json` or `~/.mcp-pipe.json`. See [`doc/MCP_NODE_SPEC.md`](MCP_NODE_SPEC.md) for the full spec.
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `type` | string | No | `"mcp"` — activates MCP client path. Default: `"binary"`. |
+| `server` | string | Yes (if mcp) | Server registry key from `servers` block. |
+| `tool` | string | Yes (if mcp) | Tool name as registered by the MCP server. |
+| `input_key` | string | No | Argument name for stdin content. Default: `"content"`. |
+| `args` | object | No | Static key/value args merged with `input_key`. |
+
+Server definitions live in a `servers` block in `pipes.json` or `~/.mcp-pipe.json`. See [`doc/MCP_NODE_SPEC.md`](MCP_NODE_SPEC.md) for the full schema reference.
 
 ### F. Bring Your Own Parser (BYOP)
 Context-Pipe enables extreme decoupling. If you prefer to use **LlamaIndex** or a standalone **MarkItDown** parser instead of the Hybrid Engine, you can chain your custom parser directly into the native Rust Sidecar (`sift-core`).

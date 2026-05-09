@@ -3,49 +3,16 @@
 
 import json
 import time
-import hashlib
-import os
 import uuid
+import asyncio
 from typing import Dict, Any
 from .platforms import detect_client_id, extract_content, inject_content
-from .orchestrator import run_pipe, resolve_pipe_from_context, CPP_SIGNATURE
+from .orchestrator import run_pipe, resolve_pipe_from_context, CPP_SIGNATURE, check_echo
 from .telemetry import log_telemetry, generate_audit_header
 
 # Global session for the wrapper (hook context)
 WRAPPER_SESSION_ID = f"hook-{uuid.uuid4().hex[:8]}"
 WRAPPER_START_TIME = time.ctime()
-
-
-def check_echo(text: str) -> bool:
-    """Checks if the content was processed recently to prevent loops (30s TTL)."""
-    if not text or len(text) < 500:
-        return False
-
-    # Unified with Context-Pipe (.pipe_cache)
-    cache_dir = os.path.join(os.getcwd(), ".pipe_cache")
-    os.makedirs(cache_dir, exist_ok=True)
-
-    content_hash = hashlib.sha256(text.encode()).hexdigest()[:16]
-    echo_path = os.path.join(cache_dir, f"echo_{content_hash}.tmp")
-    now = time.time()
-
-    if os.path.exists(echo_path):
-        try:
-            with open(echo_path, "r") as f:
-                expiry = float(f.read().strip())
-            if now < expiry:
-                return True
-        except (OSError, ValueError):
-            pass
-
-    # Write new marker
-    try:
-        with open(echo_path, "w") as f:
-            f.write(str(now + 30))
-    except OSError:
-        pass
-
-    return False
 
 
 def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
@@ -77,13 +44,14 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     except (json.JSONDecodeError, TypeError):
         pass
 
-    # 3. Guard: Echo Detection (Disk-Based)
-    if check_echo(str(raw_content)):
-        return raw_json
-
     # 4. Dynamic Routing
     pipe_name = resolve_pipe_from_context(config, str(tool_name), len(str(raw_content)))
     if not pipe_name:
+        return raw_json
+
+    # 3. Guard: Echo Detection (Disk-Based)
+    # Scoped to pipe_name to prevent false suppression cross-pipe
+    if check_echo(str(raw_content), pipe_name=pipe_name):
         return raw_json
 
     pipe = next((p for p in config.get("pipes", []) if p["name"] == pipe_name), None)
@@ -92,7 +60,7 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
 
     # 5. Execution
     try:
-        sifted_content, trace = run_pipe(pipe, str(raw_content), tool_name=tool_name, agent_label=agent_label)
+        sifted_content, trace = asyncio.run(run_pipe(pipe, str(raw_content), tool_name=tool_name, agent_label=agent_label))
         latency_ms = (time.time() - start_t) * 1000
 
         # 6. Telemetry (Accounting per node)

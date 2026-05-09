@@ -73,10 +73,93 @@ def test_load_merge_local_and_global():
 
 
 def test_load_both_absent_returns_empty():
-    """Both local and global absent — {"pipes": []} returned."""
+    """Both local and global absent — scaffold returned."""
     with patch("builtins.open", side_effect=FileNotFoundError):
         result = load_pipes_config("pipes.json")
-    assert result == {"pipes": []}
+    assert result == {"pipes": [], "servers": {}, "mappings": []}
+
+
+def test_servers_local_overrides_global():
+    """Local key wins when both define same server key."""
+    local_cfg = json.dumps({"servers": {"test-server": {"command": ["local"]}}})
+    global_cfg = json.dumps({"servers": {"test-server": {"command": ["global"]}}})
+
+    def fake_open(path, *args, **kwargs):
+        if "mcp-pipe" in str(path):
+            return mock_open(read_data=global_cfg)()
+        return mock_open(read_data=local_cfg)()
+
+    with patch("builtins.open", side_effect=fake_open):
+        with patch.object(config_loader, "GLOBAL_CONFIG_PATH", "~/.mcp-pipe.json"):
+            result = load_pipes_config("pipes.json")
+
+    assert result["servers"]["test-server"]["command"] == ["local"]
+
+
+def test_servers_global_fills_missing():
+    """Global key appears when local does not define it."""
+    local_cfg = json.dumps({"servers": {"local-server": {"command": ["local"]}}})
+    global_cfg = json.dumps({"servers": {"global-server": {"command": ["global"]}}})
+
+    def fake_open(path, *args, **kwargs):
+        if "mcp-pipe" in str(path):
+            return mock_open(read_data=global_cfg)()
+        return mock_open(read_data=local_cfg)()
+
+    with patch("builtins.open", side_effect=fake_open):
+        with patch.object(config_loader, "GLOBAL_CONFIG_PATH", "~/.mcp-pipe.json"):
+            result = load_pipes_config("pipes.json")
+
+    assert "local-server" in result["servers"]
+    assert "global-server" in result["servers"]
+
+
+def test_servers_empty_when_neither_defines():
+    """Returns {} servers if no file has servers block."""
+    with patch("builtins.open", side_effect=FileNotFoundError):
+        result = load_pipes_config("pipes.json")
+    assert result["servers"] == {}
+
+
+def test_load_merge_mappings():
+    """Mappings from both sources are combined, local first."""
+    local_cfg = json.dumps({"mappings": [{"trigger": "local", "pipe": "p1"}]})
+    global_cfg = json.dumps({"mappings": [{"trigger": "global", "pipe": "p2"}]})
+
+    def fake_open(path, *args, **kwargs):
+        if "mcp-pipe" in str(path):
+            return mock_open(read_data=global_cfg)()
+        return mock_open(read_data=local_cfg)()
+
+    with patch("builtins.open", side_effect=fake_open):
+        with patch.object(config_loader, "GLOBAL_CONFIG_PATH", "~/.mcp-pipe.json"):
+            result = load_pipes_config("pipes.json")
+
+    assert len(result["mappings"]) == 2
+    assert result["mappings"][0]["trigger"] == "local"
+    assert result["mappings"][1]["trigger"] == "global"
+
+
+def test_env_placeholder_resolved():
+    """${MY_VAR} substituted from os.environ."""
+    env = {"MY_VAR": "secret-value"}
+    with patch.dict(os.environ, env):
+        env_dict = {"API_KEY": "${MY_VAR}"}
+        resolved = config_loader._resolve_env_placeholders(env_dict)
+        assert resolved["API_KEY"] == "secret-value"
+
+
+def test_env_placeholder_unknown_left_as_is():
+    """${UNKNOWN_VAR} left verbatim, no exception."""
+    with patch.dict(os.environ, {}, clear=True):
+        env_dict = {"API_KEY": "${UNKNOWN_VAR}"}
+        resolved = config_loader._resolve_env_placeholders(env_dict)
+        assert resolved["API_KEY"] == "${UNKNOWN_VAR}"
+
+
+def test_env_placeholder_empty_dict():
+    """Empty env dict returns empty dict."""
+    assert config_loader._resolve_env_placeholders({}) == {}
 
 
 def test_load_local_malformed_falls_back_to_global():

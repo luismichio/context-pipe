@@ -22,18 +22,22 @@ Subcommands
 """
 
 import argparse
+import asyncio
 import json
 import os
 import sys
 import logging
 from typing import Optional
 
-from .config_loader import load_pipes_config
+from mcp.client.stdio import stdio_client, StdioServerParameters
+from mcp.client.session import ClientSession
+
+from .config_loader import load_pipes_config, _resolve_env_placeholders
 from .dynamic import run_dynamic_pipe
 from .onboarding import inject_shell_aliases, remove_shell_aliases
-from .orchestrator import run_pipe
+from .orchestrator import run_pipe, _run_mcp_node, get_env_with_venv_path
 from .shadow import list_shadow_tools
-from .telemetry import get_balance_sheet, generate_audit_header
+from .telemetry import get_balance_sheet, generate_audit_header, log_telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +105,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     t0 = time.monotonic()
     assert pipe is not None  # _die() exits above if pipe is None
-    result, trace = run_pipe(pipe, input_text, tool_name="cli:run")
+    result, trace = asyncio.run(run_pipe(pipe, input_text, tool_name="cli:run"))
     latency_ms = (time.monotonic() - t0) * 1000
 
     _print_audit(result, trace, args.pipe_name, latency_ms, verbose=getattr(args, "verbose", False))
@@ -123,7 +127,7 @@ def _cmd_run_dynamic(args: argparse.Namespace) -> int:
 
     t0 = time.monotonic()
     try:
-        result, trace = run_dynamic_pipe(nodes, input_text, tool_name="cli:run-dynamic")
+        result, trace = asyncio.run(run_dynamic_pipe(nodes, input_text, tool_name="cli:run-dynamic"))
     except ValueError as exc:
         _die(str(exc))
     latency_ms = (time.monotonic() - t0) * 1000
@@ -217,6 +221,143 @@ def _cmd_aliases(args: argparse.Namespace) -> int:
             print("No cpipe alias block found in any profile — nothing removed.")
     return 0
 
+def _parse_tool_args(raw: list[str]) -> dict:
+    """
+    Parses ``--arg KEY=VALUE`` entries into a dict.
+
+    ``--arg key=value`` → ``{"key": "value"}``
+    ``--arg key=a=b``   → ``{"key": "a=b"}`` (splits on first ``=`` only)
+
+    Raises SystemExit on malformed entries (missing ``=``).
+    """
+    result: dict[str, str] = {}
+    for entry in raw:
+        if "=" not in entry:
+            _die(f"--arg must be in KEY=VALUE format, got: '{entry}'")
+        key, _, value = entry.partition("=")
+        result[key.strip()] = value
+    return result
+
+
+async def _list_server_tools(server_cfg: dict, env: dict) -> list[dict]:
+    """
+    Introspects an MCP server and returns its tool list.
+
+    Returns a list of dicts: ``[{"name": str, "description": str, "inputSchema": dict}]``
+    """
+    resolved_env = _resolve_env_placeholders(server_cfg.get("env", {}))
+    child_env = {**env, **resolved_env}
+    cmd: list[str] = server_cfg["command"]
+
+    server_params = StdioServerParameters(
+        command=cmd[0], args=cmd[1:], env=child_env
+    )
+
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            tools_result = await session.list_tools()
+            return [
+                {
+                    "name": t.name,
+                    "description": t.description or "",
+                    "inputSchema": t.inputSchema or {},
+                }
+                for t in tools_result.tools
+            ]
+
+
+def _cmd_tool(args: argparse.Namespace) -> int:
+    """Directly invokes an MCP tool from the shell (Phase 7.6)."""
+    import time
+
+    # 1. Resolve config and server registry
+    config = load_pipes_config(args.config)
+    server_registry = config.get("servers", {})
+
+    if args.server not in server_registry:
+        available = list(server_registry.keys())
+        _die(
+            f"Server '{args.server}' not found in servers registry.\n"
+            f"  Available: {', '.join(available) if available else '(none — add a servers block to pipes.json or ~/.mcp-pipe.json)'}"
+        )
+
+    server_cfg = server_registry[args.server]
+    env = get_env_with_venv_path()
+
+    # 2. --list-tools: introspect and print, then exit
+    if getattr(args, "list_tools", False):
+        try:
+            tools = asyncio.run(_list_server_tools(server_cfg, env))
+        except Exception as exc:
+            _die(f"Failed to list tools on '{args.server}': {exc}")
+        if not tools:
+            print(f"No tools found on server '{args.server}'.")
+            return 0
+        print(f"\nTools on '{args.server}':")
+        for t in tools:
+            print(f"  {t['name']:<32} {t['description']}")
+        print()
+        return 0
+
+    if args.tool_name is None:
+        _die("tool_name is required unless --list-tools is given.")
+
+    # 3. Read input
+    input_text = _read_input(getattr(args, "input_file", None))
+    # Note: unlike run/run-dynamic, we don't exit on empty — some tools don't need input.
+
+    # 4. Parse static args
+    static_args = _parse_tool_args(args.arg or [])
+
+    # 5. Construct synthetic node and execute
+    node = {
+        "type": "mcp",
+        "server": args.server,
+        "tool": args.tool_name,
+        "input_key": args.input_key,
+        "args": static_args,
+    }
+
+    t0 = time.monotonic()
+    try:
+        result = asyncio.run(_run_mcp_node(node, input_text or "", server_registry, env))
+    except ValueError as exc:
+        _die(str(exc))
+    except asyncio.TimeoutError:
+        timeout_ms = os.environ.get("PIPE_NODE_TIMEOUT_MS", "30000")
+        _die(f"Tool call timed out after {int(timeout_ms) / 1000:.1f}s.")
+
+    latency_ms = (time.monotonic() - t0) * 1000
+
+    # 6. Telemetry accounting (Phase 7.6-C)
+    try:
+        import datetime
+        log_telemetry(
+            session_id=os.environ.get("PIPE_SESSION_ID", "cli"),
+            start_time=datetime.datetime.utcnow().isoformat(),
+            tool_name=args.tool_name,
+            original_size=len(input_text or ""),
+            final_size=len(result),
+            latency_ms=latency_ms,
+            pipe_name=f"{args.server}/{args.tool_name}",
+        )
+    except Exception:
+        pass  # Telemetry must never block the main flow
+
+    # 7. Output
+    sys.stdout.write(result)
+    if result and not result.endswith("\n"):
+        sys.stdout.write("\n")
+
+    if getattr(args, "verbose", False):
+        sys.stderr.write(
+            f"[mcp-pipe tool] {args.server}/{args.tool_name} | "
+            f"{len(input_text or ''):,} → {len(result):,} chars | {latency_ms:.1f}ms\n"
+        )
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mcp-pipe",
@@ -262,6 +403,24 @@ def _build_parser() -> argparse.ArgumentParser:
     # --- stats ---
     sub.add_parser("stats", help="Print the Context Balance Sheet (ROI).")
 
+    # --- tool (Phase 7.6) ---
+    tool_p = sub.add_parser("tool", help="Directly invoke an MCP tool from the shell.")
+    tool_p.add_argument("server", help="MCP server registry key.")
+    tool_p.add_argument("tool_name", nargs="?", default=None,
+                        help="Name of the tool to call. Required unless --list-tools is given.")
+    tool_p.add_argument("--arg", action="append", metavar="K=V",
+                        help="Static arguments (key=value). May be repeated.")
+    tool_p.add_argument("--input-key", default="content", metavar="KEY",
+                        help="Argument key for stdin content (default: 'content').")
+    tool_p.add_argument("--input-file", metavar="PATH",
+                        help="Read input from this file instead of stdin.")
+    tool_p.add_argument("--config", default="pipes.json", metavar="PATH",
+                        help="Path to local pipes.json (default: pipes.json).")
+    tool_p.add_argument("--list-tools", action="store_true",
+                        help="List all tools available on the named server and exit.")
+    tool_p.add_argument("-v", "--verbose", action="store_true",
+                        help="Print timing/telemetry to stderr.")
+
     # --- serve ---
     sub.add_parser("serve", help="Start the MCP server (stdio transport).")
 
@@ -299,6 +458,7 @@ def main() -> None:
         "stats": _cmd_stats,
         "serve": _cmd_serve,
         "aliases": _cmd_aliases,
+        "tool": _cmd_tool,
     }
 
     handler = dispatch.get(args.command)

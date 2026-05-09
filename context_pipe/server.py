@@ -47,7 +47,7 @@ def list_pipes() -> str:
 
 
 @mcp.tool()
-def pipe_run(pipe_name: str, input_text: str) -> str:
+async def pipe_run(pipe_name: str, input_text: str) -> str:
     """
     Executes a specific context pipe on the provided input text.
 
@@ -63,7 +63,7 @@ def pipe_run(pipe_name: str, input_text: str) -> str:
 
     start_t = time.time()
     try:
-        result, trace = run_pipe(pipe, input_text)
+        result, trace = await run_pipe(pipe, input_text)
         latency_ms = (time.time() - start_t) * 1000
 
         # Log Telemetry for ROI tracking
@@ -305,7 +305,7 @@ To protect your context window, always consider streaming large tool outputs thr
 
 
 @mcp.tool()
-def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool = False) -> str:
+async def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool = False) -> str:
     """
     Executes an ad-hoc context pipe defined as a JSON array of node objects.
     Use this when no named pipe in pipes.json fits and you need to compose a
@@ -348,7 +348,7 @@ def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool = False
 
     start_t = time.time()
     try:
-        result, trace = run_dynamic_pipe(nodes, input_text, allow_shell=allow_shell)
+        result, trace = await run_dynamic_pipe(nodes, input_text, allow_shell=allow_shell)
         latency_ms = (time.time() - start_t) * 1000
         platform = detect_client_id()
         log_telemetry(

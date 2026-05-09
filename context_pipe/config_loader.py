@@ -12,6 +12,7 @@ precedence over global ones.
 import json
 import logging
 import os
+import re as _re
 
 logger = logging.getLogger(__name__)
 
@@ -27,37 +28,70 @@ def load_pipes_config(local_path: str = "pipes.json") -> dict:
     2. ``~/.mcp-pipe.json`` (user-global config)
 
     Merging rules:
-    - Both ``"pipes"`` arrays are combined; local entries appear first.
-    - If both define a pipe with the same ``name``, the local entry wins
-      (the global duplicate is silently dropped).
+    - ``"pipes"`` arrays are combined; local entries appear first.
+      Local name wins on conflict.
+    - ``"servers"`` dicts are merged; local keys win on conflict.
+    - ``"mappings"`` arrays are combined; local entries appear first.
 
     Never raises — all errors are logged to stderr and the safest possible
-    fallback (``{"pipes": []}``) is returned.
+    fallback (``{"pipes": [], "servers": {}, "mappings": []}``) is returned.
 
     Args:
         local_path: Path to the project-level pipes.json file.
 
     Returns:
-        Merged config dict with at least a ``"pipes"`` key.
+        Merged config dict with ``"pipes"``, ``"servers"``, and ``"mappings"`` keys.
     """
     local_config: dict | None = _try_load(local_path, label="local")
     global_config: dict | None = _try_load(GLOBAL_CONFIG_PATH, label="global")
 
     if local_config is None and global_config is None:
-        return {"pipes": []}
+        return {"pipes": [], "servers": {}, "mappings": []}
 
+    # 1. Merge Pipes (local name wins)
     local_pipes: list = (local_config or {}).get("pipes", [])
     global_pipes: list = (global_config or {}).get("pipes", [])
-
-    # Build merged list: local first, then global entries whose name is not
-    # already present in local.
     local_names = {p.get("name") for p in local_pipes if p.get("name")}
-    merged = list(local_pipes)
+    merged_pipes = list(local_pipes)
     for pipe in global_pipes:
         if pipe.get("name") not in local_names:
-            merged.append(pipe)
+            merged_pipes.append(pipe)
 
-    return {"pipes": merged}
+    # 2. Merge Servers (local key wins)
+    local_servers: dict = (local_config or {}).get("servers", {})
+    global_servers: dict = (global_config or {}).get("servers", {})
+    merged_servers = {**global_servers, **local_servers}
+
+    # 3. Merge Mappings (local first, no dedup needed)
+    local_mappings: list = (local_config or {}).get("mappings", [])
+    global_mappings: list = (global_config or {}).get("mappings", [])
+    merged_mappings = list(local_mappings) + [
+        m for m in global_mappings if m not in local_mappings
+    ]
+
+    return {
+        "version": (local_config or global_config or {}).get("version", "1.0"),
+        "pipes": merged_pipes,
+        "servers": merged_servers,
+        "mappings": merged_mappings,
+    }
+
+
+def _resolve_env_placeholders(env_dict: dict) -> dict:
+    """
+    Resolves ``${VAR}`` tokens in env values from the host environment.
+
+    Unknown variables are left as-is (not raised — allows partial resolution).
+    """
+    resolved = {}
+    for key, value in env_dict.items():
+
+        def _replace(m: _re.Match) -> str:
+            var = m.group(1)
+            return os.environ.get(var, m.group(0))  # leave unreplaced if missing
+
+        resolved[key] = _re.sub(r"\$\{([^}]+)\}", _replace, str(value))
+    return resolved
 
 
 # ---------------------------------------------------------------------------

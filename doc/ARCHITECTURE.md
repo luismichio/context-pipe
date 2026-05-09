@@ -61,6 +61,25 @@ The orchestrator utilizes `subprocess.Popen` to create memory-resident pipes bet
 ### The Timeout Guard
 Every node execution is wrapped in a **Timeout Guard** (default: 30s, configurable via `PIPE_NODE_TIMEOUT_MS`). If a node hangs (e.g., a stalled network fetch or a heavy neural model), the orchestrator kills the process, prevents an IDE freeze, and returns a structured `--- [Context-Pipe: Timeout] ---` response.
 
+### MCP Node Execution Path (Phase 7.5)
+In addition to standard binary nodes, Context-Pipe supports first-class MCP nodes (`type: "mcp"`). Instead of spawning a subprocess for every call, it uses the MCP `stdio` transport to communicate with registered servers.
+
+```
+run_pipe()
+  │
+  ├─── binary branch: subprocess.Popen(cmd) ────┐
+  │                                             │
+  └─── MCP branch: _run_mcp_node() ─────────────┤
+          │                                     │
+          ├── stdio_client(server_params)       │
+          ├── ClientSession.call_tool(tool)     │
+          └── _extract_text(result)             │
+                                                │
+          next node input <─────────────────────┘
+```
+
+The orchestrator manages the full lifecycle of the MCP server connection for each node, ensuring clean teardown and timeout enforcement.
+
 ---
 
 ## 2. Dynamic Routing Engine
@@ -302,6 +321,52 @@ Set-Alias -Name cpipe -Value python -m context_pipe.cli
 ```
 
 `remove_shell_aliases()` removes the marker block idempotently. Both operations are exposed as `pipe_install_aliases` / `pipe_remove_aliases` MCP tools and `mcp-pipe aliases install/remove` CLI subcommands.
+
+---
+
+## 12. Terminal ↔ MCP Bridge — `mcp-pipe tool` (Phase 7.6)
+
+### Motivation
+
+The `mcp-pipe run` command executes named pipes defined in `pipes.json`. All nodes inside those pipes are currently terminal binaries. The `mcp-pipe tool` subcommand (Phase 7.6) extends `mcp-pipe` into a direct terminal-to-MCP bridge, removing the boundary between the shell and the MCP ecosystem entirely.
+
+### Interface
+
+```bash
+mcp-pipe tool <server-key> <tool-name> [--arg key=value ...] [--list-tools]
+```
+
+| Mode | Behaviour |
+|---|---|
+| `cat file \| mcp-pipe tool ctx ctx_execute` | Reads stdin, calls `ctx_execute` on the `ctx` server, writes stdout |
+| `mcp-pipe tool github create_issue --arg title="Bug"` | Static args merged with stdin as `content` |
+| `mcp-pipe tool firecrawl scrape --list-tools` | Introspects server, prints all available tools |
+
+### Execution Model
+
+1. Resolve `<server-key>` from `pipes.json` `servers` block (shared schema with Phase 7.5-A).
+2. Spawn the MCP server process via `stdio` transport — load on demand, no idle cost.
+3. Read `stdin` → call tool with `{"content": <stdin>, **static_args}` → capture result.
+4. Write tool result to `stdout`. Timeout guard active (`PIPE_NODE_TIMEOUT_MS`).
+5. Log telemetry event (input/output sizes, latency, server/tool labels).
+
+This means any MCP server — local (context-mode, serena) or remote (GitHub, Firecrawl, any registered server) — is composable with any terminal tool through standard shell piping:
+
+```bash
+# terminal → MCP → terminal
+cat error.log | mcp-pipe tool semantic-sift sift_logs | rg "CRITICAL"
+
+# full chain: terminal + MCP + named pipe
+curl -s https://example.com | mcp-pipe tool firecrawl scrape | mcp-pipe run semantic-refinery
+```
+
+### Relationship to Phase 7.5
+
+Phase 7.5 adds MCP nodes *inside* `pipes.json` pipe definitions — the orchestrator calls MCP tools mid-chain transparently. Phase 8 is the complementary surface: it exposes that same MCP call capability as a direct shell subcommand, one tool at a time, composable with any terminal pipeline. Both phases share the `servers` registry schema in `pipes.json`.
+
+### Implementation Reference
+
+See [`plans/PHASE_7_6_MCP_PIPE_TOOL.md`](../plans/PHASE_7_6_MCP_PIPE_TOOL.md) for the full phased implementation plan.
 
 ---
 *High-Fidelity Infrastructure for the Studio of Two.*
