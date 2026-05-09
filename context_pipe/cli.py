@@ -335,7 +335,7 @@ def _cmd_tool(args: argparse.Namespace) -> int:
         import datetime
         log_telemetry(
             session_id=os.environ.get("PIPE_SESSION_ID", "cli"),
-            start_time=datetime.datetime.utcnow().isoformat(),
+            start_time=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             tool_name=args.tool_name,
             original_size=len(input_text or ""),
             final_size=len(result),
