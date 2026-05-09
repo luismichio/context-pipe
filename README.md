@@ -8,7 +8,9 @@
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue)](LICENSE.md)
 [![OSI](https://img.shields.io/badge/OSI-Approved-brightgreen)](https://opensource.org/licenses/Apache-2.0)
 
-`context-pipe` is a high-performance orchestration layer designed to bring the **Unix Philosophy** to the AI context window. It allows you to connect AI tools (Spokes) into a series of **Streams**, ensuring that data is refined, distilled, and noise-free before it ever reaches the LLM.
+`context-pipe` is a high-performance orchestration layer directly inspired by Unix terminal piping — the same philosophy that made `cmd1 | cmd2 | cmd3` the most durable composition primitive in computing. Just as the terminal chains processes through `stdin`/`stdout` byte streams, Context-Pipe chains AI tool calls through context streams: each node does one thing, passes its output to the next, and the LLM only sees the final, refined signal.
+
+This is not a metaphor — it is a literal extension. Context-Pipe supports both **MCP piping** (chaining MCP tool calls through the orchestrator) and **terminal piping** (any binary, shell command, or script that reads `stdin` and writes `stdout` is a valid node). The two modes compose freely in a single pipe definition.
 
 ---
 

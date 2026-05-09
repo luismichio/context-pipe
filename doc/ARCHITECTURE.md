@@ -4,7 +4,40 @@ This document provides the technical specification of the Context-Pipe system's 
 
 ---
 
-## 1. The Orchestration Spine (`orchestrator.py`)
+## 0. Design Lineage — Terminal Piping as the Foundation
+
+Context-Pipe is directly and deliberately inspired by Unix terminal piping. The same primitive that made `cmd1 | cmd2 | cmd3` the most durable composition pattern in computing underlies every architectural decision here.
+
+The mapping is exact:
+
+| Terminal Piping | Context-Pipe |
+|---|---|
+| OS process | Pipe node (binary, script, MCP tool) |
+| `stdout` → `stdin` byte stream | Context stream between nodes |
+| Shell pipe operator (`\|`) | `pipes.json` node sequence |
+| `/dev/stderr` for diagnostics | Per-node `stderr` trace map |
+| Process timeout / `SIGKILL` | Timeout Guard (`PIPE_NODE_TIMEOUT_MS`) |
+| `tee` for stream splitting | T-Pipe (save raw copy mid-chain) |
+
+This lineage is not cosmetic. It is the reason for every constraint in the Context-Pipe Protocol (CPP):
+
+- **`stdin`/`stdout` first** — any tool that honours this is a node, no SDK required.
+- **`shell=False` enforced** — same injection-safety principle as secure shell scripting.
+- **Single-responsibility nodes** — each node does one transformation; composition is the orchestrator's job.
+- **Language-agnostic boundary** — a Rust binary, a Python script, and an MCP tool call are interchangeable at the pipe level.
+
+### Dual Transport Support
+
+Context-Pipe extends the terminal model to two transport modes, which compose freely in a single pipe definition:
+
+- **Terminal piping** — any binary or shell command on `PATH` is a valid node. `rg`, `jq`, `prettier`, `semantic-sift-cli`, custom scripts — all first-class citizens.
+- **MCP piping** — MCP tool calls (Phase 7.5) are nodes too. The orchestrator invokes them through the same `stdin`/`stdout` contract, making Figma, GitHub, Firecrawl, and any registered MCP server composable alongside terminal tools.
+
+The result is a unified pipe where a live web fetch, a terminal regex filter, a Rust distiller, and an MCP issue creator can sit in the same chain — each unaware of the others, each doing exactly one thing.
+
+---
+
+
 
 The heart of the platform is a high-performance Python-based engine designed to execute multi-node data pipelines at the OS level.
 
