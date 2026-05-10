@@ -187,11 +187,11 @@ Executes arbitrary shell commands. Ideal for using standard Unix utilities.
 { "cmd": "grep 'ERROR' | head -n 50", "shell": true }
 ```
 
-### C. Script & Mandate Nodes
-Executes a project-specific script or applies an "Expert Mandate" (instruction set) to the context. Resolved from `.gemini/scripts/` (default).
+### C. Script Nodes
+Executes a project-specific script (Python/Shell) or a local instruction set. Resolved from `.gemini/scripts/` (default).
 
 **Example: React Expert Chain**
-This chain uses OS bash to auto-format the code with `eslint`, applies React 19 expert instructions from a Mandate Node, and then semantically condenses the result. The LLM receives pre-reviewed, compliant code.
+This chain uses OS bash to auto-format the code with `eslint`, applies React 19 expert instructions from a Script Node, and then semantically condenses the result. The LLM receives pre-reviewed, compliant code.
 
 ```json
 {
@@ -204,7 +204,7 @@ This chain uses OS bash to auto-format the code with `eslint`, applies React 19 
 }
 ```
 
-The `type: "script"` node automatically resolves `react-code-fix-linter.py` (executes it) or `react-code-fix-linter.md` (prepends it as a mandate) from your local scripts folder.
+The `type: "script"` node automatically resolves `react-code-fix-linter.py` (executes it) or `react-code-fix-linter.md` (prepends its content) from your local scripts folder.
 
 ### D. T-Pipe Nodes (Stream Splitting)
 Save a raw copy of the node's input to disk **before** the node processes it — without interrupting the chain. Useful for debugging pipe quality, auditing what was sifted out, and building a research archive.
@@ -223,7 +223,7 @@ Save a raw copy of the node's input to disk **before** the node processes it —
 
 `path` supports `{iso_date}` (YYYY-MM-DD) and `{tool_name}` tokens. A tee failure **never** interrupts the main chain.
 
-### E. MCP Nodes (Phase 7.5)
+### E. MCP Nodes
 Call any MCP tool (web scrapers, GitHub, context-mode…) as a first-class pipe node. No wrapper scripts — the orchestrator spawns the MCP server, calls the tool, and passes the result downstream.
 
 ```json
@@ -345,7 +345,7 @@ Once you have connected the MCP server to your IDE, ask your AI assistant:
 Replace `'Cursor'` with your active environment (e.g., `'Gemini'`, `'VSCode'`, `'Windsurf'`, `'Claude'`, `'Cline'`, `'OpenCode'`). If `environment` is omitted, `pipe_onboard` **auto-detects** your IDE by inspecting environment variables and parent-process names across 12+ platforms.
 
 ### What Onboarding Does
-1.  **Mandate Injection**: Injects the Context-Pipe SOP into `AGENTS.md`, `.cursorrules`, and other instruction files. This forces the agent to use `pipe_read_file` for all file I/O.
+1.  **Agent SOP Injection**: Injects the Context-Pipe SOP into `AGENTS.md`, `.cursorrules`, and other instruction files. This forces the agent to use `pipe_read_file` for all file I/O.
 2.  **Hook Injection**: Automatically configures `.cursor/hooks.json` or `.github/hooks/` to use the `context-pipe wrap` polyfill for all other tool calls. For OpenCode, generates a TypeScript plugin at `.opencode/plugins/context-pipe.ts`. **Note**: the OpenCode plugin is currently a documented placeholder — `tool.execute.after` does not fire correctly for MCP tools as of v1.14.39 ([sst/opencode#21149](https://github.com/sst/opencode/issues/21149)). The `AGENTS.md` SOP mandate is the active interception strategy in OpenCode workspaces.
 3.  **Security Gateways**: Injects blocking hooks into Windsurf and Cline to proactively prevent large native file reads.
 4.  **Subagent Shielding**: Recursively discovers specialized agent configs (e.g., in `.cursor/agents/`) and applies context protection to them.

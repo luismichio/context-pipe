@@ -1,7 +1,6 @@
 # MCP Node Type — Design Specification
 
-**Status**: Approved for implementation
-**Phase**: 7.5 (extension of the Dynamic Shadow Ecosystem)
+**Status**: Implemented
 **Author**: Studio of Two
 
 ---
@@ -277,44 +276,13 @@ invocations.
 
 ---
 
-## 6. Implementation Plan
+## 6. Implementation Summary
 
-### Phase 7.5-A — Schema & Config (no behaviour change)
-- [ ] Add `servers` block parsing to `config_loader.load_pipes_config()`.
-- [ ] Add `_resolve_env_placeholders()` utility.
-- [ ] Update `pipes.json.example` with a commented-out `servers` block.
-- [ ] Add 6 unit tests: merge precedence, env placeholder resolution, missing
-      server key error.
-
-### Phase 7.5-B — `_run_mcp_node()` + async promotion
-- [ ] Implement `_run_mcp_node()` in `orchestrator.py`.
-- [ ] Promote `run_pipe()` to `async`; update all call sites.
-- [ ] Update `dynamic.run_dynamic_pipe()` to `async`.
-- [ ] Update `api.pipe()` with `asyncio.run()`.
-- [ ] Update `cli.py` subcommands with `asyncio.run()`.
-- [ ] Update `server.py` MCP tools with `await`.
-- [ ] Add `pytest-anyio` to `[test]` extras; mark async tests.
-- [ ] Add 8 integration tests using a mock MCP server (in-process `FastMCP`
-      instance) to validate: tool call, `input_key` routing, static args merge,
-      env placeholder injection, timeout, server-not-found error, text
-      extraction fallback, tee on mcp node.
-
-### Phase 7.5-C — Echo Guard node-scope fix
-- [ ] Change hash key in `wrapper.py` to `pipe_name:node_index:content`.
-- [ ] Add 3 regression tests: same content two nodes same pipe, genuine
-      double-sift cross-pipe, node index boundary.
-
-### Phase 7.5-D — `_validate_nodes()` extension
-- [ ] Extend `_validate_nodes()` with `mcp` node rules.
-- [ ] Add 4 unit tests: missing `server`, missing `tool`, metachar exempt,
-      sift-terminal guard exempt.
-
-### Phase 7.5-E — Docs & Release
-- [ ] Update `doc/ARCHITECTURE.md` §9 with `mcp` node execution path.
-- [ ] Update `doc/OPERATOR_GUIDE.md` §3 Node Types with new `mcp` entry.
-- [ ] Update `README.md` Advanced Node Types section.
-- [ ] Add `## [Unreleased] — Phase 7.5` block to `doc/CHANGELOG.md`.
-- [ ] Raise `fail_under` after coverage is measured.
+The `mcp` node type was fully implemented in v0.2.0, including:
+- **Schema & Config**: Native `servers` registry in `pipes.json` with `${VAR}` resolution.
+- **Async Orchestration**: Core `run_pipe` spine promoted to `async` for non-blocking MCP stdio transport.
+- **Node-Scoped Echo Guard**: Hashing logic updated to `pipe:node:content` to support multi-sift chains.
+- **MCP Bridge**: The `mcp-pipe tool` CLI subcommand provides a direct shell-to-MCP interface.
 
 ---
 

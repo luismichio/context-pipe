@@ -3,14 +3,14 @@
 **The Universal Standard for Context Engineering.**
 
 [![CI](https://github.com/luismichio/context-pipe/actions/workflows/ci.yml/badge.svg)](https://github.com/luismichio/context-pipe/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/Tests-177%20Passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-242%20Passing-brightgreen)](tests/)
 [![Python](https://img.shields.io/pypi/pyversions/mcp-context-pipe)](https://pypi.org/project/mcp-context-pipe/)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue)](LICENSE.md)
 [![OSI](https://img.shields.io/badge/OSI-Approved-brightgreen)](https://opensource.org/licenses/Apache-2.0)
 
 `context-pipe` is a high-performance orchestration layer directly inspired by Unix terminal piping — the same philosophy that made `cmd1 | cmd2 | cmd3` the most durable composition primitive in computing. Just as the terminal chains processes through `stdin`/`stdout` byte streams, Context-Pipe chains AI tool calls through context streams: each node does one thing, passes its output to the next, and the LLM only sees the final, refined signal.
 
-This is not a metaphor — it is a literal extension. Context-Pipe supports both **MCP piping** (chaining MCP tool calls through the orchestrator) and **terminal piping** (any binary, shell command, or script that reads `stdin` and writes `stdout` is a valid node). The two modes compose freely in a single pipe definition. And through the `mcp-pipe` CLI, it extends the terminal itself: the `mcp-pipe tool` subcommand (Phase 7.6) makes any MCP server — context-mode, serena, GitHub, Firecrawl, or any server registered in `pipes.json` — directly pipeable from the shell, loading on demand, with no wrapper scripts and no IDE required:
+This is not a metaphor — it is a literal extension. Context-Pipe supports both **MCP piping** (chaining MCP tool calls through the orchestrator) and **terminal piping** (any binary, shell command, or script that reads `stdin` and writes `stdout` is a valid node). The two modes compose freely in a single pipe definition. And through the `mcp-pipe` CLI, it extends the terminal itself: the `mcp-pipe tool` subcommand makes any MCP server — context-mode, serena, GitHub, Firecrawl, or any server registered in `pipes.json` — directly pipeable from the shell, loading on demand, with no wrapper scripts and no IDE required:
 
 ```bash
 cat error.log | mcp-pipe tool semantic-sift sift_logs | rg "CRITICAL"
@@ -31,7 +31,7 @@ In the **Studio of Two** philosophy, we build **Systems, not Patches**. A patch 
 
 The result is a **context supply chain**: data enters raw, passes through a sequence of refineries (normalize → filter → compress → distil), and arrives at the LLM as dense, high-signal content. Every byte saved is accounted for in the Context Balance Sheet. Every pipe run is traceable. Every A2A handoff is protected.
 
-This is not a wrapper around `semantic-sift`. It is the orchestration layer that makes any refinery composable, observable, and production-grade. A node can be a binary, a shell command, a Python script, a **Mandate** (an expert-lens instruction set injected into the stream), or — coming in Phase 7.5 — a **full MCP tool** (Figma, GitHub, context-mode, or any server registered in `pipes.json`). If it reads `stdin` and writes `stdout`, it belongs in the pipe.
+This is not a wrapper around `semantic-sift`. It is the orchestration layer that makes any refinery composable, observable, and production-grade. A node can be a binary, a shell command, a Python script, or a **full MCP tool** (Figma, GitHub, context-mode, or any server registered in `pipes.json`). If it reads `stdin` and writes `stdout`, it belongs in the pipe.
 
 
 **Example — crawl the web, research it, save it, and ship it:**
@@ -40,16 +40,15 @@ trigger: tool:web_search | tool:web_fetch
 ```
 ```
 [URL]
-    → firecrawl/scrape             # MCP node ✦: fetch live page as clean text     ~18,400 tokens
+    → firecrawl/scrape             # MCP node: fetch live page as clean text     ~18,400 tokens
     → markitdown                   # binary node: convert to structured Markdown     ~16,200 tokens
     → rg 'security|vulnerability'  # shell node: surface only relevant sections      ~3,100 tokens
     → prettier --parser markdown   # shell node: normalize formatting                ~3,050 tokens
     → semantic-sift-cli doc        # binary node: distil to high-signal summary        ~420 tokens
           ↳ tee → research.md      # T-pipe: save raw distilled copy to disk
-    → security-auditor mandate     # script node: inject expert security lens          ~380 tokens
-    → github/create_issue          # MCP node ✦: open a tracked issue with findings
+    → security-auditor             # script node: project-specific logic               ~380 tokens
+    → github/create_issue          # MCP node: open a tracked issue with findings
 ```
-*✦ Phase 7.5 — coming soon*
 
 ```
 Context Balance Sheet (illustrative)
@@ -86,8 +85,9 @@ IDE hooks that apply pipes transparently after every tool call — without the a
 
 | Feature | What it does | Where |
 |---|---|---|
-| **Unix pipe model for AI** | Chain any `stdin→stdout` tool into a named pipe. Binary, shell, mandate, or MCP tool — same contract. | [Advanced Node Types](#-advanced-node-types) |
-| **MCP Node Type** *(Phase 7.5)* | Call any MCP tool (Figma, GitHub, context-mode…) as a first-class pipe node — no wrapper scripts. | [doc/MCP_NODE_SPEC.md](doc/MCP_NODE_SPEC.md) |
+| **Unix pipe model for AI** | Chain any `stdin→stdout` tool into a named pipe. Binary, shell, script, or MCP tool — same contract. | [Advanced Node Types](#-advanced-node-types) |
+
+| **MCP Node Type** | Call any MCP tool (Figma, GitHub, context-mode…) as a first-class pipe node — no wrapper scripts. | [doc/MCP_NODE_SPEC.md](doc/MCP_NODE_SPEC.md) |
 | **Dynamic Pipes** | AI agents construct and execute ad-hoc node lists at runtime via `pipe_run_dynamic` — no `pipes.json` entry required. | [Dynamic Pipes](#dynamic-pipes) |
 | **Shadow MCP Registry** | MCP servers can be installed locally or called remotely without being registered in your IDE — keeping them invisible to the agent's tool list, preventing MCP tool list bloat. `pipe_list_shadow_tools` boots and queries them on demand, routing calls through `pipe_run` or `pipe_run_dynamic`. Ideal for high-noise utility servers you never want polluting the agent's decision space: format converters (`markitdown`, `pandoc`), search tools (`rg`, `fd`), data processors (`jq`, `yq`), web scrapers (`firecrawl`), and document ingestors (`unstructured`, `tika`). One MCP tool in the IDE. Everything else stays shadow. | [Shadow MCP Registry](#shadow-mcp-registry) |
 | **A2A Agent Handoff** | Distil Agent A's output before it enters Agent B's context window — framework-agnostic, no monkey-patching. | [A2A Handoff](#-a2a-agent-to-agent-handoff) |
@@ -195,7 +195,7 @@ Once connected, ask your AI Assistant to configure your workspace:
 Detailed documentation is available in the [`doc/`](./doc) directory.
 
 *   **[doc/INDEX.md](doc/INDEX.md)**: The navigational roadmap for the documentation ecosystem.
-*   **[doc/USE_CASES.md](doc/USE_CASES.md)**: Real-world, high-impact scenarios demonstrating how to chain Bash, Mandates, and Semantic-Sift.
+*   **[doc/USE_CASES.md](doc/USE_CASES.md)**: Real-world, high-impact scenarios demonstrating how to chain Bash, Script Nodes, and Semantic-Sift.
 *   **[doc/OPERATOR_GUIDE.md](doc/OPERATOR_GUIDE.md)**: Definitive guide for setup, terminal mastery, and `pipes.json` configuration.
 *   **[doc/ARCHITECTURE.md](doc/ARCHITECTURE.md)**: Technical specifications of the orchestration spine and switchboard.
 *   **[doc/CONTEXT_PIPE_PROTOCOL.md](doc/CONTEXT_PIPE_PROTOCOL.md)**: The language-agnostic standard for tool interoperability.
@@ -331,8 +331,8 @@ Execute arbitrary shell commands as part of your pipe.
 { "cmd": "grep 'ERROR'", "shell": true }
 ```
 
-### 2. Script & Mandate Nodes
-Executes a project-specific script or applies an "Expert Mandate" (instruction set) to the context. Resolved from `.gemini/scripts/` (default).
+### 2. Script Nodes
+Executes a project-specific script (Python/Shell) or a local instruction set. Resolved from `.gemini/scripts/` (default).
 ```json
 { "type": "script", "cmd": "security-auditor" }
 ```
@@ -352,7 +352,7 @@ Save a raw copy of the stream to disk before a node distils it — without inter
 ```
 `path` supports `{iso_date}` (YYYY-MM-DD) and `{tool_name}` tokens. A tee failure never interrupts the main chain.
 
-### 4. MCP Nodes *(Phase 7.5 — coming soon)*
+### 4. MCP Nodes
 Call any MCP tool as a pipe node. No wrapper scripts — the orchestrator spawns the MCP server, calls the tool, and passes the result downstream via `stdout`.
 ```json
 {
@@ -382,7 +382,7 @@ Four tools often appear together in a Studio of Two stack. They are complementar
 |---|---|---|---|
 | **context-pipe** | Orchestration | Routes content through named pipes; manages node execution, timeouts, T-pipe, telemetry, and A2A handoff. | The switchboard. Calls all other tools as nodes when wired together. |
 | **semantic-sift** | Distillation | Heuristic + neural compression of text. Removes noise (timestamps, boilerplate, repeated tokens) while preserving signal. | Fully standalone CLI and MCP server. The flagship refinery node inside context-pipe pipes. |
-| **[context-mode](https://github.com/mksglu/context-mode)** | In-session indexing | BM25 full-text search over content indexed during the current agent session. Fast retrieval without a vector database. | Fully standalone MCP server. Optionally wired as an `mcp` node (Phase 7.5) to index or search within a pipe. |
+| **[context-mode](https://github.com/mksglu/context-mode)** | In-session indexing | BM25 full-text search over content indexed during the current agent session. Fast retrieval without a vector database. | Fully standalone MCP server. Optionally wired as an `mcp` node to index or search within a pipe. |
 | **[Serena](https://github.com/oraios/serena)** | Code intelligence | LSP-backed symbol search, refactoring, and code navigation. Understands the AST — not just text. | Fully standalone MCP server. Optionally wired as an `mcp` node to feed precise code symbols into a pipe instead of raw file reads. |
 
 ### When to use which
@@ -413,7 +413,7 @@ The result: the agent works with a fraction of the raw token volume, every sessi
     → serena/find_symbol           # MCP node: precise code symbol — not a raw file dump
     → context-mode/search          # MCP node: retrieve related session context
     → semantic-sift-cli semantic   # binary node: compress both into a dense summary
-    → security-auditor mandate     # script node: expert lens over the result
+    → security-auditor             # script node: project-specific logic
 ```
 
 All four tools in one pipe. Each doing exactly one job.

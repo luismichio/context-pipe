@@ -2,7 +2,7 @@
 
 To truly understand the power of the **Context-Pipe Platform (CPP)**, you have to stop thinking of it as a tool, and start thinking of it as a **Mental Supply Chain** for your AI agents. 
 
-Below are real-world, high-impact scenarios demonstrating how you can chain Bash commands, Mandate Nodes, and Semantic-Sift to drastically improve your AI's performance, security, and cost.
+Below are real-world, high-impact scenarios demonstrating how you can chain Bash commands, Script Nodes, and Semantic-Sift to drastically improve your AI's performance, security, and cost.
 
 ---
 
@@ -13,7 +13,7 @@ Without CPP, the LLM reads raw, unformatted code, wasting reasoning tokens tryin
 
 **The Pipe (`react-pr-reviewer`)**:
 1.  **Bash Node (`eslint`)**: Pipes the raw PR diff through your local ESLint to instantly fix basic formatting and syntax issues.
-2.  **Mandate Node (`senior-react-engineer`)**: Injects specialized instructions enforcing your company's React 19 architecture rules.
+2.  **Script Node (`senior-react-engineer`)**: Injects project-specific architectural instructions or persona constraints.
 3.  **Refinery Node (`semantic-sift-cli`)**: Semantically condenses the diff, highlighting only the functional changes.
 
 ```json
@@ -26,7 +26,7 @@ Without CPP, the LLM reads raw, unformatted code, wasting reasoning tokens tryin
   ]
 }
 ```
-**The Result:** The LLM receives pre-formatted code wrapped in senior-level architectural instructions, allowing it to focus entirely on deep logic flaws rather than syntax.
+**The Result:** The LLM receives pre-formatted code wrapped in senior-level architectural context, allowing it to focus entirely on deep logic flaws rather than syntax.
 
 ---
 
@@ -37,7 +37,7 @@ Without CPP, the context window floods instantly, the LLM hallucinates, or the r
 
 **The Pipe (`k8s-incident-responder`)**:
 1.  **Bash Node (`grep`)**: Instantly filters the 50,000 lines down to only those containing "Error", "Exception", or "Panic".
-2.  **Mandate Node (`pii-masker`)**: Scrubs the remaining logs for email addresses, IPs, or auth tokens to ensure customer data never leaves your machine.
+2.  **Script Node (`pii-masker`)**: Scrubs the remaining logs for email addresses, IPs, or auth tokens via local regex or masking logic.
 3.  **Refinery Node (`semantic-sift-cli logs`)**: Uses the blazingly fast heuristic sieve to strip away repetitive timestamps and Kubernetes container IDs.
 
 ```json
@@ -60,9 +60,9 @@ Without CPP, the context window floods instantly, the LLM hallucinates, or the r
 Without CPP, the agent downloads raw HTML, flooding its context with CSS, JavaScript, and navigation menus. With a Shadow MCP server like Firecrawl registered in `pipes.json` but hidden from the IDE tool list, the agent never sees the bloat — it sees only the distilled knowledge.
 
 **The Pipe (`web-researcher`)**:
-1.  **MCP Node (`firecrawl/scrape`) *(Phase 7.5)***: Fetches the live page as clean text via the Firecrawl MCP server — no curl, no raw HTML. The server is registered in `pipes.json` `servers` block but not exposed to the IDE as a standalone tool.
+1.  **MCP Node (`firecrawl/scrape`)**: Fetches the live page as clean text via the Firecrawl MCP server — no curl, no raw HTML. The server is registered in `pipes.json` `servers` block but not exposed to the IDE as a standalone tool.
 2.  **Node (`markitdown` or `pandoc`)**: Converts the result into structured Markdown.
-3.  **Mandate Node (`api-integration-expert`)**: Injects instructions to focus only on API endpoints and authentication methods.
+3.  **Script Node (`api-integration-expert`)**: Injects instructions to focus only on API endpoints and authentication methods.
 4.  **Refinery Node (`semantic-sift-cli doc`)**: Performs heavy semantic compression (`rate: 0.3`), stripping marketing fluff and retaining only core technical concepts.
 
 ```json
@@ -83,7 +83,7 @@ Without CPP, the agent downloads raw HTML, flooding its context with CSS, JavaSc
 }
 ```
 
-> **Note:** The `firecrawl` server entry lives in the `servers` block of `pipes.json` (or `~/.mcp-pipe.json`) and is never registered in your IDE — keeping it shadow. Until Phase 7.5 ships, replace the MCP node with `{ "cmd": "markitdown" }` and pipe a pre-fetched HTML file through stdin.
+> **Note:** The `firecrawl` server entry lives in the `servers` block of `pipes.json` (or `~/.mcp-pipe.json`) and is never registered in your IDE — keeping it shadow.
 
 **The Result:** The LLM reads a highly concentrated, technically dense summary of the API, costing pennies instead of dollars in API tokens — with the web scraper remaining invisible to the agent's tool list.
 
@@ -96,7 +96,7 @@ Without CPP, the agent gets overwhelmed by the sheer volume of code and misses s
 
 **The Pipe (`security-auditor`)**:
 1.  **Bash Node (`trufflehog` or `bandit`)**: Runs a fast, local SAST (Static Application Security Testing) tool over the code stream to flag known vulnerability patterns.
-2.  **Mandate Node (`owasp-top-10`)**: Injects strict OWASP security guidelines for the LLM to evaluate the flagged code against.
+2.  **Script Node (`owasp-top-10`)**: Injects strict OWASP security guidelines for the LLM to evaluate the flagged code against.
 3.  **Refinery Node (`semantic-sift-cli semantic`)**: Compresses the code, retaining only the logic flow around the flagged areas.
 
 ```json
@@ -120,7 +120,7 @@ Sometimes data is so noisy you need both a machete and a scalpel. You can chain 
 
 **The Pipe (`ci-cd-autopsy`)**:
 1.  **Refinery Node (`semantic-sift-cli logs`)**: First, use the ultra-fast heuristic sieve (the machete) to instantly strip out thousands of timestamps, IP addresses, and progress bars.
-2.  **Mandate Node (`build-engineer`)**: Inject instructions to focus strictly on dependency conflicts and linking errors.
+2.  **Script Node (`build-engineer`)**: Inject project-specific build context or linking rules.
 3.  **Refinery Node (`semantic-sift-cli semantic`)**: Finally, use the neural engine (the scalpel) to semantically compress the remaining verbose developer tracebacks.
 
 ```json
@@ -145,7 +145,7 @@ A standard `curl` fails here because the DOM hasn't rendered. You need a headles
 **The Pipe (`spa-a11y-reviewer`)**:
 1.  **Bash Node (`node dump_dom.js`)**: A tiny local script uses Playwright to launch a headless browser, wait for JS hydration, and dump the fully rendered HTML Accessibility Tree to `stdout`.
 2.  **Node (`markitdown`)**: Converts the massive rendered HTML DOM into clean, structured Markdown.
-3.  **Mandate Node (`a11y-auditor`)**: Injects strict WCAG (Web Content Accessibility Guidelines) instructions.
+3.  **Script Node (`a11y-auditor`)**: Injects strict WCAG (Web Content Accessibility Guidelines) instructions.
 4.  **Refinery Node (`semantic-sift-cli semantic`)**: Compresses the DOM, focusing the LLM's attention purely on missing ARIA labels and structural flaws.
 
 ```json

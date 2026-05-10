@@ -31,7 +31,7 @@ This lineage is not cosmetic. It is the reason for every constraint in the Conte
 Context-Pipe extends the terminal model to two transport modes, which compose freely in a single pipe definition:
 
 - **Terminal piping** — any binary or shell command on `PATH` is a valid node. `rg`, `jq`, `prettier`, `semantic-sift-cli`, custom scripts — all first-class citizens.
-- **MCP piping** — MCP tool calls (Phase 7.5) are nodes too. The orchestrator invokes them through the same `stdin`/`stdout` contract, making Figma, GitHub, Firecrawl, and any registered MCP server composable alongside terminal tools.
+- **MCP piping** — MCP tool calls are nodes too. The orchestrator invokes them through the same `stdin`/`stdout` contract, making Figma, GitHub, Firecrawl, and any registered MCP server composable alongside terminal tools.
 
 The result is a unified pipe where a live web fetch, a terminal regex filter, a Rust distiller, and an MCP issue creator can sit in the same chain — each unaware of the others, each doing exactly one thing.
 
@@ -48,7 +48,7 @@ This means the decades of compounding value locked inside the MCP ecosystem beco
 
 ---
 
-
+## 1. Core Orchestration Engine
 
 The heart of the platform is a high-performance Python-based engine designed to execute multi-node data pipelines at the OS level.
 
@@ -61,7 +61,7 @@ The orchestrator utilizes `subprocess.Popen` to create memory-resident pipes bet
 ### The Timeout Guard
 Every node execution is wrapped in a **Timeout Guard** (default: 30s, configurable via `PIPE_NODE_TIMEOUT_MS`). If a node hangs (e.g., a stalled network fetch or a heavy neural model), the orchestrator kills the process, prevents an IDE freeze, and returns a structured `--- [Context-Pipe: Timeout] ---` response.
 
-### MCP Node Execution Path (Phase 7.5)
+### MCP Node Execution Path
 In addition to standard binary nodes, Context-Pipe supports first-class MCP nodes (`type: "mcp"`). Instead of spawning a subprocess for every call, it uses the MCP `stdio` transport to communicate with registered servers.
 
 ```
@@ -163,21 +163,21 @@ The results are surfaced via the `pipe_verify` MCP tool, which also auto-runs `r
 
 ---
 
-## 6. The Script & Mandate Node (`scripts.py`)
+## 6. The Script Node (`scripts.py`)
 
-The `type: "script"` node in `pipes.json` allows for deterministic local transformations and expert instructions without the overhead of absolute binary paths. It serves as the primary extension point for project-specific automation.
+The `type: "script"` node in `pipes.json` allows for deterministic local transformations and project-specific instructions without the overhead of absolute binary paths. It serves as the primary extension point for local automation.
 
 ### Purpose
-Scripts provide a safe, standardized way to run local logic (Python scripts) or apply "Mandates" (expert instruction sets) to the data stream. Unlike binary nodes, they are resolved from a dedicated `.gemini/scripts/` directory, keeping the project's transformation logic isolated and portable.
+Scripts provide a safe, standardized way to run local logic (Python scripts) or apply local instruction sets to the data stream. Unlike binary nodes, they are resolved from a dedicated `.gemini/scripts/` directory, keeping the project's transformation logic isolated and portable.
 
 ### Execution Flow
 1. **Resolve**: The orchestrator looks for `<cmd>.py` or `<cmd>.md` in `$PIPE_SCRIPT_DIR` (default: `.gemini/scripts/`).
 2. **Execute (Python)**: If a `.py` file is found, it is executed via the current Python interpreter (`sys.executable`).
-3. **Prepend (Mandate)**: If a `.md` file is found, its content is prepended as a structured header: `--- [Context-Pipe: Mandate (<name>)] ---\n<mandate>\n\n[Content]\n<data>`.
+3. **Prepend (Script)**: If a `.md` file is found, its content is prepended as a structured header: `--- [Context-Pipe: Script (<name>)] ---\n<text>\n\n[Content]\n<data>`.
 4. **Fallback**: If neither is found, it falls back to a standard binary search on the system `PATH`.
 
 ### Difference from Skills
-| | **Script / Mandate Node** | **Skill (A2A)** |
+| | **Script Node** | **Skill (A2A)** |
 |---|---|---|
 | **Scope** | Local / Single-Agent | Distributed / Multi-Agent |
 | **Logic** | Deterministic (Python/Regex) | Semantic (SLM-backed) |
@@ -312,11 +312,11 @@ Set-Alias -Name cpipe -Value python -m context_pipe.cli
 
 ---
 
-## 12. Terminal ↔ MCP Bridge — `mcp-pipe tool` (Phase 7.6)
+## 12. Terminal ↔ MCP Bridge — `mcp-pipe tool`
 
 ### Motivation
 
-The `mcp-pipe run` command executes named pipes defined in `pipes.json`. All nodes inside those pipes are currently terminal binaries. The `mcp-pipe tool` subcommand (Phase 7.6) extends `mcp-pipe` into a direct terminal-to-MCP bridge, removing the boundary between the shell and the MCP ecosystem entirely.
+The `mcp-pipe run` command executes named pipes defined in `pipes.json`. All nodes inside those pipes are currently terminal binaries. The `mcp-pipe tool` subcommand extends `mcp-pipe` into a direct terminal-to-MCP bridge, removing the boundary between the shell and the MCP ecosystem entirely.
 
 ### Interface
 
@@ -348,13 +348,9 @@ cat error.log | mcp-pipe tool semantic-sift sift_logs | rg "CRITICAL"
 curl -s https://example.com | mcp-pipe tool firecrawl scrape | mcp-pipe run semantic-refinery
 ```
 
-### Relationship to Phase 7.5
+### Relationship to MCP Nodes
 
-Phase 7.5 adds MCP nodes *inside* `pipes.json` pipe definitions — the orchestrator calls MCP tools mid-chain transparently. Phase 8 is the complementary surface: it exposes that same MCP call capability as a direct shell subcommand, one tool at a time, composable with any terminal pipeline. Both phases share the `servers` registry schema in `pipes.json`.
-
-### Implementation Reference
-
-See [`plans/PHASE_7_6_MCP_PIPE_TOOL.md`](../plans/PHASE_7_6_MCP_PIPE_TOOL.md) for the full phased implementation plan.
+MCP tool calls can also be defined *inside* `pipes.json` pipe definitions — the orchestrator calls them mid-chain transparently. `mcp-pipe tool` is the complementary surface: it exposes that same MCP call capability as a direct shell subcommand, one tool at a time, composable with any terminal pipeline. Both share the `servers` registry schema in `pipes.json`.
 
 ---
 *High-Fidelity Infrastructure for the Studio of Two.*
