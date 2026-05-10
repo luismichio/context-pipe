@@ -85,17 +85,16 @@ IDE hooks that apply pipes transparently after every tool call — without the a
 
 | Feature | What it does | Where |
 |---|---|---|
-| **Unix pipe model for AI** | Chain any `stdin→stdout` tool into a named pipe. Binary, shell, script, or MCP tool — same contract. | [Advanced Node Types](#-advanced-node-types) |
-
-| **MCP Node Type** | Call any MCP tool (Figma, GitHub, context-mode…) as a first-class pipe node — no wrapper scripts. | [doc/MCP_NODE_SPEC.md](doc/MCP_NODE_SPEC.md) |
+| **Unix pipe model for AI** | Chain any `stdin` and `stdout` tool into a named pipe. Binary, shell, script, or MCP tool — same contract. | [Advanced Node Types](#-advanced-node-types) |
+| **MCP Node Type** | Call any MCP tool (Figma, GitHub, context-mode) as a first-class pipe node — no wrapper scripts. | [doc/MCP_NODE_SPEC.md](doc/MCP_NODE_SPEC.md) |
 | **Dynamic Pipes** | AI agents construct and execute ad-hoc node lists at runtime via `pipe_run_dynamic` — no `pipes.json` entry required. | [Dynamic Pipes](#dynamic-pipes) |
-| **Shadow MCP Registry** | MCP servers can be installed locally or called remotely without being registered in your IDE — keeping them invisible to the agent's tool list, preventing MCP tool list bloat. `pipe_list_shadow_tools` boots and queries them on demand, routing calls through `pipe_run` or `pipe_run_dynamic`. Ideal for high-noise utility servers you never want polluting the agent's decision space: format converters (`markitdown`, `pandoc`), search tools (`rg`, `fd`), data processors (`jq`, `yq`), web scrapers (`firecrawl`), and document ingestors (`unstructured`, `tika`). One MCP tool in the IDE. Everything else stays shadow. | [Shadow MCP Registry](#shadow-mcp-registry) |
+| **Shadow MCP Registry** | Keep utility MCP servers invisible to the agent's tool list until needed. `pipe_list_shadow_tools` queries them on demand. | [Shadow MCP Registry](#shadow-mcp-registry) |
 | **A2A Agent Handoff** | Distil Agent A's output before it enters Agent B's context window — framework-agnostic, no monkey-patching. | [A2A Handoff](#-a2a-agent-to-agent-handoff) |
-| **T-Pipe Stream Splitting** | Save a raw copy of any node's input to disk before it is distilled — for audit, debugging, and quality measurement — without interrupting the chain. | [T-Pipe Nodes](#3-t-pipe-nodes-stream-splitting) |
-| **Adaptive Window Pressure** | `PIPE_WINDOW_PRESSURE` (0.0–1.0) signals remaining context headroom to every node; `semantic-sift` auto-adjusts `--rate` accordingly. | [Environment Variables](#️-environment-variables) |
-| **Global Config (`~/.mcp-pipe.json`)** | Share pipe definitions and MCP server registries across all projects — local `pipes.json` always wins. | [doc/ARCHITECTURE.md §10](doc/ARCHITECTURE.md) |
+| **T-Pipe Stream Splitting** | Save a raw copy of any node's input to disk before it is distilled — for audit, debugging, and quality measurement. | [T-Pipe Nodes](#3-t-pipe-nodes-stream-splitting) |
+| **Adaptive Window Pressure** | Signals remaining context headroom to every node; `semantic-sift` auto-adjusts `--rate` accordingly. | [Environment Variables](#️-environment-variables) |
+| **Global Config** | Share pipe definitions and MCP server registries across all projects — local `pipes.json` always wins. | [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) |
 | **Shell Alias Injection** | `pipe_install_aliases` writes `mcp-pipe` / `cpipe` into your shell profile — terminal-ready without venv activation. | [Terminal Usage](#-terminal-usage-mcp-pipe-cli) |
-| **Context Balance Sheet** | Every pipe run is accounted: chars in, chars out, latency per node, agent attribution, net ROI. | [Telemetry & ROI](doc/OPERATOR_GUIDE.md#6-telemetry--roi) |
+| **Context Balance Sheet** | Every pipe run is accounted: chars in, chars out, latency per node, agent attribution, net ROI. | [Telemetry & ROI](doc/OPERATOR_GUIDE.md) |
 
 ---
 
