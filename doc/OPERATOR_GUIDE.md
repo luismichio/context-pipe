@@ -81,6 +81,8 @@ uv pip install -e .[neural]        # torch, transformers, llmlingua
 
 In each project's `opencode.json`, register both servers. The `PIPE_CONFIG_PATH` env var must point to that project's own `pipes.json`.
 
+> **Note**: If you haven't created a `pipes.json` yet, don't worry. Running `pipe_onboard` in the next step will create a default one for you.
+
 **Windows:**
 ```json
 "mcp": {
@@ -129,12 +131,18 @@ In each project's `opencode.json`, register both servers. The `PIPE_CONFIG_PATH`
 }
 ```
 
-### Step 7 — Verify `pipes.json` points to the correct sift-cli
+### Step 7 — Auto-Onboard the Workspace
 
-Open `pipes.json` in your project root and confirm every node `cmd` is the **absolute path** to `context-pipe/venv/Scripts/semantic-sift-cli.exe`. If it isn't, ask your AI assistant:
-> *"Run `pipe_verify()` to confirm the installation."*
+Once both servers are connected, ask your AI assistant to configure the workspace. This single command automates the entire setup:
 
-`pipe_verify` will auto-link sift if the path is wrong or missing.
+> *"Run `pipe_onboard()` to configure this project."*
+
+**What Onboarding Does:**
+1. **Creates `pipes.json`**: If the file is missing, it creates a default configuration with production-grade templates for logs (`standard-distill`) and code (`semantic-refinery`).
+2. **Auto-Links Sift**: Discovers the absolute path to `semantic-sift-cli` and rewrites every `pipes.json` node to use it (idempotent).
+3. **Injects Hooks**: Automatically configures `.cursor/hooks.json`, `.github/hooks/`, and `opencode.json` hooks.
+4. **Injects Rules**: Creates slash commands like `/pipe-run` and `/pipe-stats` in Cursor rules and Gemini CLI commands.
+5. **Injects Mandates**: Adds the Agent SOP mandate to `AGENTS.md` and other instruction files.
 
 ---
 

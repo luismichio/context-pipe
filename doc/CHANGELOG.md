@@ -5,6 +5,15 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] — 2026-05-10
+
+### ✨ Zero-Config Onboarding
+- **Automated `pipes.json` Creation**: The `pipe_onboard` tool now automatically creates a default `pipes.json` configuration file if one does not exist in the target directory. This removes the manual "copy and rename" step for new projects.
+- **Default High-Fidelity Templates**: The auto-generated config includes production-grade definitions for `standard-distill` (logs) and `semantic-refinery` (neural code compression), along with pre-configured routing mappings.
+- **Improved Installation Resilience**: Enhanced the auto-linking logic to ensure that even a freshly created `pipes.json` is immediately populated with the correct absolute path to `semantic-sift-cli` if discovered.
+
+---
+
 ## [0.2.2] — 2026-05-09
 
 ### ✨ Fidelity & Safety Upgrade

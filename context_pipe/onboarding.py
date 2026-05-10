@@ -11,6 +11,52 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 
+DEFAULT_PIPES_CONFIG = {
+    "version": "1.0",
+    "description": "Standard context pipes for sifting and refinery.",
+    "pipes": [
+        {
+            "name": "standard-distill",
+            "description": "Fast log sifting via Semantic-Sift.",
+            "nodes": [
+                {
+                    "cmd": "semantic-sift-cli",
+                    "args": ["logs"],
+                }
+            ],
+        },
+        {
+            "name": "semantic-refinery",
+            "description": "Neural distillation for code and prose (Hybrid Engine).",
+            "nodes": [
+                {
+                    "cmd": "semantic-sift-cli",
+                    "args": ["semantic", "--rate", "0.5"],
+                }
+            ],
+        },
+    ],
+    "mappings": [
+        {
+            "trigger": "tool:web_search|web_fetch|google_web_search",
+            "pipe": "semantic-refinery",
+        },
+        {
+            "trigger": "tool:search_code|grep_search|glob|find_symbol",
+            "pipe": "semantic-refinery",
+        },
+        {
+            "trigger": "size:>10000",
+            "pipe": "semantic-refinery",
+        },
+        {
+            "trigger": "default",
+            "pipe": "standard-distill",
+        },
+    ],
+}
+
+
 def build_runtime_hook_command() -> str:
     """Builds the absolute command string to invoke the context-pipe wrapper."""
     python_exe = os.path.abspath(sys.executable)
@@ -596,8 +642,17 @@ def inject_hooks(target_dir: str, environment: str) -> List[str]:
     mandate_actions = inject_mandates(target_dir, subagents, environment=environment)
     actions.extend(mandate_actions)
 
-    # 0b. Auto-resolve semantic-sift-cli in pipes.json
+    # 0b. Ensure pipes.json exists and auto-resolve semantic-sift-cli
     pipes_json_path = os.path.join(target_dir, "pipes.json")
+    if not os.path.exists(pipes_json_path):
+        # Create default pipes.json if missing
+        try:
+            with open(pipes_json_path, "w", encoding="utf-8") as f:
+                json.dump(DEFAULT_PIPES_CONFIG, f, indent=2)
+            actions.append("Created default pipes.json.")
+        except OSError as e:
+            actions.append(f"Failed to create pipes.json: {e}")
+
     resolve_result = resolve_pipes_config(pipes_json_path)
     if resolve_result["sift_path"] and resolve_result["updated"]:
         actions.append(f"Linked semantic-sift-cli in pipes.json -> {resolve_result['sift_path']}")

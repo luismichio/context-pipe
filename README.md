@@ -104,7 +104,7 @@ IDE hooks that apply pipes transparently after every tool call — without the a
 # 1. Install
 pip install mcp-context-pipe "semantic-sift[neural]"
 
-# 2. Onboard (writes pipes.json + hooks for your IDE)
+# 2. Onboard (auto-creates pipes.json + hooks for your IDE)
 context-pipe-onboard   # or: ask your AI "Run pipe_onboard()"
 
 # 3. Verify the full stack

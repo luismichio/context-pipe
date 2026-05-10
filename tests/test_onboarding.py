@@ -350,6 +350,13 @@ def test_inject_hooks_sift_found_and_linked(tmp_path):
     assert any("linked" in a.lower() or "semantic-sift" in a.lower() for a in actions)
 
 
+def test_inject_hooks_creates_pipes_json_if_missing(tmp_path):
+    with patch("context_pipe.onboarding.discover_sift_executable", return_value=None):
+        actions = inject_hooks(str(tmp_path), "Generic CLI")
+    assert any("Created default pipes.json" in a for a in actions)
+    assert (tmp_path / "pipes.json").exists()
+
+
 # ---------------------------------------------------------------------------
 # Slash Command Injection tests
 # ---------------------------------------------------------------------------
