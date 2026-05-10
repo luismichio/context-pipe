@@ -24,6 +24,7 @@ Thumbs.db
 
 # Agent Plans (local only)
 plans/
+doc/posts/
 
 # Test Artifacts (binary fixtures — do not commit)
 large_data.txt

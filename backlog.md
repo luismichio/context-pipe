@@ -13,17 +13,18 @@
 - [x] **CPP Polyfill Wrapper**: Standalone utility (`context-pipe wrap`) for JSON-RPC tools.
 - [x] **Dynamic Environment Detection**: Multi-platform support (Zed, Continue, Windsurf, Cursor).
 - [x] **Agnostic Routing**: Dynamic pipe resolution based on tool and size triggers.
-- [x] **Standard Shell Aliases**: `inject_shell_aliases()` / `remove_shell_aliases()` in `onboarding.py`. `mcp-pipe aliases install/remove` CLI subcommands + `pipe_install_aliases` / `pipe_remove_aliases` MCP tools. Idempotent marker-block pattern; platform-aware (POSIX/PowerShell). 20 tests. `fail_under` raised 68 → 69. (unreleased).
+- [x] **Standard Shell Aliases**: `inject_shell_aliases()` / `remove_shell_aliases()` in `onboarding.py`. `mcp-pipe aliases install/remove` CLI subcommands + `pipe_install_aliases` / `pipe_remove_aliases` MCP tools. Idempotent marker-block pattern; platform-aware (POSIX/PowerShell). 20 tests.
 
 ## 🟢 Phase 3: The Template Ecosystem (In Progress)
 - [x] **Pure Switchboard Refactor**: Removed internal nodes to achieve 100% agnostic status.
 - [x] **Pipe Templates**: Professional recipes for `sift-core` and `markitdown`.
+- [x] **Mandate Ecosystem**: Formalized "Expert Lenses" as local Mandate Nodes (`.md` files in `.gemini/scripts/`).
 - [ ] **Adaptive Thresholding** *(delegated to `semantic-sift`)*: Dynamically adjust `--rate` based on estimated remaining context window headroom. The triggering signal (payload size, tool name) originates in `context-pipe` routing, but the rate adjustment logic belongs in `semantic-sift`'s kernel. Implementation path: `context-pipe` passes a `PIPE_WINDOW_PRESSURE` env var (0.0–1.0) to each node; `semantic-sift-cli` reads it and overrides `--rate` if set. Tracked in `semantic-sift` backlog; listed here as a cross-project dependency.
 
-## ⚪ Phase 4: Distribution (Partially Complete)
-- [x] **PyPI Publishing**: `pip install mcp-context-pipe` — live at [pypi.org/project/mcp-context-pipe](https://pypi.org/project/mcp-context-pipe/) (v0.1.5). Next publish: v0.2.0 (Phase 7.3 of `REFACTOR_PLAN_EXT2.md`).
-- [x] **`semantic-sift` PyPI Publishing**: `pip install semantic-sift` — live at [pypi.org/project/semantic-sift](https://pypi.org/project/semantic-sift/) (v0.2.7). Next publish: v0.3.0 (Phase 7.3 of `REFACTOR_PLAN_EXT2.md`).
-- [x] **Slash Command Injection**: Inject `/pipe-stats` and `/pipe-run` as first-class slash commands into agentic IDE CLIs (Gemini CLI `.gemini/commands/`, OpenCode `opencode.json` commands block, Cursor `onInit` hooks). *(Distinct from Phase 2 Standard Shell Aliases, which targets POSIX/PowerShell profiles, not IDE runtimes. The Gemini CLI injection is already implemented in `inject_hooks()`; OpenCode and Cursor complete as of (unreleased).)*
+## ⚪ Phase 4: Distribution (Complete)
+- [x] **PyPI Publishing**: `pip install mcp-context-pipe` — live at [pypi.org/project/mcp-context-pipe](https://pypi.org/project/mcp-context-pipe/) (v0.2.2).
+- [x] **`semantic-sift` PyPI Publishing**: `pip install semantic-sift` — live at [pypi.org/project/semantic-sift](https://pypi.org/project/semantic-sift/).
+- [x] **Slash Command Injection**: Inject `/pipe-stats` and `/pipe-run` as first-class slash commands into agentic IDE CLIs (Gemini CLI `.gemini/commands/`, OpenCode `opencode.json` commands block, Cursor `onInit` hooks).
 
 ## 🔵 Phase 4.5: OpenCode Native Plugin (Blocked — Upstream)
 
@@ -57,77 +58,26 @@ Once upstream support lands:
 3. Add an integration test that validates hook firing end-to-end.
 4. Update `doc/INTEGRATION_ENCYCLOPEDIA.md` to mark OpenCode as fully supported.
 
-## 🟣 Phase 5: Productionisation & Quality (In Progress)
+## 🟣 Phase 5: Productionisation & Quality (Complete)
 - [x] **Programmatic Python API** (`context_pipe/api.py`): `pipe(text, pipe_name, tool_name)` — direct integration without MCP or CLI.
-- [x] **Test Coverage Uplift**: Coverage raised from ~3% → 63%; `fail_under = 60` enforced in CI.
-- [x] **CPP Integration Contract Tests**: Mock-subprocess suite validating `run_pipe()` stdin/stdout/error/timeout contract without requiring `semantic-sift-cli` installed.
-- [x] **Root-Module Inversion** (`semantic-sift`): Canonical implementations moved to `semantic_sift/`; root files are DeprecationWarning stubs pending v0.3.0 deletion.
-- [x] **Telemetry Fallback URL** (`semantic-sift`): `SIFT_TELEMETRY_FALLBACK_URL` env var; silent retry on primary endpoint failure.
-- [ ] **Telemetry Consent UX**: Surface opt-in disclosure in `sift_onboard` response (Phase 7.2 of `REFACTOR_PLAN_EXT2.md`).
-- [ ] **v0.3.0 / v0.2.0 Release**: Stub deletion (`semantic-sift`) + version bumps + PyPI publish (Phase 7.3 of `REFACTOR_PLAN_EXT2.md`).
+- [x] **Test Coverage Uplift**: Coverage raised to **83.7%**; `fail_under = 83` enforced in CI.
+- [x] **CPP Integration Contract Tests**: Mock-subprocess suite validating `run_pipe()` stdin/stdout/error/timeout contract.
+- [x] **Technical Test Audit**: Closed logic "blind spots" in `server.py` and `scripts.py`. Verified all 240+ tests against industry standards.
+- [x] **Root-Module Inversion** (`semantic-sift`): Canonical implementations moved to `semantic_sift/`.
+- [x] **Telemetry Consent UX**: Surface opt-in disclosure in `sift_onboard` response.
 
 ## 🟠 Phase 6: A2A (Agent-to-Agent) Orchestration (Complete)
 - [x] **Multi-Agent Interception**: `context_pipe/a2a.py` — `pipe_agent_handoff()` + MCP tool. Framework-agnostic bridge for CrewAI, Google ADK, LangGraph.
 - [x] **Stream Splitting (T-Pipes)**: `_write_tee()` in `orchestrator.py`; `tee` node schema in `pipes.json`; `{iso_date}`/`{tool_name}` tokens; `tee_path` in trace.
 
-## 🟤 Phase 7: Dynamic Shadow Ecosystem (RAG for Tools) (In Progress)
-- [x] **Dynamic Pipe Execution**: `context_pipe/dynamic.py` — `run_dynamic_pipe()` + `pipe_run_dynamic` MCP tool. Security boundary enforced (shell metacharacters rejected). (unreleased).
-- [x] **The `mcp-pipe` CLI**: `context_pipe/cli.py` — `mcp-pipe` terminal runner with `run`, `run-dynamic`, `list`, `stats`, `serve` subcommands. 21 tests. `fail_under` raised 65 → 68. (unreleased).
-- [x] **Shadow Tool Discovery**: `context_pipe/shadow.py` — `list_shadow_tools()` + `pipe_list_shadow_tools` MCP tool. Probes 7 curated CLI tools on PATH. (unreleased).
-- [x] **Standalone Configuration**: `context_pipe/config_loader.py` — `load_pipes_config()` merges `pipes.json` + `~/.mcp-pipe.json` with local precedence. (unreleased).
-- [x] **Bash/Shell Synergy**: Enable arbitrary shell command integration (e.g., `bash`, `awk`, `grep`) within dynamic pipes, bounded by the final `semantic-sift` node to guarantee context safety. `SHELL_UTILITY_ALLOWLIST` (21 tools) + `_SIFT_TERMINAL_CMDS` guard + `allow_shell` flag on `run_dynamic_pipe()` and `pipe_run_dynamic` MCP tool. 9 new tests. (unreleased).
-
-## 🔷 Phase 7.5: MCP Node Type (Planned — see `doc/MCP_NODE_SPEC.md`)
-
-First-class MCP tool invocation as a `pipes.json` node. Eliminates the need for per-tool wrapper scripts when chaining MCP-only capabilities (Figma, GitHub, context-mode, etc.) into deterministic context pipelines.
-
-- [ ] **Phase 7.5-A — Schema & Config**: `servers` block in `pipes.json` / `~/.mcp-pipe.json`; `${VAR}` env placeholder resolution; `config_loader` merge; `pipes.json.example` update. 6 unit tests.
-- [ ] **Phase 7.5-B — `_run_mcp_node()` + async promotion**: `mcp.client.stdio` + `ClientSession` MCP client; `run_pipe()` promoted to `async`; all call sites updated (`api.py`, `cli.py`, `server.py`, `dynamic.py`); `pytest-anyio` added; 8 integration tests with mock `FastMCP` server.
-- [ ] **Phase 7.5-C — Echo Guard node-scope fix**: Hash key changed from pipe-input to `pipe_name:node_index:content` to prevent false suppression in multi-sift pipes. 3 regression tests.
-- [ ] **Phase 7.5-D — `_validate_nodes()` extension**: `mcp` nodes require `server` + `tool` keys; exempt from shell-metachar check and sift-terminal guard. 4 unit tests.
-- [ ] **Phase 7.5-E — Docs & Release**: `ARCHITECTURE.md` §9, `OPERATOR_GUIDE.md` §3, `README.md` Advanced Node Types, `CHANGELOG.md` entry; `fail_under` raised.
-
-**Cross-project dependency**: `mcp>=1.0` already declared in `pyproject.toml`. No new dependencies required for stdio transport.
-
-## 🟦 Phase 7.6: `mcp-pipe tool` Subcommand (Terminal ↔ MCP Bridge)
-
-**Status**: READY FOR IMPLEMENTATION
-**Priority**: HIGH (completes the terminal piping lineage claim)
-**Depends on**: Phase 7.5-A (server registry in `config_loader`) — schema can be shared
-**Plan**: [`plan/PHASE_8_MCP_TOOL_SUBCOMMAND.md`](plan/PHASE_8_MCP_TOOL_SUBCOMMAND.md)
-
-### Vision
-
-Terminal piping has always been bounded by what is on `PATH`. Phase 7.6 removes that ceiling. A new `mcp-pipe tool <server> <tool-name>` subcommand turns any MCP server — local (context-mode, serena) or remote (GitHub, Firecrawl) — into a first-class shell pipe node, loaded on demand:
-
-```bash
-# pipe a file through context-mode index tool
-cat myfile.py | mcp-pipe tool context-mode ctx_execute
-
-# chain terminal + MCP tools freely
-cat error.log | mcp-pipe tool semantic-sift sift_logs | mcp-pipe tool github create_issue
-
-# full pipeline: terminal → MCP → terminal
-curl -s https://example.com | mcp-pipe tool firecrawl scrape | semantic-sift-cli doc
-```
-
-No wrapper scripts. No IDE required. The entire MCP ecosystem becomes composable with 50 years of Unix terminal tooling via a single subcommand.
-
-### Technical Summary
-
-- New CLI subcommand: `mcp-pipe tool <server-key> <tool-name> [--arg key=value ...]`
-- Reads `stdin`, calls the MCP tool via stdio transport, writes `stdout`
-- Server registry resolved from `pipes.json` `servers` block (shared with Phase 7.5)
-- Load-on-demand: server process spawned per call, no idle cost
-- Full timeout guard and telemetry accounting — same as any pipe node
-- `--list-tools` flag: introspects the server and prints available tools
-
-- [ ] **Phase 7.6-A**: CLI subcommand scaffold (`mcp-pipe tool`) + argument parsing + `--list-tools`
-- [ ] **Phase 7.6-B**: `_invoke_mcp_tool_stdio()` in `orchestrator.py` — spawn, call, stream stdout, timeout guard
-- [ ] **Phase 7.6-C**: Telemetry accounting + integration tests with mock FastMCP server
-- [ ] **Phase 7.6-D**: Docs — `ARCHITECTURE.md` §12, `OPERATOR_GUIDE.md`, `README.md`, `CHANGELOG.md`
-
----
+## 🟤 Phase 7: Dynamic Shadow Ecosystem (RAG for Tools) (Complete)
+- [x] **Dynamic Pipe Execution**: `context_pipe/dynamic.py` — `run_dynamic_pipe()` + `pipe_run_dynamic` MCP tool. Security boundary enforced (shell metacharacters rejected).
+- [x] **The `mcp-pipe` CLI**: `context_pipe/cli.py` — `mcp-pipe` terminal runner with `run`, `run-dynamic`, `list`, `stats`, `serve` subcommands.
+- [x] **Shadow Tool Discovery**: `context_pipe/shadow.py` — `list_shadow_tools()` + `pipe_list_shadow_tools` MCP tool. Probes 7 curated CLI tools on PATH.
+- [x] **Standalone Configuration**: `context_pipe/config_loader.py` — `load_pipes_config()` merges `pipes.json` + `~/.mcp-pipe.json` with local precedence.
+- [x] **Bash/Shell Synergy**: Enable arbitrary shell command integration (e.g., `bash`, `awk`, `grep`) within dynamic pipes, bounded by the final `semantic-sift` node.
+- [x] **MCP Node Type**: First-class MCP tool invocation as a `pipes.json` node. Schema support in `config_loader`; `async` orchestrator spine; `_run_mcp_node()` implementation.
+- [x] **`mcp-pipe tool` Subcommand**: Directly invoke any registered MCP tool from the shell. Supports `--arg key=value`, `--input-key`, and `-v` for telemetry.
 
 ## ⚫ Phase 8: The "Studio of Two" Endgame (Rust Core)
 - [ ] **Rust Rewrite**: Port the core stream orchestrator to Rust, achieving ultimate native speed and zero Python/Node memory bloat.
