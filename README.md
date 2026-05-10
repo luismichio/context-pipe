@@ -94,6 +94,7 @@ IDE hooks that apply pipes transparently after every tool call — without the a
 | **Adaptive Window Pressure** | Signals remaining context headroom to every node; `semantic-sift` auto-adjusts `--rate` accordingly. | [Environment Variables](#️-environment-variables) |
 | **Global Config** | Share pipe definitions and MCP server registries across all projects — local `pipes.json` always wins. | [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) |
 | **Shell Alias Injection** | `pipe_install_aliases` writes `mcp-pipe` / `cpipe` into your shell profile — terminal-ready without venv activation. | [Terminal Usage](#-terminal-usage-mcp-pipe-cli) |
+| **Git Protection** | `pipe_onboard` automatically updates `.gitignore` to protect internal artifacts from being committed. | [Auto-Onboard](#6-auto-onboard) |
 | **Context Balance Sheet** | Every pipe run is accounted: chars in, chars out, latency per node, agent attribution, net ROI. | [Telemetry & ROI](doc/OPERATOR_GUIDE.md) |
 
 ---

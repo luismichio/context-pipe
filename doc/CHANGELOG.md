@@ -5,6 +5,15 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] — 2026-05-11
+
+### 🛡️ Onboarding & Safety
+- **Gitignore Automation [Bug REPORT_002]**: The `pipe_onboard` tool now automatically appends internal artifacts (`.pipe_cache/`, `.pipe_identity`, `.pipe_telemetry.json`) to the project's `.gitignore` file, preventing accidental commits of local cache and telemetry data.
+- **Robust Hook Injection [Bug REPORT_004]**: Improved the `merge_hook_json` utility to recursively detect and deduplicate commands within nested "matcher" structures. This ensures cleaner hook registration for environments like Gemini CLI and Claude Code.
+- **Full Gemini CLI Lifecycle Support**: Enhanced Gemini CLI onboarding to inject both `AfterTool` (for real-time tool sifting) and `PreCompress` (for lifecycle context compaction) hooks into `.gemini/settings.json`.
+
+---
+
 ## [0.2.3] — 2026-05-10
 
 ### ✨ Zero-Config Onboarding

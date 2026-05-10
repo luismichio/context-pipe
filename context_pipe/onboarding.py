@@ -282,6 +282,34 @@ def get_security_gateway_command() -> str:
     )
 
 
+def update_gitignore(target_dir: str) -> str:
+    """
+    Ensures that Context-Pipe internal artifacts are ignored by Git.
+    Matches the pattern used by Semantic-Sift.
+    """
+    path = os.path.join(target_dir, ".gitignore")
+    entries = [".pipe_telemetry.json", ".pipe_cache/", ".pipe_identity"]
+    try:
+        content = ""
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+        added = []
+        for entry in entries:
+            if entry not in content:
+                added.append(entry)
+
+        if not added:
+            return "No changes needed to `.gitignore`."
+
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("\n# Project Specific (Context-Pipe)\n" + "\n".join(added) + "\n")
+        return f"Added artifacts to `.gitignore`: {', '.join(added)}"
+    except OSError as e:
+        return f"Error updating `.gitignore`: {str(e)}"
+
+
 def discover_agent_configs(target_dir: str) -> List[str]:
     """Recursively discovers specialized agent configurations and mandates."""
     found_paths = []
@@ -321,8 +349,31 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
         data["hooks"] = {}
     hooks_list = data["hooks"].get(hook_key, [])
 
+    # Recursive helper to extract all commands for duplicate detection
+    def get_commands(obj: Any) -> List[str]:
+        cmds = []
+        if isinstance(obj, dict):
+            if "command" in obj and isinstance(obj["command"], str):
+                cmds.append(obj["command"])
+            if "hooks" in obj and isinstance(obj["hooks"], list):
+                for h in obj["hooks"]:
+                    cmds.extend(get_commands(h))
+        elif isinstance(obj, list):
+            for item in obj:
+                cmds.extend(get_commands(item))
+        return cmds
+
+    new_cmds = get_commands(new_hook)
+    all_existing_cmds = get_commands(hooks_list)
+
     # Prevent duplicates
-    exists = any(h.get("command") == new_hook.get("command") for h in hooks_list)
+    # If we find a specific command match, it's a duplicate.
+    # Otherwise, fallback to exact dict equality.
+    if new_cmds:
+        exists = any(c in all_existing_cmds for c in new_cmds)
+    else:
+        exists = new_hook in hooks_list
+
     if not exists:
         data["hooks"][hook_key] = [new_hook] + hooks_list
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -632,6 +683,12 @@ def remove_shell_aliases() -> List[str]:
 def inject_hooks(target_dir: str, environment: str) -> List[str]:
     """Automates the injection of Context-Pipe hooks into various IDEs/CLIs."""
     actions = []
+
+    # 0. Git Protection (matches Semantic-Sift flow)
+    gitignore_status = update_gitignore(target_dir)
+    if "No changes needed" not in gitignore_status:
+        actions.append(f"Git Protection: {gitignore_status}")
+
     cmd_str = build_runtime_hook_command()
     env_lower = environment.lower()
 
@@ -782,6 +839,16 @@ Use this at any agent-to-agent handoff boundary to prevent context flooding.
             with open(os.path.join(gemini_dir, filename), "w") as f:
                 f.write(content)
         actions.append("Added /pipe-stats, /pipe-run, /pipe-dynamic, /pipe-handoff commands to Gemini CLI.")
+
+        # 3b. Gemini Hooks (AfterTool for sifting, PreCompress for compaction)
+        gemini_settings_path = os.path.join(target_dir, ".gemini", "settings.json")
+        for hook_key in ["AfterTool", "PreCompress"]:
+            if merge_hook_json(
+                gemini_settings_path,
+                hook_key,
+                {"matcher": ".*", "hooks": [{"name": "context-pipe", "type": "command", "command": cmd_str}]},
+            ):
+                actions.append(f"Injected Context-Pipe into Gemini CLI {hook_key} hooks.")
 
     # 4. OpenCode Injection
     if "opencode" in env_lower:

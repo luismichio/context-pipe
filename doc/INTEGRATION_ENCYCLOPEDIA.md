@@ -130,7 +130,7 @@ During onboarding, the engine performs a recursive crawl of the workspace (up to
 ## 5. Payload Structures & Interception Logic (`wrapper.py`)
 
 ### 1. Smart Hooks (CLI Agents & Plugins)
-*   **Gemini/OpenClaw**: Detects `AfterTool` or `Compacting` event names. Extracts `tool_response.llmContent`.
+*   **Gemini/OpenClaw**: Detects `AfterTool` or `PreCompress` event names. Extracts `tool_response.llmContent`.
 *   **Reinjection**: Injects ROI metrics into Gemini's `additionalContext` or prepends the **Audit Header** to the text result.
 *   **OpenCode**: Plugin hook (`tool.execute.after`) is registered but currently inactive for MCP tools — see compatibility note in Section 1. The `AGENTS.md` SOP mandate is the active strategy.
 

@@ -279,7 +279,7 @@ Both files share the same `pipes.json` schema (`version`, `pipes`, `mappings`). 
 
 ---
 
-## 11. Slash Command Injection (`context_pipe/onboarding.py`)
+## 11. Slash Command & Hook Injection (`context_pipe/onboarding.py`)
 
 Phase 4 of the CPP roadmap injects four slash commands as first-class commands into IDE runtimes that support them:
 
@@ -290,9 +290,18 @@ Phase 4 of the CPP roadmap injects four slash commands as first-class commands i
 | `/pipe-dynamic` | Cursor, Gemini, OpenCode | `.mdc` rule / `.toml` command / `opencode.json` | `pipe_list_shadow_tools` → build node graph → `pipe_run_dynamic` |
 | `/pipe-handoff` | Cursor, Gemini, OpenCode | `.mdc` rule / `.toml` command / `opencode.json` | `pipe_agent_handoff` at a named A2A boundary |
 
-Injection is idempotent — `inject_hooks()` checks for existing marker blocks before writing. The slash command injection is **distinct** from the Phase 2 Standard Shell Aliases (which targets POSIX/PowerShell profiles) and the Phase 2 `inject_shell_aliases()` function.
+### Robust Hook Deduplication (`merge_hook_json`)
+Hook injection for Cursor, VS Code, Gemini CLI, and Claude Code utilizes a high-fidelity recursive deduplication algorithm. `merge_hook_json` scans existing JSON hook structures for matching command strings even when nested within complex "matcher" arrays (used by Gemini and Claude). This prevents redundant middleware registrations and ensures a clean configuration state across all 12+ supported platforms.
 
-### Shell Alias Injection (`inject_shell_aliases` / `remove_shell_aliases`)
+### 11.2. Git Protection (`update_gitignore`)
+To maintain repository hygiene and prevent machine-specific paths or local cache data from being committed, `pipe_onboard` automatically updates the project's `.gitignore` file. It appends the following artifacts under a managed `# Project Specific (Context-Pipe)` section:
+- `.pipe_cache/` (Echo Guard storage)
+- `.pipe_identity` (Telemetry identifiers)
+- `.pipe_telemetry.json` (Local accounting data)
+
+The operation is idempotent and only appends missing entries.
+
+### 11.3. Shell Alias Injection (`inject_shell_aliases` / `remove_shell_aliases`)
 
 `inject_shell_aliases()` writes platform-aware marker blocks into `~/.bashrc`, `~/.zshrc`, or the PowerShell profile:
 
