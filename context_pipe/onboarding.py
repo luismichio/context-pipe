@@ -370,13 +370,24 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
     # If we find a specific command match, it's a duplicate.
     # Otherwise, fallback to exact dict equality.
     if new_cmds:
-        exists = any(c in all_existing_cmds for c in new_cmds)
+        # Instead of exact match, check if the core target module is present.
+        # This prevents duplicate injections when the python interpreter path changes.
+        def get_core_target(cmd: str) -> str:
+            if "context_pipe.orchestrator wrap" in cmd:
+                return "context_pipe.orchestrator wrap"
+            return cmd
+
+        normalized_new = [get_core_target(c) for c in new_cmds]
+        normalized_existing = [get_core_target(c) for c in all_existing_cmds]
+        exists = any(c in normalized_existing for c in normalized_new)
     else:
         exists = new_hook in hooks_list
 
     if not exists:
         data["hooks"][hook_key] = [new_hook] + hooks_list
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        dir_path = os.path.dirname(path)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
         return True

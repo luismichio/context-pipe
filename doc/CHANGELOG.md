@@ -5,6 +5,15 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] — 2026-05-11
+
+### 🛡️ Onboarding & Core
+- **Hook Idempotency [Bug REPORT_005]**: Refactored `merge_hook_json` to utilize core-target command normalization. Onboarding now correctly detects duplicate hook registrations even when the Python interpreter path changes (e.g., between global and venv runs).
+- **Robust Path Creation**: Fixed a Windows-specific robustness bug in `merge_hook_json` where `os.makedirs` was called on empty directory strings.
+- **Gemini CLI Protocol Alignment [Bug REPORT_006]**: Updated the payload injection logic for Gemini CLI to return the specific "Decision" schema (`decision: deny`). This ensures sifting results are correctly recognized by the platform's hook system.
+
+---
+
 ## [0.2.4] — 2026-05-11
 
 ### 🛡️ Onboarding & Safety

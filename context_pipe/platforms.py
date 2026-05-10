@@ -95,6 +95,10 @@ def inject_content(data: Dict, content: str, platform: str) -> Dict:
     """
     Injects processed content back into the platform-specific JSON payload.
     """
+    # 0. Gemini CLI specific hook response schema
+    if platform == "Gemini CLI":
+        return {"decision": "deny", "reason": content}
+
     # 1. Standard MCP / VSCode / Gemini / OpenCode Shape
     if "tool_response" in data and isinstance(data["tool_response"], dict):
         data["tool_response"]["llmContent"] = content

@@ -10,9 +10,9 @@ context_pipe/dynamic.py
 context_pipe/onboarding.py
 context_pipe/orchestrator.py
 context_pipe/platforms.py
+context_pipe/scripts.py
 context_pipe/server.py
 context_pipe/shadow.py
-context_pipe/skills.py
 context_pipe/telemetry.py
 context_pipe/wrapper.py
 mcp_context_pipe.egg-info/PKG-INFO
@@ -35,8 +35,9 @@ tests/test_onboarding.py
 tests/test_orchestrator.py
 tests/test_pipe_hook.py
 tests/test_platforms.py
+tests/test_scripts.py
+tests/test_server.py
 tests/test_shadow.py
-tests/test_skills.py
 tests/test_tee.py
 tests/test_telemetry.py
 tests/test_wrapper.py
