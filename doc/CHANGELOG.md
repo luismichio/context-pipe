@@ -5,7 +5,7 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.6] — 2026-05-11
+## [0.2.7] — 2026-05-11
 
 ### 🛡️ Orchestration & Telemetry
 - **Audit Header Robustness [Bug REPORT_001]**: Fixed a `KeyError` crash in `generate_audit_header` when generating trace logs for nodes that fail during execution.
