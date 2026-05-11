@@ -5,6 +5,20 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] — 2026-05-11
+
+### 🛡️ Orchestration & Telemetry
+- **Audit Header Robustness [Bug REPORT_001]**: Fixed a `KeyError` crash in `generate_audit_header` when generating trace logs for nodes that fail during execution.
+- **CLI Registry Leak [Bug REPORT_001]**: Fixed an issue where the `mcp-pipe run` and `run-dynamic` CLI commands failed to pass the server registry to the orchestrator, which previously broke MCP node resolution.
+- **MCP Command Parsing [Bug REPORT_001]**: Improved `_run_mcp_node` to safely handle server configurations where the `command` is defined as a string instead of a list (using `shlex.split`).
+- **Windows PATH Resolution [Bug REPORT_003]**: Fixed a binary discovery failure on Windows by explicitly passing the venv-aware `PATH` environment variable to `shutil.which()`.
+- **Silent Telemetry Gap [Bug REPORT_007]**: Changed the telemetry consent gate from opt-in to opt-out by default. This aligns the codebase with the project's documentation, ensuring that ROI and Context Balance Sheet statistics are automatically recorded unless explicitly disabled.
+- **Intelligent Hook Deduplication [Bug REPORT_008]**: Updated `merge_hook_json` to intelligently replace older versions of a hook (such as those missing necessary environment variables) instead of aggressively skipping when the core command is already present. This fixes the Gemini CLI environment detection failure.
+- **Python RuntimeWarning Suppression [Bug REPORT_009]**: Injected `-W ignore` into `build_runtime_hook_command()` to prevent native Python warnings from corrupting the JSON output stream expected by the hook pipelines.
+- **Gemini CLI Hook Timeout [Bug REPORT_010]**: Added explicit `"timeout": 10000` to the Gemini CLI `AfterTool` and `PreCompress` hook configurations. This prevents the CLI from prematurely terminating the context sifting process due to Python's cold-start latency, especially on Windows or inside fragmented virtual environments.
+
+---
+
 ## [0.2.5] — 2026-05-11
 
 ### 🛡️ Onboarding & Core

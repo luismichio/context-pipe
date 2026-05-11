@@ -61,7 +61,7 @@ def build_runtime_hook_command() -> str:
     """Builds the absolute command string to invoke the context-pipe wrapper."""
     python_exe = os.path.abspath(sys.executable)
     # We use 'python -m context_pipe.orchestrator wrap' for reliability
-    return f'"{python_exe}" -m context_pipe.orchestrator wrap'
+    return f'"{python_exe}" -W ignore -m context_pipe.orchestrator wrap'
 
 
 def discover_sift_executable() -> Optional[str]:
@@ -364,22 +364,27 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
         return cmds
 
     new_cmds = get_commands(new_hook)
-    all_existing_cmds = get_commands(hooks_list)
 
     # Prevent duplicates
-    # If we find a specific command match, it's a duplicate.
+    # If we find a specific command match, we update the existing hook.
     # Otherwise, fallback to exact dict equality.
     if new_cmds:
-        # Instead of exact match, check if the core target module is present.
-        # This prevents duplicate injections when the python interpreter path changes.
         def get_core_target(cmd: str) -> str:
             if "context_pipe.orchestrator wrap" in cmd:
                 return "context_pipe.orchestrator wrap"
             return cmd
 
         normalized_new = [get_core_target(c) for c in new_cmds]
-        normalized_existing = [get_core_target(c) for c in all_existing_cmds]
-        exists = any(c in normalized_existing for c in normalized_new)
+
+        def hook_has_target(hook_obj: Any, target: str) -> bool:
+            return any(get_core_target(c) == target for c in get_commands(hook_obj))
+
+        if new_hook in hooks_list:
+            return False  # Exactly present, nothing to do
+
+        # Filter out old versions of the same hook
+        hooks_list = [h for h in hooks_list if not any(hook_has_target(h, t) for t in normalized_new)]
+        exists = False
     else:
         exists = new_hook in hooks_list
 
@@ -857,7 +862,7 @@ Use this at any agent-to-agent handoff boundary to prevent context flooding.
             if merge_hook_json(
                 gemini_settings_path,
                 hook_key,
-                {"matcher": ".*", "hooks": [{"name": "context-pipe", "type": "command", "command": cmd_str}]},
+                {"matcher": ".*", "hooks": [{"name": "context-pipe", "type": "command", "command": cmd_str, "timeout": 10000, "env": {"GEMINI_SESSION_ID": "true"}}]},
             ):
                 actions.append(f"Injected Context-Pipe into Gemini CLI {hook_key} hooks.")
 

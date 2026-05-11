@@ -10,15 +10,13 @@ from typing import Dict, Any, List, Optional
 # Primary: CPP_TELEMETRY_FILE, Fallback: .pipe_telemetry.json
 TELEMETRY_FILE = os.environ.get("CPP_TELEMETRY_FILE") or os.environ.get("PIPE_TELEMETRY_FILE", ".pipe_telemetry.json")
 
-# Telemetry Consent Gate (Opt-In by Default)
-# Telemetry runs ONLY when CPP_TELEMETRY_OPTED_IN=true is explicitly set.
-# Legacy kill-switch CPP_TELEMETRY_DISABLED=true is still respected for backward compat.
-_OPTED_IN = os.environ.get("CPP_TELEMETRY_OPTED_IN", "").lower() == "true"
-_LEGACY_DISABLED = (
+# Telemetry Consent Gate (Opt-Out by Default)
+# Telemetry runs automatically to provide the Context Balance Sheet.
+# Kill-switch CPP_TELEMETRY_DISABLED=true is respected for privacy.
+PIPE_TELEMETRY_DISABLED = (
     os.environ.get("CPP_TELEMETRY_DISABLED", "").lower() == "true"
     or os.environ.get("PIPE_TELEMETRY_DISABLED", "").lower() == "true"
 )
-PIPE_TELEMETRY_DISABLED = not _OPTED_IN or _LEGACY_DISABLED
 
 # Locks for concurrent file access
 _TELEMETRY_LOCK = threading.Lock()
@@ -108,8 +106,8 @@ def generate_audit_header(pipe_name: str, trace: List[Dict[str, Any]], latency_m
     if not trace:
         return ""
 
-    start_size = trace[0]["input_size"]
-    end_size = trace[-1]["output_size"]
+    start_size = trace[0].get("input_size", 0)
+    end_size = trace[-1].get("output_size", 0)
 
     # Calculate Net ROI
     reduction = (1 - (end_size / start_size)) * 100 if start_size > 0 else 0

@@ -118,6 +118,7 @@ async def run_dynamic_pipe(
     input_text: str,
     tool_name: str = "dynamic",
     allow_shell: bool = False,
+    server_registry: dict[str, Any] | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """
     Executes an ad-hoc pipe defined by a caller-supplied node list.
@@ -131,6 +132,7 @@ async def run_dynamic_pipe(
                      grep, sed, jq, etc.) are permitted as intermediate nodes.
                      The final node MUST be semantic-sift-cli to guarantee context
                      safety.  Default False.
+        server_registry: Optional registry of MCP servers for MCP nodes.
 
     Returns:
         ``(result, trace)`` — same contract as ``run_pipe()``.
@@ -146,4 +148,4 @@ async def run_dynamic_pipe(
     _validate_nodes(nodes, allow_shell=allow_shell)
 
     pipe_config: dict[str, Any] = {"name": "dynamic", "nodes": nodes}
-    return await run_pipe(pipe_config, input_text, tool_name=tool_name)
+    return await run_pipe(pipe_config, input_text, tool_name=tool_name, server_registry=server_registry)

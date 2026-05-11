@@ -291,7 +291,10 @@ Phase 4 of the CPP roadmap injects four slash commands as first-class commands i
 | `/pipe-handoff` | Cursor, Gemini, OpenCode | `.mdc` rule / `.toml` command / `opencode.json` | `pipe_agent_handoff` at a named A2A boundary |
 
 ### Robust Hook Deduplication (`merge_hook_json`)
-Hook injection for Cursor, VS Code, Gemini CLI, and Claude Code utilizes a high-fidelity recursive deduplication algorithm. `merge_hook_json` scans existing JSON hook structures for matching command strings even when nested within complex "matcher" arrays (used by Gemini and Claude). This prevents redundant middleware registrations and ensures a clean configuration state across all 12+ supported platforms.
+Hook injection for Cursor, VS Code, Gemini CLI, and Claude Code utilizes a high-fidelity recursive deduplication algorithm. `merge_hook_json` scans existing JSON hook structures for matching core command strings even when nested within complex "matcher" arrays. To ensure seamless updates across versions, it employs an **Intelligent Replacement** strategy: if an older version of the hook is detected (e.g., missing new environment variables like `GEMINI_SESSION_ID`), it is safely filtered out and replaced with the upgraded payload without causing duplication.
+
+### Payload Stream Protection
+When invoking the orchestrator via IDE hooks, the Python executable is strictly invoked with the `-W ignore` flag (e.g., `python -W ignore -m context_pipe.orchestrator wrap`). This ensures that native `RuntimeWarning` or other standard error logs do not bleed into `stdout`, which would corrupt the JSON output stream expected by platforms like Gemini CLI and OpenCode.
 
 ### 11.2. Git Protection (`update_gitignore`)
 To maintain repository hygiene and prevent machine-specific paths or local cache data from being committed, `pipe_onboard` automatically updates the project's `.gitignore` file. It appends the following artifacts under a managed `# Project Specific (Context-Pipe)` section:

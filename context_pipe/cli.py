@@ -105,7 +105,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     t0 = time.monotonic()
     assert pipe is not None  # _die() exits above if pipe is None
-    result, trace = asyncio.run(run_pipe(pipe, input_text, tool_name="cli:run"))
+    result, trace = asyncio.run(run_pipe(pipe, input_text, tool_name="cli:run", server_registry=config.get("servers", {})))
     latency_ms = (time.monotonic() - t0) * 1000
 
     _print_audit(result, trace, args.pipe_name, latency_ms, verbose=getattr(args, "verbose", False))

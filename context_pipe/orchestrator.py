@@ -54,7 +54,8 @@ def resolve_node_cmd(cmd: str) -> str:
         return cmd
 
     # 2. PATH lookup (covers venv Scripts/bin injected by get_env_with_venv_path)
-    which_result = shutil.which(cmd)
+    env_path = get_env_with_venv_path().get("PATH")
+    which_result = shutil.which(cmd, path=env_path)
     if which_result:
         return which_result
 
@@ -229,6 +230,9 @@ async def _run_mcp_node(
     child_env = {**env, **resolved_env}
 
     cmd: list[str] = server_cfg["command"]
+    if isinstance(cmd, str):
+        import shlex
+        cmd = shlex.split(cmd)
     if not cmd:
         raise ValueError(f"Server '{server_key}' has an empty command list.")
 
