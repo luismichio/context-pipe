@@ -523,10 +523,17 @@ def main():
                 print(f"⚠️  Hook Fallbacks: {sheet['fallback_events']} (pipe failed; raw input passed through)")
             print("-----------------------------------------\n")
 
-    except Exception:
+    except Exception as e:
         # ABSOLUTE SAFETY: Never crash the hook.
         if raw_input:
-            sys.stdout.write(raw_input)
+            # Gemini CLI strictly requires a Decision Object schema even on error.
+            if os.environ.get("GEMINI_SESSION_ID"):
+                sys.stdout.write(json.dumps({
+                    "decision": "allow",
+                    "reason": f"Context-Pipe fallback (Error: {type(e).__name__})"
+                }))
+            else:
+                sys.stdout.write(raw_input)
         sys.exit(0)
 
 

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🛡️ Orchestration & Telemetry
 - **Gemini CLI Bypass Schema [Bug REPORT_011]**: Introduced a platform-aware bypass mechanism in the orchestrator wrapper. When a context pipe is bypassed (due to size, structured data, or echo detection), the system now correctly returns the `{"decision": "allow"}` schema required by the Gemini CLI, fixing "Hook failed" errors during transparent passthrough.
+- **Robust Exception Fallback [Bug REPORT_012]**: Updated the "Absolute Safety" fallback logic in both `pipe_hook.py` and `context_pipe/orchestrator.py` to be platform-aware. Internal Python exceptions (like import errors or IO failures) now correctly return a `{"decision": "allow"}` response to the Gemini CLI instead of raw JSON, preventing IDE warnings on error paths.
 
 ---
 

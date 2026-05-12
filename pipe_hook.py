@@ -37,7 +37,15 @@ def main():
             log_fallback_event(tool_name="unknown", reason=type(e).__name__)
         except Exception:
             pass
-        sys.stdout.write(raw_input)
+
+        # Gemini CLI strictly requires a Decision Object schema even on error.
+        if os.environ.get("GEMINI_SESSION_ID"):
+            sys.stdout.write(json.dumps({
+                "decision": "allow",
+                "reason": f"Context-Pipe fallback (Error: {type(e).__name__})"
+            }))
+        else:
+            sys.stdout.write(raw_input)
 
 
 if __name__ == "__main__":

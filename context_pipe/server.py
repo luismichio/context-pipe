@@ -226,6 +226,34 @@ def pipe_verify() -> str:
 
 
 @mcp.tool()
+def pipe_audit_last() -> str:
+    """
+    Returns the absolute last recorded telemetry event for manual auditing.
+    Use this to 'Trust but Verify' that the context reduction reported in
+    an audit header matches the actual data committed to the ledger.
+    """
+    from .telemetry import get_latest_telemetry
+    last = get_latest_telemetry()
+    if not last:
+        return "No telemetry events found in the ledger."
+
+    reduction = (1 - (last["final_chars"] / last["original_chars"])) * 100 if last["original_chars"] > 0 else 0
+
+    return f"""
+## 🔍 Context-Pipe Audit: Last Event
+
+- **Tool Call:** `{last['tool_key']}`
+- **Original Size:** {last['original_chars']:,} chars
+- **Final Size:** {last['final_chars']:,} chars
+- **Net Reduction:** {reduction:.1f}%
+- **Latency:** {last['total_latency_ms']:.1f}ms
+- **Platform:** {last['platform']}
+- **Agent Label:** {last['agent']}
+- **Session ID:** `{last['session_id']}`
+    """
+
+
+@mcp.tool()
 def pipe_onboard(environment: str, target_dir: Optional[str] = None) -> str:
     """
     Initializes Context-Pipe hooks and commands in the current project.

@@ -154,6 +154,47 @@ def log_fallback_event(tool_name: str, reason: str) -> None:
         pass
 
 
+def get_latest_telemetry() -> Optional[Dict[str, Any]]:
+    """Retrieves the absolute last recorded telemetry event across all sessions."""
+    if not os.path.exists(TELEMETRY_FILE):
+        return None
+
+    try:
+        with _TELEMETRY_LOCK:
+            with open(TELEMETRY_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if not data:
+                return None
+
+            # 1. Get the most recent session (last key in the dict)
+            session_keys = list(data.keys())
+            if not session_keys:
+                return None
+            
+            # Filter out fallback sentinel
+            session_keys = [k for k in session_keys if k != "__fallbacks__"]
+            if not session_keys:
+                return None
+                
+            last_session_id = session_keys[-1]
+            last_session = data[last_session_id]
+
+            # 2. Get the most recent tool call in that session
+            tools = last_session.get("tools", {})
+            if not tools:
+                return None
+
+            last_tool_key = list(tools.keys())[-1]
+            result = tools[last_tool_key].copy()
+            result["tool_key"] = last_tool_key
+            result["session_id"] = last_session_id
+            return result
+
+    except Exception:
+        return None
+
+
 def get_balance_sheet() -> Dict[str, Any]:
     """Calculates context ROI by aggregating all sessions.
     Filters out 'node' level events to prevent double counting with 'mcp' protocol events.

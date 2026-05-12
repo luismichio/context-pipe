@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Luis Kobayashi. All rights reserved.
 
+import os
 import json
 import time
 import uuid
@@ -27,9 +28,14 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     Parses an incoming tool response, applies the optimal context pipe,
     and returns the re-wrapped JSON response.
     """
+    debug = os.environ.get("CPP_DEBUG", "").lower() == "true"
+
     try:
         data = json.loads(raw_json)
     except json.JSONDecodeError:
+        if debug:
+            import sys
+            sys.stderr.write("[CPP DEBUG] Error: Invalid JSON input to wrapper.\n")
         return raw_json
 
     start_t = time.time()
@@ -40,6 +46,9 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
 
     # 2. Signature Check (Bypass)
     if CPP_SIGNATURE in str(raw_content):
+        if debug:
+            import sys
+            sys.stderr.write(f"[CPP DEBUG] Bypassing '{tool_name}': Signature detected.\n")
         return _generate_bypass_payload(raw_json, platform)
 
     # 2.5 Structured Data Exemption
@@ -47,6 +56,9 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     try:
         parsed = json.loads(str(raw_content))
         if isinstance(parsed, (dict, list)):
+            if debug:
+                import sys
+                sys.stderr.write(f"[CPP DEBUG] Bypassing '{tool_name}': Structured JSON detected.\n")
             return _generate_bypass_payload(raw_json, platform)
     except (json.JSONDecodeError, TypeError):
         pass
@@ -54,21 +66,34 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     # 4. Dynamic Routing
     pipe_name = resolve_pipe_from_context(config, str(tool_name), len(str(raw_content)))
     if not pipe_name:
+        if debug:
+            import sys
+            sys.stderr.write(f"[CPP DEBUG] Bypassing '{tool_name}': No routing match found.\n")
         return _generate_bypass_payload(raw_json, platform)
 
     # 3. Guard: Echo Detection (Disk-Based)
     # Scoped to pipe_name to prevent false suppression cross-pipe
     if check_echo(str(raw_content), pipe_name=pipe_name):
+        if debug:
+            import sys
+            sys.stderr.write(f"[CPP DEBUG] Bypassing '{tool_name}': Echo Guard hit (recently processed).\n")
         return _generate_bypass_payload(raw_json, platform)
 
     pipe = next((p for p in config.get("pipes", []) if p["name"] == pipe_name), None)
     if not pipe:
+        if debug:
+            import sys
+            sys.stderr.write(f"[CPP DEBUG] Error: Pipe '{pipe_name}' matched but not found in config.\n")
         return _generate_bypass_payload(raw_json, platform)
 
     # 5. Execution
     try:
         sifted_content, trace = asyncio.run(run_pipe(pipe, str(raw_content), tool_name=tool_name, agent_label=agent_label))
         latency_ms = (time.time() - start_t) * 1000
+
+        if debug:
+            import sys
+            sys.stderr.write(f"[CPP DEBUG] Intercepted '{tool_name}': Applied '{pipe_name}' ({len(str(raw_content))} -> {len(sifted_content)}) in {latency_ms:.1f}ms\n")
 
         # 6. Telemetry (Accounting per node)
         latency_per_node = latency_ms / max(1, len(trace))
