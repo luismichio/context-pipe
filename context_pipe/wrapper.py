@@ -15,6 +15,13 @@ WRAPPER_SESSION_ID = f"hook-{uuid.uuid4().hex[:8]}"
 WRAPPER_START_TIME = time.ctime()
 
 
+def _generate_bypass_payload(raw_json: str, platform: str) -> str:
+    """Returns the platform-correct payload to silently bypass sifting."""
+    if platform == "Gemini CLI":
+        return json.dumps({"decision": "allow"})
+    return raw_json
+
+
 def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     """
     Parses an incoming tool response, applies the optimal context pipe,
@@ -33,30 +40,30 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
 
     # 2. Signature Check (Bypass)
     if CPP_SIGNATURE in str(raw_content):
-        return raw_json
+        return _generate_bypass_payload(raw_json, platform)
 
     # 2.5 Structured Data Exemption
     # Do not pipe valid JSON dictionaries or lists (e.g., Serena outputs)
     try:
         parsed = json.loads(str(raw_content))
         if isinstance(parsed, (dict, list)):
-            return raw_json
+            return _generate_bypass_payload(raw_json, platform)
     except (json.JSONDecodeError, TypeError):
         pass
 
     # 4. Dynamic Routing
     pipe_name = resolve_pipe_from_context(config, str(tool_name), len(str(raw_content)))
     if not pipe_name:
-        return raw_json
+        return _generate_bypass_payload(raw_json, platform)
 
     # 3. Guard: Echo Detection (Disk-Based)
     # Scoped to pipe_name to prevent false suppression cross-pipe
     if check_echo(str(raw_content), pipe_name=pipe_name):
-        return raw_json
+        return _generate_bypass_payload(raw_json, platform)
 
     pipe = next((p for p in config.get("pipes", []) if p["name"] == pipe_name), None)
     if not pipe:
-        return raw_json
+        return _generate_bypass_payload(raw_json, platform)
 
     # 5. Execution
     try:

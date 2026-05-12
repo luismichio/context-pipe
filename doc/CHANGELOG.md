@@ -5,6 +5,13 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.8] — 2026-05-11
+
+### 🛡️ Orchestration & Telemetry
+- **Gemini CLI Bypass Schema [Bug REPORT_011]**: Introduced a platform-aware bypass mechanism in the orchestrator wrapper. When a context pipe is bypassed (due to size, structured data, or echo detection), the system now correctly returns the `{"decision": "allow"}` schema required by the Gemini CLI, fixing "Hook failed" errors during transparent passthrough.
+
+---
+
 ## [0.2.7] — 2026-05-11
 
 ### 🛡️ Orchestration & Telemetry
