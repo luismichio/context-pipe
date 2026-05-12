@@ -187,8 +187,15 @@ Context-Pipe supports five distinct node types, plus advanced chaining patterns:
 ### A. Binary Nodes (Default)
 Executes a standalone binary or Python script.
 ```json
-{ "cmd": "sift-core", "args": ["logs"] }
+{ "cmd": "sift-core", "args": ["logs"], "optional": true }
 ```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cmd` | string | Yes | The executable or binary name. |
+| `args` | array | No | Command-line arguments. |
+| `optional` | boolean | No | If `true`, the pipeline continues if the node fails. Default: `false`. |
+| `help_msg` | string | No | Custom instruction shown if binary is missing. |
 
 ### B. Bash Nodes (`shell: true`)
 Executes arbitrary shell commands. Ideal for using standard Unix utilities.
@@ -484,6 +491,18 @@ Incoming content or task
 | `/pipe-run` | Cursor, Gemini, OpenCode | `list_pipes` → user picks → `pipe_run` |
 | `/pipe-dynamic` | Cursor, Gemini, OpenCode | `pipe_list_shadow_tools` → build graph → confirm → `pipe_run_dynamic` |
 | `/pipe-handoff` | Cursor, Gemini, OpenCode | `pipe_agent_handoff` at named A2A boundary |
+
+---
+
+## 10. Troubleshooting & Platform Notes
+
+### Gemini CLI: "Tool result blocked"
+When using the Gemini CLI, you will frequently see a message saying **`Tool result blocked:`** followed by the sifted text.
+
+**This is not an error.** It is the intended behavior of the Gemini hook protocol:
+- To replace raw tool output with sifted text, Context-Pipe must return a `decision: deny` command to the CLI.
+- The Gemini CLI interprets this "Denial" as a security block and displays the warning label in the UI.
+- In reality, the sifting was successful and the agent received the reduced context as intended.
 
 ---
 *Building Systems, not Patches.*

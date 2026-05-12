@@ -44,6 +44,11 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     platform = detect_client_id()
     raw_content, tool_name, agent_label = extract_content(data, platform)
 
+    if debug:
+        import sys
+        content_peek = str(raw_content)[:100].replace("\n", " ")
+        sys.stderr.write(f"[CPP DEBUG] Platform: {platform}, Tool: {tool_name}, Content: {content_peek}...\n")
+
     # 2. Signature Check (Bypass)
     if CPP_SIGNATURE in str(raw_content):
         if debug:

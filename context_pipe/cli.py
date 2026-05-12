@@ -32,7 +32,7 @@ from typing import Optional
 from mcp.client.stdio import stdio_client, StdioServerParameters
 from mcp.client.session import ClientSession
 
-from .config_loader import load_pipes_config, _resolve_env_placeholders
+from .config_loader import load_pipes_config, resolve_placeholders
 from .dynamic import run_dynamic_pipe
 from .onboarding import inject_shell_aliases, remove_shell_aliases
 from .orchestrator import run_pipe, _run_mcp_node, get_env_with_venv_path
@@ -245,7 +245,7 @@ async def _list_server_tools(server_cfg: dict, env: dict) -> list[dict]:
 
     Returns a list of dicts: ``[{"name": str, "description": str, "inputSchema": dict}]``
     """
-    resolved_env = _resolve_env_placeholders(server_cfg.get("env", {}))
+    resolved_env = resolve_placeholders(server_cfg.get("env", {}), env)
     child_env = {**env, **resolved_env}
     cmd: list[str] = server_cfg["command"]
 
@@ -447,7 +447,18 @@ def _build_parser() -> argparse.ArgumentParser:
 # Entry point
 # ---------------------------------------------------------------------------
 
+def _reconfigure_io() -> None:
+    """Forces stdout/stderr to UTF-8 on Windows to prevent emoji rendering crashes."""
+    import sys
+    if os.name == "nt":
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8")
+
+
 def main() -> None:
+    _reconfigure_io()
     parser = _build_parser()
     args = parser.parse_args()
 

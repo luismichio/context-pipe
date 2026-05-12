@@ -16,7 +16,7 @@ from typing import List, Dict, Any, Optional
 
 from mcp.client.stdio import stdio_client, StdioServerParameters
 from mcp.client.session import ClientSession
-from .config_loader import _resolve_env_placeholders
+from .config_loader import resolve_placeholders
 
 # Metadata Signatures
 CPP_SIGNATURE = "--- [Context-Pipe: Native Execution] ---"
@@ -217,7 +217,7 @@ async def _run_mcp_node(
     server_key = node["server"]
     tool_name = node["tool"]
     input_key = node.get("input_key", "content")
-    static_args: dict = {k: v for k, v in node.get("args", {}).items()}
+    static_args: dict = resolve_placeholders(node.get("args", {}), env)
 
     server_cfg = server_registry.get(server_key)
     if not server_cfg:
@@ -226,13 +226,18 @@ async def _run_mcp_node(
             f"Available: {list(server_registry.keys()) or '(none)'}"
         )
 
-    resolved_env = _resolve_env_placeholders(server_cfg.get("env", {}))
+    resolved_env = resolve_placeholders(server_cfg.get("env", {}), env)
     child_env = {**env, **resolved_env}
 
-    cmd: list[str] = server_cfg["command"]
-    if isinstance(cmd, str):
+    cmd_raw = server_cfg["command"]
+    if isinstance(cmd_raw, str):
         import shlex
-        cmd = shlex.split(cmd)
+        cmd = shlex.split(cmd_raw)
+    else:
+        cmd = list(cmd_raw)
+
+    cmd = resolve_placeholders(cmd, child_env)
+    
     if not cmd:
         raise ValueError(f"Server '{server_key}' has an empty command list.")
 
@@ -284,9 +289,10 @@ async def run_pipe(
             continue
 
         node_type = node.get("type", "binary")
+        is_optional = node.get("optional", False)
 
         if node_type == "mcp":
-            # ... (mcp logic)
+            # --- MCP tool path ---
             start_size = len(current_input)
             tee_path: Optional[str] = None
             tee_config = node.get("tee")
@@ -297,14 +303,20 @@ async def run_pipe(
             except asyncio.TimeoutError:
                 error_text = f"--- [Context-Pipe: Timeout] ---\nMCP node {node['server']}/{node['tool']} exceeded {node_timeout}s."
                 trace.append({"node": f"mcp:{node['server']}/{node['tool']}", "error": "Timeout"})
+                if is_optional:
+                    continue
                 return error_text, trace
             except ValueError as exc:
                 error_text = f"--- [Context-Pipe: MCP Error] ---\n{exc}"
                 trace.append({"node": f"mcp:{node['server']}/{node['tool']}", "error": str(exc)})
+                if is_optional:
+                    continue
                 return error_text, trace
             except Exception as exc:
                 error_text = f"--- [Context-Pipe: MCP Unexpected Error] ---\n{exc}"
                 trace.append({"node": f"mcp:{node['server']}/{node['tool']}", "error": str(exc)})
+                if is_optional:
+                    continue
                 return error_text, trace
 
             end_size = len(stdout)
@@ -332,7 +344,7 @@ async def run_pipe(
             if os.path.exists(py_script):
                 # Execute Python script
                 resolved_cmd = sys.executable
-                args = [py_script] + [str(a) for a in node.get("args", [])]
+                raw_args = [py_script] + [str(a) for a in node.get("args", [])]
             elif os.path.exists(md_mandate):
                 # Mandate Prepend Logic
                 with open(md_mandate, "r", encoding="utf-8") as f:
@@ -353,13 +365,14 @@ async def run_pipe(
             else:
                 # Fallback to binary resolution if script not found
                 resolved_cmd = resolve_node_cmd(node["cmd"])
-                args = [str(a) for a in node.get("args", [])]
+                raw_args = [str(a) for a in node.get("args", [])]
             
-            cmd = [resolved_cmd] + args
+            cmd = resolve_placeholders([resolved_cmd] + raw_args, process_env)
         else:
             # --- Existing subprocess path ---
             resolved_cmd = resolve_node_cmd(node["cmd"])
-            cmd = [resolved_cmd] + [str(a) for a in node.get("args", [])]
+            raw_args = [resolved_cmd] + [str(a) for a in node.get("args", [])]
+            cmd = resolve_placeholders(raw_args, process_env)
 
         start_size = len(current_input)
 
@@ -388,17 +401,23 @@ async def run_pipe(
                 stdout, stderr = process.communicate()
                 error_text = f"--- [Context-Pipe: Timeout] ---\nNode {node['cmd']} exceeded {node_timeout}s."
                 trace.append({"node": node["cmd"], "error": "Timeout"})
+                if is_optional:
+                    continue
                 return error_text, trace
 
             if process.returncode != 0:
                 # Record error in trace
                 trace.append({"node": node["cmd"], "error": stderr.strip()})
+                if is_optional:
+                    continue
                 return f"Error in node {node['cmd']}: {stderr}", trace
 
         except FileNotFoundError:
             help_msg = node.get("help_msg", f"Command '{node['cmd']}' not found in system PATH.")
             error_text = f"--- [Context-Pipe: Dependency Error] ---\n{help_msg}"
             trace.append({"node": node["cmd"], "error": "FileNotFound"})
+            if is_optional:
+                continue
             return error_text, trace
 
         end_size = len(stdout)
@@ -446,7 +465,18 @@ def load_config(config_path: str = "pipes.json") -> Dict[str, Any]:
     return config
 
 
+def _reconfigure_io() -> None:
+    """Forces stdout/stderr to UTF-8 on Windows to prevent emoji rendering crashes."""
+    import sys
+    if os.name == "nt":
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8")
+
+
 def main():
+    _reconfigure_io()
     # 1. Capture raw input immediately for safety fallback
     raw_input = None
     if not sys.stdin.isatty():
@@ -520,7 +550,7 @@ def main():
             print(f"Platform Events:   {sheet['total_events']}")
             print(f"Avg Node Latency:  {sheet['avg_latency_ms']:.2f}ms")
             if sheet.get("fallback_events", 0) > 0:
-                print(f"⚠️  Hook Fallbacks: {sheet['fallback_events']} (pipe failed; raw input passed through)")
+                print(f"âš ï¸  Hook Fallbacks: {sheet['fallback_events']} (pipe failed; raw input passed through)")
             print("-----------------------------------------\n")
 
     except Exception as e:

@@ -7,7 +7,7 @@
       "description": "The flagship log sifting template.",
       "nodes": [
         {
-          "cmd": "semantic-sift-cli",
+          "cmd": "C:\\Users\\luism\\Workbench\\GitHub\\context-pipe\\venv\\Scripts\\semantic-sift-cli.exe",
           "args": [
             "logs"
           ],
@@ -20,7 +20,7 @@
       "description": "High-intelligence neural distillation template (Hybrid Engine).",
       "nodes": [
         {
-          "cmd": "semantic-sift-cli",
+          "cmd": "C:\\Users\\luism\\Workbench\\GitHub\\context-pipe\\venv\\Scripts\\semantic-sift-cli.exe",
           "args": [
             "semantic",
             "--rate",
@@ -35,7 +35,7 @@
       "description": "Complete ingestion and distillation chain (Smart Sift).",
       "nodes": [
         {
-          "cmd": "semantic-sift-cli",
+          "cmd": "C:\\Users\\luism\\Workbench\\GitHub\\context-pipe\\venv\\Scripts\\semantic-sift-cli.exe",
           "args": [
             "auto",
             "--rate",
@@ -50,7 +50,7 @@
       "description": "Search optimization chain (Rank -> Sift).",
       "nodes": [
         {
-          "cmd": "semantic-sift-cli",
+          "cmd": "C:\\Users\\luism\\Workbench\\GitHub\\context-pipe\\venv\\Scripts\\semantic-sift-cli.exe",
           "args": [
             "rank",
             "--top-n",
@@ -59,7 +59,7 @@
           "help_msg": "semantic-sift-cli not found. Please install via: uv tool install semantic-sift"
         },
         {
-          "cmd": "semantic-sift-cli",
+          "cmd": "C:\\Users\\luism\\Workbench\\GitHub\\context-pipe\\venv\\Scripts\\semantic-sift-cli.exe",
           "args": [
             "semantic",
             "--rate",
@@ -81,25 +81,25 @@
           "help_msg": "findstr not found. On Unix, use 'grep' instead."
         }
       ]
-      }
-      ],
-      "mappings": [
-      {
+    }
+  ],
+  "mappings": [
+    {
       "trigger": "tool:search|grep|find",
       "pipe": "rerank-and-sift"
-      },
-      {
+    },
+    {
       "trigger": "size:>10000",
       "pipe": "semantic-refinery"
-      },
-      {
-      "trigger": "default",
+    },
+    {
+      "trigger": "size:>500",
       "pipe": "standard-distill"
-      }
-      ],
-      "servers": {
-      "_comment": "Uncomment and configure MCP servers for use as pipe nodes (Phase 7.5).",
-      "_example_firecrawl": {
+    }
+  ],
+  "servers": {
+    "_comment": "Uncomment and configure MCP servers for use as pipe nodes (Phase 7.5).",
+    "_example_firecrawl": {
       "command": [
         "python",
         "-m",
@@ -108,6 +108,6 @@
       "env": {
         "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
       }
-      }
-      }
-      }
+    }
+  }
+}

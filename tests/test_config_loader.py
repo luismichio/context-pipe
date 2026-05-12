@@ -145,7 +145,7 @@ def test_env_placeholder_resolved():
     env = {"MY_VAR": "secret-value"}
     with patch.dict(os.environ, env):
         env_dict = {"API_KEY": "${MY_VAR}"}
-        resolved = config_loader._resolve_env_placeholders(env_dict)
+        resolved = config_loader.resolve_placeholders(env_dict)
         assert resolved["API_KEY"] == "secret-value"
 
 
@@ -153,13 +153,13 @@ def test_env_placeholder_unknown_left_as_is():
     """${UNKNOWN_VAR} left verbatim, no exception."""
     with patch.dict(os.environ, {}, clear=True):
         env_dict = {"API_KEY": "${UNKNOWN_VAR}"}
-        resolved = config_loader._resolve_env_placeholders(env_dict)
+        resolved = config_loader.resolve_placeholders(env_dict)
         assert resolved["API_KEY"] == "${UNKNOWN_VAR}"
 
 
 def test_env_placeholder_empty_dict():
     """Empty env dict returns empty dict."""
-    assert config_loader._resolve_env_placeholders({}) == {}
+    assert config_loader.resolve_placeholders({}) == {}
 
 
 def test_load_local_malformed_falls_back_to_global():

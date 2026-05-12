@@ -131,6 +131,8 @@ During onboarding, the engine performs a recursive crawl of the workspace (up to
 
 ### 1. Smart Hooks (CLI Agents & Plugins)
 *   **Gemini/OpenClaw**: Detects `AfterTool` or `PreCompress` event names. Extracts `tool_response.llmContent`.
+    *   **Decision Schema**: Uses the explicit `{"decision": "deny", "reason": "..."}` schema for content modification.
+    *   **UI Note**: In the Gemini CLI, a successful interception will display as **`Tool result blocked:`** followed by the reason (the sifted text). This is expected platform behavior, as the CLI interprets the protocol-level "denial" of the original text as a security block.
 *   **Reinjection**: Injects ROI metrics into Gemini's `additionalContext` or prepends the **Audit Header** to the text result.
 *   **OpenCode**: Plugin hook (`tool.execute.after`) is registered but currently inactive for MCP tools — see compatibility note in Section 1. The `AGENTS.md` SOP mandate is the active strategy.
 

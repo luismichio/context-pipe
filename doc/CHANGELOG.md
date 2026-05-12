@@ -5,6 +5,22 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.9] — 2026-05-12
+
+### ✨ Features & Fidelity
+- **Recursive Placeholder Resolution [Bug REPORT_013]**: Upgraded the environment variable resolver to be fully recursive. The orchestrator now resolves `${VAR}` tokens anywhere in the `pipes.json` configuration, including node arguments, script parameters, and nested server settings. This enables "Adaptive Window Pressure" by allowing pipes to dynamically adjust behavior based on host environment signals.
+- **Trust & Audit System**:
+    - **`pipe_audit_last`**: New MCP tool for agents to verify the absolute last recorded sifting event against the on-disk telemetry ledger.
+    - **`CPP_DEBUG=true`**: New human-facing debug mode using `stderr` to print real-time sifting decisions (Intercepted vs. Bypassed) directly to the chat interface without polluting JSON payloads.
+- **Loop Protection for Admin Tools**: Added `CPP_SIGNATURE` to all administrative MCP tools (`pipe_audit_last`, `get_pipe_stats`, `pipe_verify`, etc.) to prevent recursive sifting loops.
+- **Windows Unicode Robustness [Bug REPORT_014]**: Added a `_reconfigure_io()` utility to both the CLI and Orchestrator entry points. This forcefully reconfigures `stdout`/`stderr` to use UTF-8 on Windows, preventing `UnicodeEncodeError` crashes when printing emojis in the Audit Header or Balance Sheet.
+- **Resilient Orchestration [Bug REPORT_015]**: Introduced the `optional: true` flag for pipe nodes. If a node is marked as optional, the orchestrator will record any failure (Timeout, FileNotFound, or Exit Code) in the trace but will continue executing the remaining nodes in the pipe instead of aborting.
+- **Hook Configuration Fidelity [Bug REPORT_017]**: Fixed an issue where the Gemini CLI hook would ignore critical environment variables. The onboarder now injects `GEMINI_SESSION_ID` and `PYTHONPATH` directly into the `command` string using platform-aware shell syntax, ensuring protocol compliance and module discovery.
+- **Subconscious Noise Floor**: Integrated a 500-character floor to automatically silence `Blocked` UI messages for tiny status updates and edits.
+- **Reference Updates**: Updated `pipes.json.example` to showcase the new `optional` flags and recursive `${VAR}` resolution patterns.
+
+---
+
 ## [0.2.8] — 2026-05-11
 
 ### 🛡️ Orchestration & Telemetry

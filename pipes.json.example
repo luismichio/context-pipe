@@ -26,82 +26,28 @@
       ]
     },
     {
-      "name": "secure-distill",
-      "description": "PII Masking -> Log Distillation.",
+      "name": "resilient-chain",
+      "description": "Demonstrates the 'optional' flag for experimental nodes.",
       "nodes": [
         {
-          "type": "script",
-          "cmd": "pii-masker"
+          "cmd": "experimental-linter",
+          "optional": true,
+          "help_msg": "Experimental linter skipped because it was not found in PATH."
         },
         {
           "cmd": "semantic-sift-cli",
-          "args": ["logs"]
+          "args": ["semantic", "--rate", "0.4"]
         }
       ]
     },
     {
-      "name": "error-focus-chain",
-      "description": "Extracts only error lines via grep, then compresses them.",
-      "_note": "Use bare 'grep' — PATH resolution handles the full path at runtime.",
+      "name": "adaptive-chain",
+      "description": "Demonstrates recursive placeholders for Adaptive Window Pressure.",
       "nodes": [
-        {
-          "cmd": "grep",
-          "args": ["-i", "error"],
-          "help_msg": "grep not found. On Windows, use 'findstr' with args [\"error\"]."
-        },
         {
           "cmd": "semantic-sift-cli",
-          "args": ["semantic", "--rate", "0.6"],
-          "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
-        }
-      ]
-    },
-    {
-      "name": "architectural-review",
-      "description": "Applies security and architecture lenses, then sifts.",
-      "nodes": [
-        {
-          "type": "script",
-          "cmd": "security-auditor"
-        },
-        {
-          "type": "script",
-          "cmd": "performance-auditor"
-        },
-        {
-          "cmd": "semantic-sift-cli",
-          "args": ["auto", "--rate", "0.4"],
-          "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
-        }
-      ]
-    },
-    {
-      "name": "advanced-ingestion-chain",
-      "description": "Bring your own parser: Custom LlamaIndex/MarkItDown parser piped directly into the native Rust sidecar.",
-      "nodes": [
-        {
-          "cmd": "python",
-          "args": ["-m", "my_custom_parser"]
-        },
-        {
-          "cmd": "sift-core",
-          "args": ["semantic", "--rate", "0.4"],
-          "help_msg": "sift-core not found. Run 'uv tool install semantic-sift' (includes sift-core binary)."
-        }
-      ]
-    },
-    {
-      "name": "react-expert-chain",
-      "description": "Pre-processes code through an expert instruction lens before sifting.",
-      "nodes": [
-        {
-          "type": "script",
-          "cmd": "react-code-fix-linter"
-        },
-        {
-          "cmd": "semantic-sift-cli",
-          "args": ["semantic", "--rate", "0.6"],
-          "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
+          "args": ["semantic", "--rate", "${SIFT_RATE}"],
+          "help_msg": "Set SIFT_RATE environment variable to dynamically adjust compression."
         }
       ]
     }
@@ -120,7 +66,7 @@
       "pipe": "semantic-refinery"
     },
     {
-      "trigger": "default",
+      "trigger": "size:>500",
       "pipe": "standard-distill"
     }
   ],
@@ -134,13 +80,6 @@
       "env": {
         "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
       }
-    },
-    "context-mode": {
-      "command": [
-        "python",
-        "-m",
-        "context_mode.server"
-      ]
     }
   }
 }

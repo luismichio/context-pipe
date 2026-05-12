@@ -58,6 +58,19 @@ The orchestrator utilizes `subprocess.Popen` to create memory-resident pipes bet
 - **`stdout` (The Output)**: The node's transformed data is captured and passed to the next node's `stdin`.
 - **`stderr` (The Error Stream)**: Redirected to a trace map to ensure node failures are reported without polluting the data stream.
 
+#### Node Schema
+Each node is a dictionary following this schema:
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `cmd` | string | (required) | Binary name, script path, or shell command. |
+| `args` | array | `[]` | List of arguments passed to the command. |
+| `type` | string | `"binary"` | `"binary"`, `"script"`, or `"mcp"`. |
+| `optional` | boolean | `false` | If `true`, orchestration continues even if the node fails. |
+| `help_msg` | string | `""` | User-friendly instruction shown on node failure. |
+| `shell` | boolean | `false` | (DEPRECATED) Enables shell interpolation. |
+| `tee` | object | `null` | Optional T-Pipe configuration for stream splitting. |
+
 ### The Timeout Guard
 Every node execution is wrapped in a **Timeout Guard** (default: 30s, configurable via `PIPE_NODE_TIMEOUT_MS`). If a node hangs (e.g., a stalled network fetch or a heavy neural model), the orchestrator kills the process, prevents an IDE freeze, and returns a structured `--- [Context-Pipe: Timeout] ---` response.
 
@@ -79,6 +92,13 @@ run_pipe()
 ```
 
 The orchestrator manages the full lifecycle of the MCP server connection for each node, ensuring clean teardown and timeout enforcement.
+
+### Resilient Orchestration (Failure-Bypass)
+By default, the orchestrator follows a **Fail-Fast** strategy: any node failure (FileNotFound, Timeout, or Non-zero Exit Code) aborts the entire pipe.
+
+To support complex "Mental Supply Chains," nodes may be marked as **Optional** (`"optional": true`) in `pipes.json`.
+- **Optional nodes** that fail will record the error in the trace but will **not** abort the execution.
+- The pipeline will continue using the `stdin` from the failed optional node as the input for the next node in the chain.
 
 ---
 

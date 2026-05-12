@@ -50,7 +50,7 @@ DEFAULT_PIPES_CONFIG = {
             "pipe": "semantic-refinery",
         },
         {
-            "trigger": "default",
+            "trigger": "size:>500",
             "pipe": "standard-distill",
         },
     ],
@@ -858,11 +858,19 @@ Use this at any agent-to-agent handoff boundary to prevent context flooding.
 
         # 3b. Gemini Hooks (AfterTool for sifting, PreCompress for compaction)
         gemini_settings_path = os.path.join(target_dir, ".gemini", "settings.json")
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        # Move environment variables into the command string itself (schema compliance)
+        if os.name == "nt":
+            gemini_cmd = f"$env:GEMINI_SESSION_ID='true'; $env:PYTHONPATH='{root_dir}'; {cmd_str}"
+        else:
+            gemini_cmd = f"GEMINI_SESSION_ID=true PYTHONPATH='{root_dir}' {cmd_str}"
+
         for hook_key in ["AfterTool", "PreCompress"]:
             if merge_hook_json(
                 gemini_settings_path,
                 hook_key,
-                {"matcher": ".*", "hooks": [{"name": "context-pipe", "type": "command", "command": cmd_str, "timeout": 10000, "env": {"GEMINI_SESSION_ID": "true"}}]},
+                {"name": "context-pipe", "type": "command", "command": gemini_cmd, "timeout": 10000},
             ):
                 actions.append(f"Injected Context-Pipe into Gemini CLI {hook_key} hooks.")
 

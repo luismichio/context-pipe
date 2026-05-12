@@ -12,7 +12,7 @@ precedence over global ones.
 import json
 import logging
 import os
-import re as _re
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -77,21 +77,36 @@ def load_pipes_config(local_path: str = "pipes.json") -> dict:
     }
 
 
-def _resolve_env_placeholders(env_dict: dict) -> dict:
+def resolve_placeholders(obj: Any, env: dict | None = None) -> Any:
     """
-    Resolves ``${VAR}`` tokens in env values from the host environment.
+    Recursively resolves ``${VAR}`` placeholders in strings, lists, and dicts.
 
-    Unknown variables are left as-is (not raised — allows partial resolution).
+    Args:
+        obj: The object to resolve placeholders within.
+        env: Optional environment dictionary. Defaults to os.environ.
     """
-    resolved = {}
-    for key, value in env_dict.items():
+    import os
+    import re as _re
+
+    # Use a local copy or the provided dict to ensure type safety
+    effective_env: dict = dict(os.environ) if env is None else env
+
+    if isinstance(obj, str):
 
         def _replace(m: _re.Match) -> str:
             var = m.group(1)
-            return os.environ.get(var, m.group(0))  # leave unreplaced if missing
+            # leave unreplaced if missing
+            return str(effective_env.get(var, m.group(0)))
 
-        resolved[key] = _re.sub(r"\$\{([^}]+)\}", _replace, str(value))
-    return resolved
+        return _re.sub(r"\$\{([^}]+)\}", _replace, obj)
+
+    if isinstance(obj, list):
+        return [resolve_placeholders(item, effective_env) for item in obj]
+
+    if isinstance(obj, dict):
+        return {k: resolve_placeholders(v, effective_env) for k, v in obj.items()}
+
+    return obj
 
 
 # ---------------------------------------------------------------------------
