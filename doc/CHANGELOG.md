@@ -5,7 +5,7 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.9] — 2026-05-12
+## [0.3.0] — 2026-05-12
 
 ### ✨ Features & Fidelity
 - **Recursive Placeholder Resolution [Bug REPORT_013]**: Upgraded the environment variable resolver to be fully recursive. The orchestrator now resolves `${VAR}` tokens anywhere in the `pipes.json` configuration, including node arguments, script parameters, and nested server settings. This enables "Adaptive Window Pressure" by allowing pipes to dynamically adjust behavior based on host environment signals.
