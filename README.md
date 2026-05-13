@@ -3,7 +3,7 @@
 **The Universal Standard for Context Engineering.**
 
 [![CI](https://github.com/luismichio/context-pipe/actions/workflows/ci.yml/badge.svg)](https://github.com/luismichio/context-pipe/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/Tests-242%20Passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-243%20Passing-brightgreen)](tests/)
 [![Python](https://img.shields.io/pypi/pyversions/mcp-context-pipe)](https://pypi.org/project/mcp-context-pipe/)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue)](LICENSE.md)
 [![OSI](https://img.shields.io/badge/OSI-Approved-brightgreen)](https://opensource.org/licenses/Apache-2.0)
@@ -90,7 +90,9 @@ IDE hooks that apply pipes transparently after every tool call — without the a
 | **Dynamic Pipes** | AI agents construct and execute ad-hoc node lists at runtime via `pipe_run_dynamic` — no `pipes.json` entry required. | [Dynamic Pipes](#dynamic-pipes) |
 | **Shadow MCP Registry** | Keep utility MCP servers invisible to the agent's tool list until needed. `pipe_list_shadow_tools` queries them on demand. | [Shadow MCP Registry](#shadow-mcp-registry) |
 | **A2A Agent Handoff** | Distil Agent A's output before it enters Agent B's context window — framework-agnostic, no monkey-patching. | [A2A Handoff](#-a2a-agent-to-agent-handoff) |
-| **T-Pipe Stream Splitting** | Save a raw copy of any node's input to disk before it is distilled — for audit, debugging, and quality measurement. | [T-Pipe Nodes](#3-t-pipe-nodes-stream-splitting) |
+| **Version Awareness** | Proactive GitHub-backed update alerts in `pipe_verify` and `pipe_onboard` to ensure environment parity. | [Health Checks](doc/OPERATOR_GUIDE.md) |
+| **Stream Integrity** | Hardened orchestration engine with non-UTF8 robustness (`errors="replace"`) and null-safe reading. | [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) |
+| **T-Pipe Stream Splitting** | Save a raw copy of any node's input to disk before it is distilled — for audit, debugging, and quality measurement. | [3. T-Pipe Nodes (Stream Splitting)](#3-t-pipe-nodes-stream-splitting) |
 | **Adaptive Window Pressure** | Signals remaining context headroom to every node; `semantic-sift` auto-adjusts `--rate` accordingly. | [Environment Variables](#️-environment-variables) |
 | **Global Config** | Share pipe definitions and MCP server registries across all projects — local `pipes.json` always wins. | [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) |
 | **Shell Alias Injection** | `pipe_install_aliases` writes `mcp-pipe` / `cpipe` into your shell profile — terminal-ready without venv activation. | [Terminal Usage](#-terminal-usage-mcp-pipe-cli) |
@@ -371,6 +373,7 @@ Server definitions live in a `servers` block in `pipes.json` or `~/.mcp-pipe.jso
 Context-Pipe is a foundational member of the **Studio of Two** infrastructure. It is designed to work in high-fidelity harmony with:
 
 *   **[Semantic-Sift](https://github.com/luismichio/semantic-sift)**: The intelligent refinery for agentic context. Sift is the flagship distillation engine for Context-Pipe, providing the mathematical and neural sifting nodes used in our standard templates.
+*   **[std-context-lab](https://github.com/luismichio/std-context-lab)**: The official integration laboratory. This repository is strictly used for end-to-end integration testing, bug discovery, and verifying cross-repo compatibility between `context-pipe` and `semantic-sift`.
 
 ---
 

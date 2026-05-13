@@ -74,6 +74,11 @@ Each node is a dictionary following this schema:
 ### The Timeout Guard
 Every node execution is wrapped in a **Timeout Guard** (default: 30s, configurable via `PIPE_NODE_TIMEOUT_MS`). If a node hangs (e.g., a stalled network fetch or a heavy neural model), the orchestrator kills the process, prevents an IDE freeze, and returns a structured `--- [Context-Pipe: Timeout] ---` response.
 
+### Stream Integrity & Robustness
+Context-Pipe is hardened against protocol violations caused by malformed or non-UTF8 output from pipe nodes.
+- **Decoding Safety**: All subprocess streams (`stdout`, `stderr`) are decoded using `errors="replace"`. This ensures that binary data or invalid byte sequences do not trigger `UnicodeDecodeError` crashes in the orchestration engine.
+- **Null-Safety**: Internal reading threads include robust `None` checks for process streams, preventing `TypeError` during high-pressure or timed-out execution paths.
+
 ### MCP Node Execution Path
 In addition to standard binary nodes, Context-Pipe supports first-class MCP nodes (`type: "mcp"`). Instead of spawning a subprocess for every call, it uses the MCP `stdio` transport to communicate with registered servers.
 
@@ -180,6 +185,12 @@ Once the binary is discovered, `resolve_pipes_config` rewrites every `semantic-s
 
 The results are surfaced via the `pipe_verify` MCP tool, which also auto-runs `resolve_pipes_config` to link sift before reporting.
 
+### Version Awareness & Self-Heal (`check_for_updates`)
+
+To ensure environment parity and reduce "Setup Fatigue," Context-Pipe includes a proactive version checker:
+- **GitHub-Backed**: The system queries the GitHub Releases API to identify the latest stable tag (`vX.Y.Z`).
+- **Seamless Integration**: Update checks are automatically performed during `pipe_onboard` and `pipe_verify`. 
+- **Actionable Alerts**: If a newer version is available, the system returns a formatted warning with the exact `pip install --upgrade` command required to self-heal the environment.
 
 ---
 

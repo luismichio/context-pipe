@@ -427,6 +427,16 @@ Overall: ✅ All systems operational.
 
 If semantic-sift is not found, the report will include actionable install instructions.
 
+### Version Awareness & Self-Heal
+
+Context-Pipe proactively checks for updates during `pipe_verify` and `pipe_onboard`. If a newer version is available on GitHub, the report will include a warning:
+
+```
+âš ï¸  Update Available: A newer version (v0.3.1) is available. Run `pip install --upgrade mcp-context-pipe` to apply.
+```
+
+This ensures you are always testing against the latest stable primitives without needing to manually monitor the repository.
+
 ### Supported Install Patterns
 
 | Pattern | Works? |
