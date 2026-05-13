@@ -11,6 +11,40 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 
+def check_for_updates() -> Optional[str]:
+    """
+    Checks the GitHub API for the latest release tag and compares it to the local version.
+    Returns an update warning string if a newer version is available, else None.
+    """
+    import urllib.request
+    import json
+    from importlib.metadata import version, PackageNotFoundError
+
+    try:
+        local_version = version("mcp-context-pipe")
+    except PackageNotFoundError:
+        return None  # Development/editable mode or not installed via pip
+
+    url = "https://api.github.com/repos/luismichio/context-pipe/releases/latest"
+    req = urllib.request.Request(url, headers={"User-Agent": f"Context-Pipe-CLI/{local_version}"})
+    
+    try:
+        with urllib.request.urlopen(req, timeout=1.5) as response:  # nosec B310
+            data = json.loads(response.read().decode("utf-8"))
+            latest_tag = data.get("tag_name", "")
+            
+            # Simple version comparison assuming vX.Y.Z format
+            latest_version = latest_tag.lstrip("v")
+            if latest_version and latest_version != local_version:
+                return (
+                    f"⚠️ Update Available: A newer version ({latest_tag}) is available. "
+                    f"Run `pip install --upgrade mcp-context-pipe` to apply."
+                )
+    except Exception:
+        pass
+    
+    return None
+
 DEFAULT_PIPES_CONFIG = {
     "version": "1.0",
     "description": "Standard context pipes for sifting and refinery.",
@@ -258,7 +292,12 @@ def verify_installation(pipes_json_path: Optional[str] = None) -> Dict[str, Any]
                     }
                 )
 
-    # 5. Overall
+    # 5. Version Awareness
+    update_warning = check_for_updates()
+    if update_warning:
+        report["update_warning"] = update_warning
+
+    # 6. Overall
     report["overall"] = report["context_pipe"]["ok"] and report["pipes_config"]["ok"] and report["semantic_sift"]["ok"]
 
     return report
@@ -736,6 +775,10 @@ def inject_hooks(target_dir: str, environment: str) -> List[str]:
             "semantic-sift-cli not found. Pipes will use PATH fallback. "
             "Run 'uv tool install semantic-sift' or 'uv pip install mcp-context-pipe[sift]' then re-run pipe_onboard."
         )
+
+    update_warning = check_for_updates()
+    if update_warning:
+        actions.append(update_warning)
 
     # 1. Cursor Injection
     if "cursor" in env_lower:

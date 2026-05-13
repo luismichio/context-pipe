@@ -219,6 +219,10 @@ def pipe_verify() -> str:
 
     # overall
     lines.append("")
+    if report.get("update_warning"):
+        lines.append(report["update_warning"])
+        lines.append("")
+
     if report["overall"]:
         lines.append("**Overall: ✅ All systems operational.**")
     else:

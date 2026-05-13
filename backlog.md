@@ -83,6 +83,7 @@ Once upstream support lands:
 - [ ] **Rust Rewrite**: Port the core stream orchestrator to Rust, achieving ultimate native speed and zero Python/Node memory bloat.
 - [ ] **Tauri Synergy**: Integrate the Rust crate directly into Meechi/Side-Hustle as a native cognitive ingestion engine, eliminating the need for standalone sidecars.
 - [ ] **Universal CLI (`cpipe`)**: Expose the Rust engine as a compiled `cpipe` binary on PATH — same interface as `mcp-pipe` but zero Python dependency and ~5ms startup. Supersedes the Phase 2 shell alias; users simply remove the alias once the binary is installed.
+- [ ] **Dual-Layer Agent Integration (The "Belt and Suspenders" Pattern)**: Research and implement a generalized approach for publishing `context-pipe` native packages for agent frameworks (e.g., Pi, OpenCode). This involves bundling an **Extension** (for programmatic tool replacement/interception) with a **SKILL.md** (for cognitive discovery and intent shaping), mimicking the highly effective architecture seen in the `context-mode` package.
 
 ## 🔹 Phase 9: Pipe Transparency Layer (Planned)
 

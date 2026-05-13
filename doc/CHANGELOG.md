@@ -5,6 +5,12 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] — 2026-05-13
+
+### 🛡️ Orchestration & Fidelity
+- **Update Awareness & Self-Heal [Bug REPORT_019]**: Integrated a GitHub-backed version checker into the orchestrator. The `pipe_verify` and `pipe_onboard` tools now proactively alert the user when a newer version is available in the repository, reducing setup fatigue and ensuring environment parity.
+- **Stream Integrity & UTF-8 Robustness [Bug REPORT_020]**: Hardened the orchestrator against protocol violations caused by non-UTF8 output. Subprocess streams are now decoded using `errors="replace"`, and internal reading threads have been made null-safe, preventing session crashes when nodes output binary data or garbage bytes.
+
 ## [0.3.0] — 2026-05-12
 
 ### ✨ Features & Fidelity

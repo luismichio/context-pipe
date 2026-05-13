@@ -390,6 +390,7 @@ async def run_pipe(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                errors="replace",
                 shell=False,
                 env=process_env,
             )
@@ -399,11 +400,22 @@ async def run_pipe(
             except subprocess.TimeoutExpired:
                 process.kill()
                 stdout, stderr = process.communicate()
+                
+                if stdout is None:
+                    stdout = ""
+                if stderr is None:
+                    stderr = ""
+                
                 error_text = f"--- [Context-Pipe: Timeout] ---\nNode {node['cmd']} exceeded {node_timeout}s."
                 trace.append({"node": node["cmd"], "error": "Timeout"})
                 if is_optional:
                     continue
                 return error_text, trace
+
+            if stdout is None:
+                stdout = ""
+            if stderr is None:
+                stderr = ""
 
             if process.returncode != 0:
                 # Record error in trace
