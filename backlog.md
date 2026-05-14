@@ -19,7 +19,7 @@
 - [x] **Pure Switchboard Refactor**: Removed internal nodes to achieve 100% agnostic status.
 - [x] **Pipe Templates**: Professional recipes for `sift-core` and `markitdown`.
 - [x] **Mandate Ecosystem**: Formalized "Expert Lenses" as local Mandate Nodes (`.md` files in `.gemini/scripts/`).
-- [ ] **Adaptive Thresholding** *(delegated to `semantic-sift`)*: Dynamically adjust `--rate` based on estimated remaining context window headroom. The triggering signal (payload size, tool name) originates in `context-pipe` routing, but the rate adjustment logic belongs in `semantic-sift`'s kernel. Implementation path: `context-pipe` passes a `PIPE_WINDOW_PRESSURE` env var (0.0–1.0) to each node; `semantic-sift-cli` reads it and overrides `--rate` if set. Tracked in `semantic-sift` backlog; listed here as a cross-project dependency.
+
 
 ## ⚪ Phase 4: Distribution (Complete)
 - [x] **PyPI Publishing**: `pip install mcp-context-pipe` — live at [pypi.org/project/mcp-context-pipe](https://pypi.org/project/mcp-context-pipe/) (v0.2.2).
@@ -127,3 +127,12 @@ Real-time `[PIPE]` log lines emitted to `stderr` as a native behaviour of the pi
 - [ ] **Phase 9-A**: `_emit_pipe_log()` in `orchestrator.py` + `logging` block parsing in `config_loader`. Unit tests for each level + field combination.
 - [ ] **Phase 9-B**: `PIPE_LOG_LEVEL` / `PIPE_LOG_PREFIX` env var support + global default merge with per-pipe override. Tests for precedence.
 - [ ] **Phase 9-C**: Docs — `OPERATOR_GUIDE.md` §3 node schema, `ARCHITECTURE.md` §1, `README.md` Environment Variables table, `CHANGELOG.md`.
+
+## 🟩 Phase 10: Sandboxing & Protocol Security (Done)
+
+Implementing the MCP `roots` protocol to securely handle sandboxing without relying on global overrides or arbitrary working directories.
+
+- [x] **Dynamic Root Discovery**: Implement `request_roots()` via the MCP session to dynamically retrieve the allowed workspace boundaries from the client (e.g., Antigravity, VS Code).
+- [x] **Path Traversal Guard Upgrade**: Refactor `resolve_safe_path()` to validate file reads against the dynamically provided `roots` list.
+- [x] **Graceful CWD Fallback**: Ensure that clients lacking `roots` support gracefully degrade to using `os.getcwd()`.
+- [x] **Deprecate Global Bypass**: Formalize the removal of `SIFT_ALLOW_GLOBAL_READS` flag, as it is made obsolete by the dynamic roots implementation.

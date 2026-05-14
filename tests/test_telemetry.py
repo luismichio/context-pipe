@@ -5,7 +5,7 @@
 Tests for context_pipe/telemetry.py.
 
 Covers:
-- log_telemetry writes a session entry to the telemetry file.
+- log_telemetry writes a session entry to the telemetry file in jsonl format.
 - Balance sheet totals accumulate correctly across calls.
 - No raw tool content appears in the telemetry log.
 - log_telemetry is a no-op when telemetry is disabled.
@@ -25,7 +25,7 @@ from context_pipe import telemetry as tel
 @pytest.fixture(autouse=True)
 def isolated_telemetry(tmp_path, monkeypatch):
     """Redirect telemetry writes to a temp file for every test."""
-    temp_file = str(tmp_path / "test_telemetry.json")
+    temp_file = str(tmp_path / "test_telemetry.jsonl")
     monkeypatch.setattr(tel, "TELEMETRY_FILE", temp_file)
     monkeypatch.setattr(tel, "PIPE_TELEMETRY_DISABLED", False)
     yield temp_file
@@ -45,20 +45,19 @@ def test_log_telemetry_creates_session_entry(isolated_telemetry):
     )
 
     with open(isolated_telemetry) as f:
-        data = json.load(f)
+        lines = f.readlines()
 
-    assert sid in data
-    tools = data[sid]["tools"]
-    assert len(tools) == 1
-    key = list(tools.keys())[0]
-    assert "grep_search" in key
-    assert tools[key]["calls"] == 1
-    assert tools[key]["original_chars"] == 1000
-    assert tools[key]["final_chars"] == 600
+    assert len(lines) == 1
+    event = json.loads(lines[0])
+
+    assert event["session_id"] == sid
+    assert "grep_search" in event["tool_name"]
+    assert event["original_chars"] == 1000
+    assert event["final_chars"] == 600
 
 
 def test_log_telemetry_accumulates_across_calls(isolated_telemetry):
-    """Multiple calls to the same session/tool must accumulate, not overwrite."""
+    """Multiple calls to the same session/tool must accumulate in the balance sheet."""
     sid = f"test-{uuid.uuid4().hex}"
     for _ in range(3):
         tel.log_telemetry(
@@ -72,13 +71,13 @@ def test_log_telemetry_accumulates_across_calls(isolated_telemetry):
         )
 
     with open(isolated_telemetry) as f:
-        data = json.load(f)
+        lines = f.readlines()
 
-    tool_key = list(data[sid]["tools"].keys())[0]
-    stats = data[sid]["tools"][tool_key]
-    assert stats["calls"] == 3
-    assert stats["original_chars"] == 1500
-    assert stats["final_chars"] == 900
+    assert len(lines) == 3
+    
+    sheet = tel.get_balance_sheet()
+    assert sheet["total_events"] == 3
+    assert sheet["noise_removed"] == 600  # (500-300)*3 = 600
 
 
 def test_log_telemetry_no_raw_content_stored(isolated_telemetry):
@@ -102,20 +101,20 @@ def test_log_telemetry_no_raw_content_stored(isolated_telemetry):
     assert "final_chars" in raw_file_contents
     # Verify sizes (metadata) are present but no additional uncontrolled blobs
     with open(isolated_telemetry) as f:
-        data = json.load(f)
-    session = data[sid]
-    for tool_stats in session["tools"].values():
-        assert "calls" in tool_stats
-        assert "original_chars" in tool_stats
-        assert "final_chars" in tool_stats
-        # No 'content', 'payload', 'body', or 'text' field should exist
-        for forbidden in ("content", "payload", "body", "text", "prompt"):
-            assert forbidden not in tool_stats
+        lines = f.readlines()
+        
+    event = json.loads(lines[0])
+    
+    assert "original_chars" in event
+    assert "final_chars" in event
+    # No 'content', 'payload', 'body', or 'text' field should exist
+    for forbidden in ("content", "payload", "body", "text", "prompt"):
+        assert forbidden not in event
 
 
 def test_log_telemetry_disabled_is_noop(tmp_path, monkeypatch):
     """When PIPE_TELEMETRY_DISABLED is True, the file must not be created."""
-    temp_file = str(tmp_path / "should_not_exist.json")
+    temp_file = str(tmp_path / "should_not_exist.jsonl")
     monkeypatch.setattr(tel, "TELEMETRY_FILE", temp_file)
     monkeypatch.setattr(tel, "PIPE_TELEMETRY_DISABLED", True)
 
@@ -133,7 +132,7 @@ def test_log_telemetry_disabled_is_noop(tmp_path, monkeypatch):
 
 def test_get_balance_sheet_no_file(tmp_path, monkeypatch):
     """get_balance_sheet must return a zeroed sheet when no telemetry file exists."""
-    monkeypatch.setattr(tel, "TELEMETRY_FILE", str(tmp_path / "nonexistent.json"))
+    monkeypatch.setattr(tel, "TELEMETRY_FILE", str(tmp_path / "nonexistent.jsonl"))
     sheet = tel.get_balance_sheet()
     assert sheet["total_events"] == 0
     assert sheet["net_change"] == 0

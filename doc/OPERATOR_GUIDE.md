@@ -197,10 +197,10 @@ Executes a standalone binary or Python script.
 | `optional` | boolean | No | If `true`, the pipeline continues if the node fails. Default: `false`. |
 | `help_msg` | string | No | Custom instruction shown if binary is missing. |
 
-### B. Bash Nodes (`shell: true`)
-Executes arbitrary shell commands. Ideal for using standard Unix utilities.
+### B. Bash Nodes (Sandboxed)
+Executes allowlisted shell commands (e.g., `grep`, `awk`). By design, all commands are executed natively with `shell=False` to prevent injection vulnerabilities.
 ```json
-{ "cmd": "grep 'ERROR' | head -n 50", "shell": true }
+{ "cmd": "grep", "args": ["ERROR"] }
 ```
 
 ### C. Script Nodes
@@ -213,7 +213,7 @@ This chain uses OS bash to auto-format the code with `eslint`, applies React 19 
 {
   "name": "react-expert-chain",
   "nodes": [
-    { "cmd": "npx", "args": ["eslint", "--stdin", "--fix-dry-run"], "shell": true },
+    { "cmd": "npx", "args": ["eslint", "--stdin", "--fix-dry-run"] },
     { "type": "script", "cmd": "react-code-fix-linter" },
     { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.6"] }
   ]
@@ -287,8 +287,8 @@ Because Context-Pipe is simply OS-level `stdin`/`stdout`, there is no theoretica
   "name": "the-god-pipe",
   "description": "Fetch -> Extract -> Grep -> Mask -> Sift",
   "nodes": [
-    { "cmd": "curl", "args": ["-s", "https://raw.githubusercontent.com/kubernetes/kubernetes/master/CHANGELOG/CHANGELOG-1.30.md"], "shell": true },
-    { "cmd": "grep", "args": ["-i", "API"], "shell": true },
+    { "cmd": "curl", "args": ["-s", "https://raw.githubusercontent.com/kubernetes/kubernetes/master/CHANGELOG/CHANGELOG-1.30.md"] },
+    { "cmd": "grep", "args": ["-i", "API"] },
     { "type": "script", "cmd": "pii-masker" },
     { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.2"] }
   ]

@@ -30,7 +30,8 @@ Before acting on any non-trivial task, produce a plan first.
 **Execution Guidelines**:
 - **Pythonic Excellence**: Use Python 3.10+ features, type hints, and follow PEP 8.
 - **Standard I/O First**: Ensure every new tool or node supports `stdin`/`stdout` streaming.
-- **Verification**: Run `scripts/audit.bat` before every commit to ensure the quality gate is green.
+- **Atomic Commits**: Keep fixes surgical and aligned with the specific bug report being addressed.
+- **Verification**: Run `scripts/audit.bat` (or local test scripts) before every commit to ensure the quality gate is green.
 - **Deviations**: Document the reason, explain the alternative, and ask for approval before proceeding.
 
 ---
@@ -60,6 +61,13 @@ Before acting on any non-trivial task, produce a plan first.
 ---
 
 # 🛡️ Operational Constraints
+
+### 🛡️ Operational Isolation (Sovereign Dual-Repo)
+To maintain architectural integrity and prevent environment pollution, follow these rules:
+
+1. **std-context-lab is READ-ONLY**: This repository is used for integration testing and bug discovery. NEVER write to, modify, or commit changes within `std-context-lab`. Use it only for research, reading bug reports, and verifying fixes (via read-only observation).
+2. **Core Development**: All implementation, bug fixes, and documentation updates must happen in the core repositories (`context-pipe` or `semantic-sift`).
+3. **No Cross-Pollination**: Do not move files or state between the lab and core projects unless explicitly instructed.
 
 ### 🛑 The Interrogative Shield
 If user input contains **Questions** (`?`, `How`, `Why`, `Analyze`), enter **READ-ONLY MODE**.

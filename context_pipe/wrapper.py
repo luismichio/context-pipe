@@ -6,10 +6,13 @@ import json
 import time
 import uuid
 import asyncio
+import logging
 from typing import Dict, Any
 from .platforms import detect_client_id, extract_content, inject_content
 from .orchestrator import run_pipe, resolve_pipe_from_context, CPP_SIGNATURE, check_echo
 from .telemetry import log_telemetry, generate_audit_header
+
+logger = logging.getLogger(__name__)
 
 # Global session for the wrapper (hook context)
 WRAPPER_SESSION_ID = f"hook-{uuid.uuid4().hex[:8]}"
@@ -29,13 +32,14 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     and returns the re-wrapped JSON response.
     """
     debug = os.environ.get("CPP_DEBUG", "").lower() == "true"
+    if debug:
+        logging.basicConfig(level=logging.DEBUG)
 
     try:
         data = json.loads(raw_json)
     except json.JSONDecodeError:
         if debug:
-            import sys
-            sys.stderr.write("[CPP DEBUG] Error: Invalid JSON input to wrapper.\n")
+            logger.debug("[CPP DEBUG] Error: Invalid JSON input to wrapper.")
         return raw_json
 
     start_t = time.time()
@@ -45,15 +49,13 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     raw_content, tool_name, agent_label = extract_content(data, platform)
 
     if debug:
-        import sys
         content_peek = str(raw_content)[:100].replace("\n", " ")
-        sys.stderr.write(f"[CPP DEBUG] Platform: {platform}, Tool: {tool_name}, Content: {content_peek}...\n")
+        logger.debug(f"[CPP DEBUG] Platform: {platform}, Tool: {tool_name}, Content: {content_peek}...")
 
     # 2. Signature Check (Bypass)
     if CPP_SIGNATURE in str(raw_content):
         if debug:
-            import sys
-            sys.stderr.write(f"[CPP DEBUG] Bypassing '{tool_name}': Signature detected.\n")
+            logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': Signature detected.")
         return _generate_bypass_payload(raw_json, platform)
 
     # 2.5 Structured Data Exemption
@@ -62,8 +64,7 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
         parsed = json.loads(str(raw_content))
         if isinstance(parsed, (dict, list)):
             if debug:
-                import sys
-                sys.stderr.write(f"[CPP DEBUG] Bypassing '{tool_name}': Structured JSON detected.\n")
+                logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': Structured JSON detected.")
             return _generate_bypass_payload(raw_json, platform)
     except (json.JSONDecodeError, TypeError):
         pass
@@ -72,23 +73,20 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     pipe_name = resolve_pipe_from_context(config, str(tool_name), len(str(raw_content)))
     if not pipe_name:
         if debug:
-            import sys
-            sys.stderr.write(f"[CPP DEBUG] Bypassing '{tool_name}': No routing match found.\n")
+            logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': No routing match found.")
         return _generate_bypass_payload(raw_json, platform)
 
     # 3. Guard: Echo Detection (Disk-Based)
     # Scoped to pipe_name to prevent false suppression cross-pipe
     if check_echo(str(raw_content), pipe_name=pipe_name):
         if debug:
-            import sys
-            sys.stderr.write(f"[CPP DEBUG] Bypassing '{tool_name}': Echo Guard hit (recently processed).\n")
+            logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': Echo Guard hit (recently processed).")
         return _generate_bypass_payload(raw_json, platform)
 
     pipe = next((p for p in config.get("pipes", []) if p["name"] == pipe_name), None)
     if not pipe:
         if debug:
-            import sys
-            sys.stderr.write(f"[CPP DEBUG] Error: Pipe '{pipe_name}' matched but not found in config.\n")
+            logger.debug(f"[CPP DEBUG] Error: Pipe '{pipe_name}' matched but not found in config.")
         return _generate_bypass_payload(raw_json, platform)
 
     # 5. Execution
@@ -97,8 +95,7 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
         latency_ms = (time.time() - start_t) * 1000
 
         if debug:
-            import sys
-            sys.stderr.write(f"[CPP DEBUG] Intercepted '{tool_name}': Applied '{pipe_name}' ({len(str(raw_content))} -> {len(sifted_content)}) in {latency_ms:.1f}ms\n")
+            logger.debug(f"[CPP DEBUG] Intercepted '{tool_name}': Applied '{pipe_name}' ({len(str(raw_content))} -> {len(sifted_content)}) in {latency_ms:.1f}ms")
 
         # 6. Telemetry (Accounting per node)
         latency_per_node = latency_ms / max(1, len(trace))

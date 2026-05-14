@@ -17,7 +17,7 @@ Every tool in the pipe must support `stdin` for input and `stdout` for output.
 
 ### 2. The Native Execution Signature (The Bypass)
 To prevent **Double-Sifting** (infinite loops or data destruction by reactive hooks), any tool that performs native context distillation MUST append the following signature to its output:
-`--- [Semantic-Sift: Native Execution] ---`
+`--- [Context-Pipe: Native Execution] ---`
 
 When a "Blind Hook" (like Cursor or VS Code) sees this signature, it must instantly pass the data through without further modification.
 
@@ -52,7 +52,7 @@ function searchAndStream(query) {
     const sifted = spawnSync('sift-core', ['logs'], { input: rawResults });
     
     // Return clean data with the Native Signature
-    return sifted.stdout.toString() + "\n--- [Semantic-Sift: Native Execution] ---";
+    return sifted.stdout.toString() + "\n--- [Context-Pipe: Native Execution] ---";
 }
 ```
 

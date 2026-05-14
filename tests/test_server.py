@@ -5,7 +5,9 @@
 import os
 import json
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock, AsyncMock
+import mcp.types as t
+from mcp.server.fastmcp import Context
 
 from context_pipe import server
 
@@ -13,6 +15,15 @@ from context_pipe import server
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.fixture
+def mock_context(tmp_path):
+    ctx = MagicMock(spec=Context)
+    ctx.session = AsyncMock()
+    root = t.Root(uri=tmp_path.as_uri(), name="test")
+    ctx.session.list_roots.return_value = t.ListRootsResult(roots=[root])
+    return ctx
 
 
 @pytest.fixture
@@ -85,72 +96,75 @@ async def test_pipe_run_exception_returns_error_string(mock_config):
 # 3. File Operations & Security
 # ---------------------------------------------------------------------------
 
-def test_resolve_safe_path_allowed_in_workspace(tmp_path):
-    os.environ["SIFT_WORKSPACE_ROOT"] = str(tmp_path)
+@pytest.mark.anyio
+async def test_resolve_safe_path_allowed_in_workspace(tmp_path, mock_context):
     safe_file = tmp_path / "safe.txt"
     safe_file.touch()
     
-    resolved = server._resolve_safe_path(str(safe_file))
+    resolved = await server._resolve_safe_path(str(safe_file), mock_context)
     assert os.path.exists(resolved)
 
 
-def test_resolve_safe_path_denies_outside_workspace(tmp_path):
-    os.environ["SIFT_WORKSPACE_ROOT"] = str(tmp_path)
+@pytest.mark.anyio
+async def test_resolve_safe_path_denies_outside_workspace(tmp_path, mock_context):
     # Use a clearly outside path
     outside_path = "/etc/passwd" if os.name != "nt" else "C:/Windows/System32/drivers/etc/hosts"
     with pytest.raises(PermissionError):
-        server._resolve_safe_path(outside_path)
-
-
-def test_resolve_safe_path_allows_global_when_env_set(tmp_path):
-    os.environ["SIFT_ALLOW_GLOBAL_READS"] = "true"
-    # Should not raise
-    path = "/tmp/test" if os.name != "nt" else "C:/temp/test"
-    assert server._resolve_safe_path(path)
-    os.environ["SIFT_ALLOW_GLOBAL_READS"] = "false"
+        await server._resolve_safe_path(outside_path, mock_context)
 
 
 @pytest.mark.anyio
-async def test_pipe_analyze_file_returns_recommendation(tmp_path):
-    os.environ["SIFT_WORKSPACE_ROOT"] = str(tmp_path)
+async def test_resolve_safe_path_fallback_cwd(tmp_path):
+    # Test that when context is None, it uses cwd
+    old_cwd = os.getcwd()
+    os.chdir(str(tmp_path))
+    try:
+        safe_file = tmp_path / "fallback.txt"
+        safe_file.touch()
+        
+        resolved = await server._resolve_safe_path(str(safe_file), None)
+        assert os.path.exists(resolved)
+    finally:
+        os.chdir(old_cwd)
+
+
+@pytest.mark.anyio
+async def test_pipe_analyze_file_returns_recommendation(tmp_path, mock_context):
     f = tmp_path / "test.txt"
     f.write_text("a" * 500) # Small file
     
-    result = server.pipe_analyze_file(str(f))
+    result = await server.pipe_analyze_file(str(f), mock_context)
     assert "standard-distill" in result
     assert "--- [Context-Pipe: Native Execution] ---" in result
     
     f.write_text("a" * 15000) # Large file
-    result = server.pipe_analyze_file(str(f))
+    result = await server.pipe_analyze_file(str(f), mock_context)
     assert "semantic-refinery" in result
     assert "--- [Context-Pipe: Native Execution] ---" in result
 
 
 @pytest.mark.anyio
-async def test_pipe_analyze_file_error_handling(tmp_path):
-    os.environ["SIFT_WORKSPACE_ROOT"] = str(tmp_path)
-    result = server.pipe_analyze_file(str(tmp_path / "nonexistent"))
+async def test_pipe_analyze_file_error_handling(tmp_path, mock_context):
+    result = await server.pipe_analyze_file(str(tmp_path / "nonexistent"), mock_context)
     assert "Error analyzing file" in result
     assert "--- [Context-Pipe: Native Execution] ---" in result
 
 
 @pytest.mark.anyio
-async def test_pipe_read_file_success(tmp_path, mock_config):
-    os.environ["SIFT_WORKSPACE_ROOT"] = str(tmp_path)
+async def test_pipe_read_file_success(tmp_path, mock_config, mock_context):
     f = tmp_path / "read.txt"
     f.write_text("file content")
     
     with patch("context_pipe.server.CONFIG_PATH", mock_config):
         with patch("context_pipe.server.run_pipe", return_value=("distilled", [])):
-            result = await server.pipe_read_file(str(f), "standard-distill")
+            result = await server.pipe_read_file(str(f), "standard-distill", mock_context)
             
     assert "distilled" in result
 
 
 @pytest.mark.anyio
-async def test_pipe_read_file_error_handling(tmp_path):
-    os.environ["SIFT_WORKSPACE_ROOT"] = str(tmp_path)
-    result = await server.pipe_read_file(str(tmp_path / "nonexistent"))
+async def test_pipe_read_file_error_handling(tmp_path, mock_context):
+    result = await server.pipe_read_file(str(tmp_path / "nonexistent"), "standard-distill", mock_context)
     assert "Error reading file" in result
     assert "--- [Context-Pipe: Native Execution] ---" in result
 

@@ -5,6 +5,23 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] — 2026-05-14
+
+### 🛡️ Phase 10: Dynamic Sandboxing via MCP Roots
+- **Dynamic Context Bounds**: Integrated the `ServerSession.list_roots()` MCP API to dynamically discover workspace boundaries from connected clients (e.g., VS Code, Antigravity) at runtime, gracefully falling back to the current working directory if roots are unsupported.
+- **Global Read Deprecation**: Formally deprecated and removed the static `SIFT_ALLOW_GLOBAL_READS` and `SIFT_WORKSPACE_ROOT` environment variable guards, cementing the client-provided `roots` list as the sole source of truth for authorization in `_resolve_safe_path`.
+- **Hardened Onboarding**: Updated the `onboarding.py` mandate injection to use a high-priority `CRITICAL INSTRUCTION` format with consequence framing, specifically designed to combat "System Prompt Dominance" in environments without structural tool hooks (like Antigravity). Mandates are now prepended to the top of instruction files.
+
+### 🛡️ Architecture & Security Audit Resolution
+- **Onboarding Monolith Refactoring**: Decomposed the 400-line `inject_hooks` monolith in `context_pipe/onboarding.py` into distinct environment-specific functions (e.g., `_inject_cursor`, `_inject_vscode_github`) to improve maintainability.
+- **Telemetry O(1) Migration**: Refactored `context_pipe/telemetry.py` to use an append-only JSON Lines (`.jsonl`) schema. This resolves the `O(n)` read/write contention that previously degraded performance under high-frequency sifting.
+- **Python Logging Standardization**: Eliminated raw `sys.stderr.write` and `print` statements in `wrapper.py`, `orchestrator.py`, and `server.py`, replacing them with standard Python `logging` for structured output control.
+- **Quality Gates Hardening**: Restored the CI `pytest` coverage gate to `83%` in `.github/workflows/ci.yml` and added `bandit` to the `[project.optional-dependencies] dev` block in `pyproject.toml` to align local and CI execution of `audit.bat`.
+- **Documentation Fidelity**: 
+  - Aligned `SHELL_UTILITY_ALLOWLIST` in `ARCHITECTURE.md` to precisely reflect the 20 actual tools permitted by `dynamic.py`.
+  - Removed outdated references to `shell: true` and `PIPE_WINDOW_PRESSURE`.
+  - Updated legacy signatures in `CONTEXT_PIPE_PROTOCOL.md` to use the correct `[Context-Pipe: Native Execution]`.
+
 ## [0.3.1] — 2026-05-13
 
 ### 🛡️ Orchestration & Fidelity

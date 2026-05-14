@@ -36,3 +36,4 @@ test_search.txt
 .sift_telemetry.json
 .sift_cache/
 .pipe_telemetry.json
+.pipe_telemetry.jsonl

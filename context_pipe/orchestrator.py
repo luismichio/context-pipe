@@ -13,10 +13,13 @@ import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+import logging
 
 from mcp.client.stdio import stdio_client, StdioServerParameters
 from mcp.client.session import ClientSession
 from .config_loader import resolve_placeholders
+
+logger = logging.getLogger(__name__)
 
 # Metadata Signatures
 CPP_SIGNATURE = "--- [Context-Pipe: Native Execution] ---"

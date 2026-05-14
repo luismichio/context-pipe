@@ -6,7 +6,7 @@ import json
 import time
 import uuid
 from typing import Optional
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Context
 from .orchestrator import run_pipe, CPP_SIGNATURE
 from .telemetry import get_balance_sheet, log_telemetry, generate_audit_header
 from .platforms import detect_client_id
@@ -15,6 +15,9 @@ from .a2a import pipe_agent_handoff as _pipe_agent_handoff
 from .dynamic import run_dynamic_pipe
 from .shadow import list_shadow_tools
 from . import config_loader
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Initialize FastMCP server
 mcp = FastMCP("Context-Pipe")
@@ -87,27 +90,41 @@ async def pipe_run(pipe_name: str, input_text: str) -> str:
         return f"Error executing pipe: {str(e)}\n\n{CPP_SIGNATURE}"
 
 
-def _resolve_safe_path(path: str) -> str:
-    """Validates the path is within the allowed workspace."""
+async def _resolve_safe_path(path: str, ctx: Optional[Context] = None) -> str:
+    """Validates the path is within the authorized workspace roots."""
     import os
+    from urllib.parse import urlparse
+    from urllib.request import url2pathname
 
-    allow_global = os.environ.get("SIFT_ALLOW_GLOBAL_READS", "false").lower() == "true"
     resolved_path = os.path.realpath(path)
+    workspace_roots = []
 
-    if allow_global:
-        return resolved_path
+    if ctx and hasattr(ctx, "session"):
+        try:
+            roots_result = await ctx.session.list_roots()
+            if roots_result and hasattr(roots_result, "roots"):
+                for r in roots_result.roots:
+                    parsed = urlparse(str(r.uri))
+                    local_path = url2pathname(parsed.path)
+                    workspace_roots.append(os.path.realpath(local_path))
+        except Exception as e:
+            logger.warning(f"Failed to fetch roots from client: {e}")
 
-    workspace_root = os.environ.get("SIFT_WORKSPACE_ROOT", os.getcwd())
-    if not resolved_path.startswith(os.path.realpath(workspace_root)):
-        raise PermissionError(
-            f"Access denied for path: {path}. Use a file path inside the current workspace or set SIFT_ALLOW_GLOBAL_READS=true to override."
-        )
+    # Fallback to CWD if no roots provided by client
+    if not workspace_roots:
+        workspace_roots = [os.path.realpath(os.getcwd())]
 
-    return resolved_path
+    for root in workspace_roots:
+        if resolved_path.startswith(root):
+            return resolved_path
+
+    raise PermissionError(
+        f"Access denied for path: {path}. The path must be within the authorized workspace roots."
+    )
 
 
 @mcp.tool()
-async def pipe_read_file(path: str, pipe_name: str = "standard-distill") -> str:
+async def pipe_read_file(path: str, pipe_name: str = "standard-distill", ctx: Optional[Context] = None) -> str:
     """
     Reads a local file safely and streams it directly through a context pipe.
     Use this instead of native file readers to prevent context window flooding.
@@ -117,7 +134,7 @@ async def pipe_read_file(path: str, pipe_name: str = "standard-distill") -> str:
         pipe_name: The name of the pipe to run (e.g., 'standard-distill', 'full-refinery').
     """
     try:
-        resolved_path = _resolve_safe_path(path)
+        resolved_path = await _resolve_safe_path(path, ctx)
         with open(resolved_path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
     except Exception as e:
@@ -127,7 +144,7 @@ async def pipe_read_file(path: str, pipe_name: str = "standard-distill") -> str:
 
 
 @mcp.tool()
-def pipe_analyze_file(path: str) -> str:
+async def pipe_analyze_file(path: str, ctx: Optional[Context] = None) -> str:
     """
     Analyzes a file's size and structure to recommend the optimal context pipe,
     without flooding the context window.
@@ -143,7 +160,7 @@ def pipe_analyze_file(path: str) -> str:
         path: Absolute or relative path to the file.
     """
     try:
-        resolved_path = _resolve_safe_path(path)
+        resolved_path = await _resolve_safe_path(path, ctx)
         size = os.path.getsize(resolved_path)
     except Exception as e:
         return f"Error analyzing file: {str(e)}\n\n{CPP_SIGNATURE}"

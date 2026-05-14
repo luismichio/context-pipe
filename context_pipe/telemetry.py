@@ -7,8 +7,8 @@ import threading
 from typing import Dict, Any, List, Optional
 
 # Telemetry Configuration (Unified with Studio of Two standards)
-# Primary: CPP_TELEMETRY_FILE, Fallback: .pipe_telemetry.json
-TELEMETRY_FILE = os.environ.get("CPP_TELEMETRY_FILE") or os.environ.get("PIPE_TELEMETRY_FILE", ".pipe_telemetry.json")
+# Primary: CPP_TELEMETRY_FILE, Fallback: .pipe_telemetry.jsonl
+TELEMETRY_FILE = os.environ.get("CPP_TELEMETRY_FILE") or os.environ.get("PIPE_TELEMETRY_FILE", ".pipe_telemetry.jsonl")
 
 # Telemetry Consent Gate (Opt-Out by Default)
 # Telemetry runs automatically to provide the Context Balance Sheet.
@@ -35,59 +35,34 @@ def log_telemetry(
     pipe_name: str = "unknown",
     tier: str = "Real-World",
 ) -> None:
-    """Logs tool performance metrics locally using the unified session-keyed schema."""
+    """Logs tool performance metrics locally using an append-only JSONL schema."""
     if PIPE_TELEMETRY_DISABLED:
         return
 
     try:
+        orig_tokens = estimate_tokens(" " * original_size)
+        final_tokens = estimate_tokens(" " * final_size)
+
+        event = {
+            "type": "tool_call",
+            "session_id": session_id,
+            "start_time": start_time,
+            "tool_name": f"{pipe_name}:{tool_name}",
+            "original_chars": original_size,
+            "final_chars": final_size,
+            "original_tokens": orig_tokens,
+            "final_tokens": final_tokens,
+            "latency_ms": latency_ms,
+            "cache_hit": cache_hit,
+            "platform": platform,
+            "agent": agent_label or "Main",
+            "pipe_name": pipe_name,
+            "tier": tier
+        }
+
         with _TELEMETRY_LOCK:
-            data = {}
-            if os.path.exists(TELEMETRY_FILE):
-                try:
-                    with open(TELEMETRY_FILE, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                except (json.JSONDecodeError, OSError):
-                    data = {}
-
-            # Ensure session entry exists
-            if session_id not in data:
-                data[session_id] = {"start_time": start_time, "tools": {}}
-
-            # Track by tool (convention: pipe:tool)
-            composite_tool = f"{pipe_name}:{tool_name}"
-
-            tool_stats = data[session_id]["tools"].get(
-                composite_tool,
-                {
-                    "calls": 0,
-                    "original_chars": 0,
-                    "final_chars": 0,
-                    "original_tokens": 0,
-                    "final_tokens": 0,
-                    "total_latency_ms": 0,
-                    "cache_hits": 0,
-                    "platform": platform,
-                    "agent": agent_label or "Main",
-                    "tier": tier,
-                },
-            )
-
-            orig_tokens = estimate_tokens(" " * original_size)
-            final_tokens = estimate_tokens(" " * final_size)
-
-            tool_stats["calls"] += 1
-            tool_stats["original_chars"] += original_size
-            tool_stats["final_chars"] += final_size
-            tool_stats["original_tokens"] += orig_tokens
-            tool_stats["final_tokens"] += final_tokens
-            tool_stats["total_latency_ms"] += latency_ms
-            if cache_hit:
-                tool_stats["cache_hits"] = tool_stats.get("cache_hits", 0) + 1
-
-            data[session_id]["tools"][composite_tool] = tool_stats
-
-            with open(TELEMETRY_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
+            with open(TELEMETRY_FILE, "a", encoding="utf-8") as f:
+                f.write(json.dumps(event) + "\n")
 
     except Exception:
         # Fail silently to avoid breaking the tool execution
@@ -127,92 +102,65 @@ def log_fallback_event(tool_name: str, reason: str) -> None:
     """
     Records a hook fallback event — fired when ``pipe_hook.py`` catches an
     unexpected exception and returns raw input to the agent unchanged.
-
-    Events are stored under the reserved ``"__fallbacks__"`` session key so
-    they never pollute tool-level ROI accounting.  They are surfaced as a
-    warning count in the Balance Sheet.
     """
     if PIPE_TELEMETRY_DISABLED:
         return
 
     try:
+        event = {
+            "type": "fallback",
+            "tool_name": tool_name,
+            "reason": reason
+        }
         with _TELEMETRY_LOCK:
-            data: Dict[str, Any] = {}
-            if os.path.exists(TELEMETRY_FILE):
-                try:
-                    with open(TELEMETRY_FILE, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                except (json.JSONDecodeError, OSError):
-                    data = {}
-
-            fb = data.setdefault("__fallbacks__", {"events": []})
-            fb["events"].append({"tool": tool_name, "reason": reason})
-
-            with open(TELEMETRY_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
+            with open(TELEMETRY_FILE, "a", encoding="utf-8") as f:
+                f.write(json.dumps(event) + "\n")
     except Exception:
         pass
 
 
 def get_latest_telemetry() -> Optional[Dict[str, Any]]:
-    """Retrieves the absolute last recorded telemetry event across all sessions."""
+    """Retrieves the absolute last recorded tool telemetry event."""
     if not os.path.exists(TELEMETRY_FILE):
         return None
 
     try:
+        last_tool_event = None
         with _TELEMETRY_LOCK:
             with open(TELEMETRY_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
-            if not data:
-                return None
-
-            # 1. Get the most recent session (last key in the dict)
-            session_keys = list(data.keys())
-            if not session_keys:
-                return None
-            
-            # Filter out fallback sentinel
-            session_keys = [k for k in session_keys if k != "__fallbacks__"]
-            if not session_keys:
-                return None
-                
-            last_session_id = session_keys[-1]
-            last_session = data[last_session_id]
-
-            # 2. Get the most recent tool call in that session
-            tools = last_session.get("tools", {})
-            if not tools:
-                return None
-
-            last_tool_key = list(tools.keys())[-1]
-            result = tools[last_tool_key].copy()
-            result["tool_key"] = last_tool_key
-            result["session_id"] = last_session_id
-            return result
-
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                        if event.get("type") == "tool_call":
+                            last_tool_event = event
+                    except json.JSONDecodeError:
+                        pass
+                        
+        if last_tool_event:
+            return {
+                "session_id": last_tool_event.get("session_id"),
+                "tool_key": last_tool_event.get("tool_name"),
+                "original_chars": last_tool_event.get("original_chars", 0),
+                "final_chars": last_tool_event.get("final_chars", 0),
+                "original_tokens": last_tool_event.get("original_tokens", 0),
+                "final_tokens": last_tool_event.get("final_tokens", 0),
+                "latency_ms": last_tool_event.get("latency_ms", 0),
+                "cache_hit": last_tool_event.get("cache_hit", False),
+                "platform": last_tool_event.get("platform", "unknown"),
+                "agent": last_tool_event.get("agent", "Main"),
+                "tier": last_tool_event.get("tier", "Real-World"),
+            }
+        return None
     except Exception:
         return None
 
 
 def get_balance_sheet() -> Dict[str, Any]:
-    """Calculates context ROI by aggregating all sessions.
-    Filters out 'node' level events to prevent double counting with 'mcp' protocol events.
-    """
+    """Calculates context ROI by aggregating all sessions from the JSONL file."""
     if not os.path.exists(TELEMETRY_FILE):
-        return {
-            "signal_added": 0,
-            "noise_removed": 0,
-            "net_change": 0,
-            "total_events": 0,
-            "avg_latency_ms": 0.0,
-            "fallback_events": 0,
-        }
-
-    try:
-        with open(TELEMETRY_FILE, "r") as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, OSError):
         return {
             "signal_added": 0,
             "noise_removed": 0,
@@ -226,45 +174,42 @@ def get_balance_sheet() -> Dict[str, Any]:
     total_latency = 0.0
     signal_added = 0
     noise_removed = 0
-
-    # Aggregate across all sessions and tools
-    if isinstance(data, dict):
-        for session in data.values():
-            tools = session.get("tools", {})
-            for tool_id, stats in tools.items():
-                # Anti-Double-Counting Logic:
-                # If the tool name indicates a 'sift_cli' engine call, it's a sub-node of an MCP call.
-                # We skip sub-nodes to get the clean protocol-level balance sheet.
-                if "sift_cli" in tool_id:
-                    continue
-
-                calls = stats.get("calls", 0)
-                total_calls += calls
-                total_latency += stats.get("total_latency_ms", 0)
-
-                orig = stats.get("original_chars", 0)
-                final = stats.get("final_chars", 0)
-                delta = final - orig
-
-                if delta > 0:
-                    signal_added += delta
-                else:
-                    noise_removed += abs(delta)
-    elif isinstance(data, list):
-            # Fallback for old flat format
-            for e in data:
-                total_calls += 1
-                total_latency += e.get("latency_ms", 0)
-                delta = e.get("delta", 0)
-                if delta > 0:
-                    signal_added += delta
-                else:
-                    noise_removed += abs(delta)
-
-    # Count hook fallback events (stored under __fallbacks__ sentinel key)
     fallback_count = 0
-    if isinstance(data, dict):
-        fallback_count = len(data.get("__fallbacks__", {}).get("events", []))
+
+    try:
+        with open(TELEMETRY_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    
+                    if event.get("type") == "fallback":
+                        fallback_count += 1
+                        continue
+                        
+                    if event.get("type") == "tool_call":
+                        tool_id = event.get("tool_name", "")
+                        if "sift_cli" in tool_id:
+                            continue
+                            
+                        total_calls += 1
+                        total_latency += event.get("latency_ms", 0)
+                        
+                        orig = event.get("original_chars", 0)
+                        final = event.get("final_chars", 0)
+                        delta = final - orig
+                        
+                        if delta > 0:
+                            signal_added += delta
+                        else:
+                            noise_removed += abs(delta)
+                            
+                except json.JSONDecodeError:
+                    pass
+    except OSError:
+        pass
 
     net_change = signal_added - noise_removed
 

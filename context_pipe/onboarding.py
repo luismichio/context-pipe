@@ -327,7 +327,7 @@ def update_gitignore(target_dir: str) -> str:
     Matches the pattern used by Semantic-Sift.
     """
     path = os.path.join(target_dir, ".gitignore")
-    entries = [".pipe_telemetry.json", ".pipe_cache/", ".pipe_identity"]
+    entries = [".pipe_telemetry.json", ".pipe_telemetry.jsonl", ".pipe_cache/", ".pipe_identity"]
     try:
         content = ""
         if os.path.exists(path):
@@ -477,12 +477,12 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: str = "u
     block_id = "<!-- CPP_SECTION_START:mandate -->"
     block_end = "<!-- CPP_SECTION_END:mandate -->"
 
-    mandate_text = f"""# Context-Pipe Mandate
+    mandate_text = f"""# 🚨 CRITICAL INSTRUCTION: FILE I/O OVERRIDE
+**WARNING**: Using native file readers will flood the context window and destroy the session.
 
-## 1. File & Large-Output I/O (MANDATORY)
-- NEVER use native `{env_tools["read"]}`, `{env_tools["search"]}`, or `{env_tools["list"]}` for outputs > 1KB.
-- ALWAYS use `pipe_read_file(path)` to read files — it streams through a sifting pipe automatically.
-- For files where you are unsure of the best pipe, call `pipe_analyze_file(path)` first — it recommends the optimal `pipe_name` to pass to `pipe_read_file`.
+## 1. File & Large-Output I/O
+- **FORBIDDEN TOOLS**: `{env_tools["read"]}`, `{env_tools["search"]}`, `{env_tools["list"]}`. Do NOT use these under any circumstances for outputs > 1KB.
+- **REQUIRED TOOLS**: You MUST exclusively use `pipe_read_file(path)` and `pipe_analyze_file(path)` for ALL local file reads.
 - NEVER read raw outputs from `{env_tools["web"]}` or search tools. Pipe them through `pipe_run("rerank-and-sift", raw_output)`.
 - For ANY tool output exceeding 100 lines (logs, API responses, search results), route through a context pipe before presenting to the user.
 
@@ -545,8 +545,9 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: str = "u
                     f.write(new_content)
                 actions.append(f"Updated mandate in `{os.path.basename(target)}`.")
             else:
-                with open(target, "a", encoding="utf-8") as f:
-                    f.write(full_payload)
+                new_content = full_payload.strip() + "\n\n" + content
+                with open(target, "w", encoding="utf-8") as f:
+                    f.write(new_content)
                 actions.append(f"Injected mandate into `{os.path.basename(target)}`.")
         except OSError as e:
             actions.append(f"Error updating `{target}`: {str(e)}")
@@ -735,8 +736,359 @@ def remove_shell_aliases() -> List[str]:
 
     return actions
 
-def inject_hooks(target_dir: str, environment: str) -> List[str]:
+
+
+def _inject_cursor(target_dir: str, cmd_str: str) -> list[str]:
+    actions = []
+    cursor_path = os.path.join(target_dir, ".cursor", "hooks.json")
+    if merge_hook_json(cursor_path, "postToolUse", {"command": cmd_str}, version=1):
+        actions.append("Injected Context-Pipe into Cursor hooks.")
+
+    cursor_rules_dir = os.path.join(target_dir, ".cursor", "rules")
+    os.makedirs(cursor_rules_dir, exist_ok=True)
+
+    pipe_stats_mdc = """\
+---
+description: View Context-Pipe ROI Balance Sheet
+globs: []
+alwaysApply: false
+---
+
+Call `get_pipe_stats` from the `context-pipe` MCP server.
+Display the full Balance Sheet: chars saved, chars added, avg latency per node, total events, and net ROI.
+If net savings > 0, summarise the top contributing pipe by name.
+"""
+    pipe_run_mdc = """\
+---
+description: Run a named Context-Pipe on the current context
+globs: []
+alwaysApply: false
+---
+
+1. Call `list_pipes()` from the `context-pipe` MCP server to show available pipes.
+2. If the user has not specified a pipe name, ask them to choose from the list.
+3. Ask the user to confirm or paste the input text to process, or use the current conversation context.
+4. Call `pipe_run(pipe_name, input_text)`.
+5. Display the audit header (compression ratio, latency) and the distilled result.
+"""
+    pipe_dynamic_mdc = """\
+---
+description: Build and run an ad-hoc Context-Pipe from available tools
+globs: []
+alwaysApply: false
+---
+
+1. Call `pipe_list_shadow_tools()` from the `context-pipe` MCP server to discover available nodes
+   (configured pipes + PATH tools like jq, rg, markitdown, pandoc).
+2. Based on the user's goal, construct a `nodes_json` array. Rules:
+   - Every array MUST end with a sifting node: `{"cmd": "semantic-sift-cli", "args": ["semantic"]}`.
+   - Shell utilities (grep, awk, jq, rg) require `allow_shell=True`.
+   - Never put shell metacharacters (|, ;, &, $) in a `cmd` value - use `args` instead.
+3. Show the user the proposed node graph and confirm before executing.
+4. Call `pipe_run_dynamic(nodes_json, input_text, allow_shell=<bool>)`.
+5. Display the audit header and distilled result.
+"""
+    pipe_handoff_mdc = """\
+---
+description: Distil agent output before passing it to another agent
+globs: []
+alwaysApply: false
+---
+
+Use this at any agent-to-agent handoff boundary to prevent context flooding.
+
+1. Identify the output text from Agent A and the name of Agent B that will consume it.
+2. Call `pipe_agent_handoff(output, from_agent="<A>", to_agent="<B>")` from the `context-pipe` MCP server.
+   - If you know the content type, pass `pipe_name` explicitly (e.g. `pipe_name="semantic-refinery"`).
+   - Otherwise omit `pipe_name` and routing is determined automatically by pipes.json mappings.
+3. Pass the returned distilled text as the input to Agent B.
+"""
+    stats_path = os.path.join(cursor_rules_dir, "pipe-stats.mdc")
+    run_path = os.path.join(cursor_rules_dir, "pipe-run.mdc")
+    dynamic_path = os.path.join(cursor_rules_dir, "pipe-dynamic.mdc")
+    handoff_path = os.path.join(cursor_rules_dir, "pipe-handoff.mdc")
+    for path, text in [
+        (stats_path, pipe_stats_mdc),
+        (run_path, pipe_run_mdc),
+        (dynamic_path, pipe_dynamic_mdc),
+        (handoff_path, pipe_handoff_mdc),
+    ]:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+    actions.append("Added /pipe-stats, /pipe-run, /pipe-dynamic, /pipe-handoff rules to Cursor (.cursor/rules/).")
+    return actions
+
+def _inject_vscode_github(target_dir: str, cmd_str: str) -> list[str]:
+    actions = []
+    vscode_path = os.path.join(target_dir, ".github", "hooks", "context-pipe.json")
+    if merge_hook_json(vscode_path, "PostToolUse", {"type": "command", "command": cmd_str}):
+        actions.append("Injected Context-Pipe into VS Code/GitHub hooks.")
+    return actions
+
+def _inject_gemini(target_dir: str, cmd_str: str) -> list[str]:
+    actions = []
+    gemini_dir = os.path.join(target_dir, ".gemini", "commands")
+    os.makedirs(gemini_dir, exist_ok=True)
+    gemini_commands = {
+        "pipe-stats.toml": (
+            "View Context-Pipe ROI Balance Sheet",
+            "Call get_pipe_stats from the context-pipe MCP server. Display chars saved, chars added, avg latency, total events, and net ROI.",
+        ),
+        "pipe-run.toml": (
+            "Run a named Context-Pipe on the current context",
+            "Call list_pipes() to show available pipes. Ask the user to choose one and confirm the input text. Then call pipe_run(pipe_name, input_text) and display the audit header and distilled result.",
+        ),
+        "pipe-dynamic.toml": (
+            "Build and run an ad-hoc Context-Pipe from available tools",
+            "Call pipe_list_shadow_tools() to discover available nodes. Construct a nodes_json array ending with a semantic-sift-cli node. Show the user the proposed graph, confirm, then call pipe_run_dynamic(nodes_json, input_text).",
+        ),
+        "pipe-handoff.toml": (
+            "Distil agent output before passing it to another agent",
+            "Call pipe_agent_handoff(output, from_agent='A', to_agent='B') from the context-pipe MCP server to prevent context flooding at A2A handoff boundaries.",
+        ),
+    }
+    for filename, (description, prompt) in gemini_commands.items():
+        text = f'description = "{description}"\nprompt = """\n{prompt}\n"""\n'
+        with open(os.path.join(gemini_dir, filename), "w", encoding="utf-8") as f:
+            f.write(text)
+    actions.append("Added /pipe-stats, /pipe-run, /pipe-dynamic, /pipe-handoff commands to Gemini CLI.")
+
+    gemini_settings_path = os.path.join(target_dir, ".gemini", "settings.json")
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if os.name == "nt":
+        gemini_cmd = f"$env:GEMINI_SESSION_ID='true'; $env:PYTHONPATH='{root_dir}'; {cmd_str}"
+    else:
+        gemini_cmd = f"GEMINI_SESSION_ID=true PYTHONPATH='{root_dir}' {cmd_str}"
+
+    for hook_key in ["AfterTool", "PreCompress"]:
+        if merge_hook_json(
+            gemini_settings_path,
+            hook_key,
+            {"name": "context-pipe", "type": "command", "command": gemini_cmd, "timeout": 10000},
+        ):
+            actions.append(f"Injected Context-Pipe into Gemini CLI {hook_key} hooks.")
+    return actions
+
+def _inject_opencode(target_dir: str, cmd_str: str) -> list[str]:
+    actions = []
+    import sys
+    import json
+    oc_path = os.path.join(target_dir, "opencode.json")
+    if os.path.exists(oc_path):
+        try:
+            with open(oc_path, "r", encoding="utf-8") as f:
+                oc_data = json.load(f)
+
+            if "mcp" not in oc_data:
+                oc_data["mcp"] = {}
+            oc_data["mcp"]["context-pipe"] = {
+                "type": "local",
+                "command": [os.path.abspath(sys.executable), "-m", "context_pipe.server"],
+                "environment": {"PIPE_CONFIG_PATH": os.path.abspath(os.path.join(target_dir, "pipes.json"))},
+            }
+
+            if "command" not in oc_data:
+                oc_data["command"] = {}
+            oc_data["command"]["pipe-stats"] = {
+                "description": "View Context-Pipe ROI Balance Sheet",
+                "template": "Call get_pipe_stats from the context-pipe MCP server. Display chars saved, chars added, avg latency, total events, and net ROI. If net savings > 0, name the top contributing pipe.",
+            }
+            oc_data["command"]["pipe-run"] = {
+                "description": "Run a named pipe from pipes.json on the current context",
+                "template": "Call list_pipes() to show available pipes. Ask the user to choose a pipe name and confirm the input text. Then call pipe_run(pipe_name, input_text) and display the audit header and distilled result.",
+            }
+            oc_data["command"]["pipe-dynamic"] = {
+                "description": "Build and run an ad-hoc Context-Pipe from available tools",
+                "template": "Call pipe_list_shadow_tools() to discover available nodes (configured pipes + PATH tools). Construct a nodes_json array ending with semantic-sift-cli. Show the proposed node graph to the user, confirm, then call pipe_run_dynamic(nodes_json, input_text). Use allow_shell=True if the graph includes shell utilities (grep, awk, jq, rg).",
+            }
+            oc_data["command"]["pipe-handoff"] = {
+                "description": "Distil agent output before passing it to another agent",
+                "template": "Call pipe_agent_handoff(output, from_agent='<A>', to_agent='<B>') from the context-pipe MCP server to prevent context flooding at A2A handoff boundaries. Pass pipe_name explicitly if you know the content type (e.g. 'semantic-refinery').",
+            }
+
+            with open(oc_path, "w", encoding="utf-8") as f:
+                json.dump(oc_data, f, indent=2)
+            actions.append("Updated Context-Pipe MCP and /pipe-stats, /pipe-run, /pipe-dynamic, /pipe-handoff in opencode.json.")
+
+            oc_plugin_dir = os.path.join(target_dir, ".opencode", "plugins")
+            os.makedirs(oc_plugin_dir, exist_ok=True)
+            oc_plugin_path = os.path.join(oc_plugin_dir, "context-pipe.ts")
+
+            oc_plugin_content = """/**
+ * Context-Pipe Native OpenCode Plugin
+ *
+ * NOTE: `tool.execute.after` is declared in the OpenCode plugin Hooks interface
+ * but is NOT currently triggered by the OpenCode runtime (as of v1.14.39).
+ * See: https://github.com/anomalyco/opencode/issues/25918
+ *
+ * This plugin is therefore TELEMETRY-ONLY. Output mutation via this hook has
+ * no effect. The real interception point is the `pipe_read_file` MCP tool,
+ * which is called explicitly by the agent per the AGENTS.md SOP.
+ *
+ * When OpenCode wires up the trigger in processor.ts, this plugin can be
+ * re-enabled for transparent output interception without any agent-side changes.
+ */
+export const ContextPipePlugin = async (_: any) => {
+  return {
+    // Hook placeholder - will be activated once OpenCode triggers tool.execute.after
+    // "tool.execute.after": async (input: any, output: any) => { ... }
+  };
+};
+"""
+            with open(oc_plugin_path, "w", encoding="utf-8") as f:
+                f.write(oc_plugin_content)
+            actions.append("Configured OpenCode native plugin.")
+
+        except Exception as e:
+            actions.append(f"Failed to update opencode.json: {str(e)}")
+    return actions
+
+def _inject_windsurf(target_dir: str, cmd_str: str) -> list[str]:
+    actions = []
+    windsurf_path = os.path.join(target_dir, ".windsurf", "hooks.json")
+    gateway_cmd = get_security_gateway_command()
+    if merge_hook_json(
+        windsurf_path,
+        "pre_mcp_tool_use",
+        {"matcher": "mcp__.*__(read_file|view_file)", "type": "command", "command": gateway_cmd},
+    ):
+        actions.append("Injected Security Gateway into Windsurf hooks.")
+    return actions
+
+def _inject_cline(target_dir: str, cmd_str: str) -> list[str]:
+    actions = []
+    cline_dir = os.path.join(target_dir, ".clinerules", "hooks")
+    os.makedirs(cline_dir, exist_ok=True)
+    ps1_blocker = """$inputJson = $input | ConvertFrom-Json
+if ($inputJson.preToolUse.toolName -eq 'read_file' -or $inputJson.preToolUse.toolName -eq 'view_file') {
+    $filePath = $inputJson.preToolUse.parameters.path
+    if (Test-Path $filePath) {
+        $size = (Get-Item $filePath).Length
+        if ($size -gt 1024) {
+            $response = @{ cancel = $true; errorMessage = "[BLOCKED by Context-Pipe] File > 1KB. Use pipe_read_file instead." }
+            $response | ConvertTo-Json -Compress | Write-Output
+            exit 0
+        }
+    }
+}
+$response = @{ cancel = $false }
+$response | ConvertTo-Json -Compress | Write-Output
+"""
+    with open(os.path.join(cline_dir, "PreToolUse.ps1"), "w") as f:
+        f.write(ps1_blocker)
+    actions.append("Injected Security Gateway into Cline hooks (PS1).")
+
+    cline_bash_path = os.path.join(cline_dir, "PreToolUse")
+    cline_bash_content = """#!/bin/bash
+INPUT=$(cat)
+TOOL_NAME=$(echo "$INPUT" | grep -oP '(?<="toolName":")[^"]*')
+if [[ "$TOOL_NAME" == "read_file" ]] || [[ "$TOOL_NAME" == "view_file" ]]; then
+    FILE_PATH=$(echo "$INPUT" | grep -oP '(?<="path":")[^"]*')
+    if [[ -f "$FILE_PATH" ]]; then
+        SIZE=$(wc -c < "$FILE_PATH" 2>/dev/null || stat -f %s "$FILE_PATH" 2>/dev/null || stat -c %s "$FILE_PATH" 2>/dev/null)
+        if [[ "$SIZE" -gt 1024 ]]; then
+            echo '{"cancel": true, "errorMessage": "[BLOCKED by Context-Pipe] File > 1KB. Use pipe_read_file instead."}'
+            exit 0
+        fi
+    fi
+fi
+echo '{"cancel": false}'
+"""
+    with open(cline_bash_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(cline_bash_content)
+    try:
+        os.chmod(cline_bash_path, 0o755)  # nosec B103
+    except OSError:
+        pass
+    actions.append("Injected Security Gateway into Cline hooks (Bash).")
+    return actions
+
+def _inject_claude(target_dir: str, cmd_str: str) -> list[str]:
+    actions = []
+    claude_paths = [
+        os.path.join(os.path.expanduser("~"), ".claude", "settings.json"),
+        os.path.join(target_dir, ".claude", "settings.json"),
+    ]
+    for c_path in claude_paths:
+        if merge_hook_json(
+            c_path, "PostToolUse", {"matcher": "mcp__.*__.*", "hooks": [{"type": "command", "command": cmd_str}]}
+        ):
+            actions.append(f"Merged into Claude Code hooks at {c_path}.")
+    return actions
+
+def _inject_qwen(target_dir: str, cmd_str: str) -> list[str]:
+    actions = []
+    qwen_paths = [
+        os.path.join(os.path.expanduser("~"), ".qwen", "settings.json"),
+        os.path.join(target_dir, ".qwen", "settings.json"),
+    ]
+    for q_path in qwen_paths:
+        if merge_hook_json(
+            q_path, "PostToolUse", {"matcher": "mcp__.*__.*", "hooks": [{"type": "command", "command": cmd_str}]}
+        ):
+            actions.append(f"Merged into Qwen CLI hooks at {q_path}.")
+    return actions
+
+def _inject_codex(target_dir: str, cmd_str: str) -> list[str]:
+    actions = []
+    codex_paths = [
+        os.path.join(os.path.expanduser("~"), ".codex", "settings.json"),
+        os.path.join(target_dir, ".codex", "settings.json"),
+    ]
+    for co_path in codex_paths:
+        if merge_hook_json(
+            co_path, "PostToolUse", {"matcher": "mcp__.*__.*", "hooks": [{"type": "command", "command": cmd_str}]}
+        ):
+            actions.append(f"Merged into Codex CLI hooks at {co_path}.")
+    return actions
+
+def _inject_openclaw(target_dir: str, cmd_str: str) -> list[str]:
+    actions = []
+    import sys
+    openclaw_plugin_path = os.path.join(target_dir, ".openclaw", "plugins", "context-pipe.ts")
+    os.makedirs(os.path.dirname(openclaw_plugin_path), exist_ok=True)
+    py_exe = os.path.abspath(sys.executable).replace('\\', '/')
+    openclaw_plugin_content = f"""/**
+ * Context-Pipe Native OpenClaw Plugin
+ */
+export default function (api) {{
+  api.on("tool:after", async (event, ctx) => {{
+    const rawContent = ctx.result;
+    if (typeof rawContent !== 'string' || rawContent.length < 500) return;
+    if (rawContent.includes("--- [Context-Pipe: Native Execution] ---")) return;
+    try {{
+      const pythonExe = "{py_exe}";
+      const payload = {{ hook_event_name: "AfterTool", tool_name: ctx.toolName, tool_response: {{ llmContent: rawContent }} }};
+      const {{ execSync }} = require('child_process');
+      const response = execSync(`"${{pythonExe}}" -m context_pipe.orchestrator wrap`, {{ input: JSON.stringify(payload), encoding: 'utf-8' }});
+      const siftedData = JSON.parse(response);
+      if (siftedData?.tool_response?.llmContent) {{
+         ctx.result = siftedData.tool_response.llmContent;
+      }}
+    }} catch (error) {{ console.error("[Context-Pipe Plugin] failed:", error); }}
+  }});
+}};
+"""
+    with open(openclaw_plugin_path, "w", encoding="utf-8") as f:
+        f.write(openclaw_plugin_content)
+    actions.append("Configured OpenClaw native plugin.")
+    return actions
+
+def _inject_kilocode(target_dir: str, cmd_str: str) -> list[str]:
+    actions = []
+    kilo_rule_dir = os.path.join(target_dir, ".kilocode", "rules")
+    os.makedirs(kilo_rule_dir, exist_ok=True)
+    kilo_rule_path = os.path.join(kilo_rule_dir, "context.md")
+    with open(kilo_rule_path, "w", encoding="utf-8") as f:
+        f.write(
+            "# Context-Pipe Kilo Code Constraints\n\nEnsure that all raw file reads use the `pipe_read_file` tool to prevent context flooding."
+        )
+    actions.append("Injected Kilo Code workspace rules.")
+    return actions
+
+def inject_hooks(target_dir: str, environment: str) -> list[str]:
     """Automates the injection of Context-Pipe hooks into various IDEs/CLIs."""
+    import json
     actions = []
 
     # 0. Git Protection (matches Semantic-Sift flow)
@@ -757,7 +1109,6 @@ def inject_hooks(target_dir: str, environment: str) -> List[str]:
     # 0b. Ensure pipes.json exists and auto-resolve semantic-sift-cli
     pipes_json_path = os.path.join(target_dir, "pipes.json")
     if not os.path.exists(pipes_json_path):
-        # Create default pipes.json if missing
         try:
             with open(pipes_json_path, "w", encoding="utf-8") as f:
                 json.dump(DEFAULT_PIPES_CONFIG, f, indent=2)
@@ -780,358 +1131,29 @@ def inject_hooks(target_dir: str, environment: str) -> List[str]:
     if update_warning:
         actions.append(update_warning)
 
-    # 1. Cursor Injection
+    # Dispatch to specialized helpers based on environment
     if "cursor" in env_lower:
-        cursor_path = os.path.join(target_dir, ".cursor", "hooks.json")
-        if merge_hook_json(cursor_path, "postToolUse", {"command": cmd_str}, version=1):
-            actions.append("Injected Context-Pipe into Cursor hooks.")
-
-        # 1b. Cursor Slash Commands — injected as .cursor/rules/*.mdc agent rules
-        cursor_rules_dir = os.path.join(target_dir, ".cursor", "rules")
-        os.makedirs(cursor_rules_dir, exist_ok=True)
-
-        pipe_stats_mdc = """\
----
-description: View Context-Pipe ROI Balance Sheet
-globs: []
-alwaysApply: false
----
-
-Call `get_pipe_stats` from the `context-pipe` MCP server.
-Display the full Balance Sheet: chars saved, chars added, avg latency per node, total events, and net ROI.
-If net savings > 0, summarise the top contributing pipe by name.
-"""
-        pipe_run_mdc = """\
----
-description: Run a named Context-Pipe on the current context
-globs: []
-alwaysApply: false
----
-
-1. Call `list_pipes()` from the `context-pipe` MCP server to show available pipes.
-2. If the user has not specified a pipe name, ask them to choose from the list.
-3. Ask the user to confirm or paste the input text to process, or use the current conversation context.
-4. Call `pipe_run(pipe_name, input_text)`.
-5. Display the audit header (compression ratio, latency) and the distilled result.
-"""
-        pipe_dynamic_mdc = """\
----
-description: Build and run an ad-hoc Context-Pipe from available tools
-globs: []
-alwaysApply: false
----
-
-1. Call `pipe_list_shadow_tools()` from the `context-pipe` MCP server to discover available nodes
-   (configured pipes + PATH tools like jq, rg, markitdown, pandoc).
-2. Based on the user's goal, construct a `nodes_json` array. Rules:
-   - Every array MUST end with a sifting node: `{"cmd": "semantic-sift-cli", "args": ["semantic"]}`.
-   - Shell utilities (grep, awk, jq, rg) require `allow_shell=True`.
-   - Never put shell metacharacters (|, ;, &, $) in a `cmd` value — use `args` instead.
-3. Show the user the proposed node graph and confirm before executing.
-4. Call `pipe_run_dynamic(nodes_json, input_text, allow_shell=<bool>)`.
-5. Display the audit header and distilled result.
-"""
-        pipe_handoff_mdc = """\
----
-description: Distil agent output before passing it to another agent
-globs: []
-alwaysApply: false
----
-
-Use this at any agent-to-agent handoff boundary to prevent context flooding.
-
-1. Identify the output text from Agent A and the name of Agent B that will consume it.
-2. Call `pipe_agent_handoff(output, from_agent="<A>", to_agent="<B>")` from the `context-pipe` MCP server.
-   - If you know the content type, pass `pipe_name` explicitly (e.g. `pipe_name="semantic-refinery"`).
-   - Otherwise omit `pipe_name` and routing is determined automatically by pipes.json mappings.
-3. Pass the returned distilled text as the input to Agent B.
-"""
-        stats_path = os.path.join(cursor_rules_dir, "pipe-stats.mdc")
-        run_path = os.path.join(cursor_rules_dir, "pipe-run.mdc")
-        dynamic_path = os.path.join(cursor_rules_dir, "pipe-dynamic.mdc")
-        handoff_path = os.path.join(cursor_rules_dir, "pipe-handoff.mdc")
-        for path, content in [
-            (stats_path, pipe_stats_mdc),
-            (run_path, pipe_run_mdc),
-            (dynamic_path, pipe_dynamic_mdc),
-            (handoff_path, pipe_handoff_mdc),
-        ]:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(content)
-        actions.append("Added /pipe-stats, /pipe-run, /pipe-dynamic, /pipe-handoff rules to Cursor (.cursor/rules/).")
-
-    # 2. VS Code / GitHub Injection
+        actions.extend(_inject_cursor(target_dir, cmd_str))
     if "vscode" in env_lower or "github" in env_lower:
-        vscode_path = os.path.join(target_dir, ".github", "hooks", "context-pipe.json")
-        if merge_hook_json(vscode_path, "PostToolUse", {"type": "command", "command": cmd_str}):
-            actions.append("Injected Context-Pipe into VS Code/GitHub hooks.")
-
-    # 3. Gemini CLI Injection
+        actions.extend(_inject_vscode_github(target_dir, cmd_str))
     if "gemini" in env_lower:
-        gemini_dir = os.path.join(target_dir, ".gemini", "commands")
-        os.makedirs(gemini_dir, exist_ok=True)
-        gemini_commands = {
-            "pipe-stats.toml": (
-                "View Context-Pipe ROI Balance Sheet",
-                "Call get_pipe_stats from the context-pipe MCP server. "
-                "Display chars saved, chars added, avg latency, total events, and net ROI.",
-            ),
-            "pipe-run.toml": (
-                "Run a named Context-Pipe on the current context",
-                "Call list_pipes() to show available pipes. Ask the user to choose one and confirm the input text. "
-                "Then call pipe_run(pipe_name, input_text) and display the audit header and distilled result.",
-            ),
-            "pipe-dynamic.toml": (
-                "Build and run an ad-hoc Context-Pipe from available tools",
-                "Call pipe_list_shadow_tools() to discover available nodes. "
-                "Construct a nodes_json array ending with a semantic-sift-cli node. "
-                "Show the user the proposed graph, confirm, then call pipe_run_dynamic(nodes_json, input_text).",
-            ),
-            "pipe-handoff.toml": (
-                "Distil agent output before passing it to another agent",
-                "Call pipe_agent_handoff(output, from_agent='A', to_agent='B') from the context-pipe MCP server "
-                "to prevent context flooding at A2A handoff boundaries.",
-            ),
-        }
-        for filename, (description, prompt) in gemini_commands.items():
-            content = f'description = "{description}"\nprompt = """\n{prompt}\n"""\n'
-            with open(os.path.join(gemini_dir, filename), "w") as f:
-                f.write(content)
-        actions.append("Added /pipe-stats, /pipe-run, /pipe-dynamic, /pipe-handoff commands to Gemini CLI.")
-
-        # 3b. Gemini Hooks (AfterTool for sifting, PreCompress for compaction)
-        gemini_settings_path = os.path.join(target_dir, ".gemini", "settings.json")
-        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-        # Move environment variables into the command string itself (schema compliance)
-        if os.name == "nt":
-            gemini_cmd = f"$env:GEMINI_SESSION_ID='true'; $env:PYTHONPATH='{root_dir}'; {cmd_str}"
-        else:
-            gemini_cmd = f"GEMINI_SESSION_ID=true PYTHONPATH='{root_dir}' {cmd_str}"
-
-        for hook_key in ["AfterTool", "PreCompress"]:
-            if merge_hook_json(
-                gemini_settings_path,
-                hook_key,
-                {"name": "context-pipe", "type": "command", "command": gemini_cmd, "timeout": 10000},
-            ):
-                actions.append(f"Injected Context-Pipe into Gemini CLI {hook_key} hooks.")
-
-    # 4. OpenCode Injection
+        actions.extend(_inject_gemini(target_dir, cmd_str))
     if "opencode" in env_lower:
-        oc_path = os.path.join(target_dir, "opencode.json")
-        if os.path.exists(oc_path):
-            try:
-                with open(oc_path, "r") as f:
-                    oc_data = json.load(f)
-
-                # 4.1 Update MCP entry
-                if "mcp" not in oc_data:
-                    oc_data["mcp"] = {}
-                oc_data["mcp"]["context-pipe"] = {
-                    "type": "local",
-                    "command": [os.path.abspath(sys.executable), "-m", "context_pipe.server"],
-                    "environment": {"PIPE_CONFIG_PATH": os.path.abspath(os.path.join(target_dir, "pipes.json"))},
-                }
-
-                # 4.2 Update Commands
-                if "command" not in oc_data:
-                    oc_data["command"] = {}
-                oc_data["command"]["pipe-stats"] = {
-                    "description": "View Context-Pipe ROI Balance Sheet",
-                    "template": "Call get_pipe_stats from the context-pipe MCP server. "
-                    "Display chars saved, chars added, avg latency, total events, and net ROI. "
-                    "If net savings > 0, name the top contributing pipe.",
-                }
-                oc_data["command"]["pipe-run"] = {
-                    "description": "Run a named pipe from pipes.json on the current context",
-                    "template": "Call list_pipes() to show available pipes. "
-                    "Ask the user to choose a pipe name and confirm the input text. "
-                    "Then call pipe_run(pipe_name, input_text) and display the audit header and distilled result.",
-                }
-                oc_data["command"]["pipe-dynamic"] = {
-                    "description": "Build and run an ad-hoc Context-Pipe from available tools",
-                    "template": "Call pipe_list_shadow_tools() to discover available nodes (configured pipes + PATH tools). "
-                    "Construct a nodes_json array ending with semantic-sift-cli. "
-                    "Show the proposed node graph to the user, confirm, then call pipe_run_dynamic(nodes_json, input_text). "
-                    "Use allow_shell=True if the graph includes shell utilities (grep, awk, jq, rg).",
-                }
-                oc_data["command"]["pipe-handoff"] = {
-                    "description": "Distil agent output before passing it to another agent",
-                    "template": "Call pipe_agent_handoff(output, from_agent='<A>', to_agent='<B>') "
-                    "from the context-pipe MCP server to prevent context flooding at A2A handoff boundaries. "
-                    "Pass pipe_name explicitly if you know the content type (e.g. 'semantic-refinery').",
-                }
-
-                with open(oc_path, "w") as f:
-                    json.dump(oc_data, f, indent=2)
-                actions.append("Updated Context-Pipe MCP and /pipe-stats, /pipe-run, /pipe-dynamic, /pipe-handoff in opencode.json.")
-
-                # 4.3 Native Plugin
-                oc_plugin_dir = os.path.join(target_dir, ".opencode", "plugins")
-                os.makedirs(oc_plugin_dir, exist_ok=True)
-                oc_plugin_path = os.path.join(oc_plugin_dir, "context-pipe.ts")
-
-                oc_plugin_content = """/**
- * Context-Pipe Native OpenCode Plugin
- *
- * NOTE: `tool.execute.after` is declared in the OpenCode plugin Hooks interface
- * but is NOT currently triggered by the OpenCode runtime (as of v1.14.39).
- * See: https://github.com/anomalyco/opencode/issues/25918
- *
- * This plugin is therefore TELEMETRY-ONLY. Output mutation via this hook has
- * no effect. The real interception point is the `pipe_read_file` MCP tool,
- * which is called explicitly by the agent per the AGENTS.md SOP.
- *
- * When OpenCode wires up the trigger in processor.ts, this plugin can be
- * re-enabled for transparent output interception without any agent-side changes.
- */
-export const ContextPipePlugin = async (_: any) => {
-  return {
-    // Hook placeholder — will be activated once OpenCode triggers tool.execute.after
-    // "tool.execute.after": async (input: any, output: any) => { ... }
-  };
-};
-"""
-                with open(oc_plugin_path, "w", encoding="utf-8") as f:
-                    f.write(oc_plugin_content)
-                actions.append("Configured OpenCode native plugin.")
-
-            except Exception as e:
-                actions.append(f"Failed to update opencode.json: {str(e)}")
-
-    # 5. Windsurf Security Gateway
+        actions.extend(_inject_opencode(target_dir, cmd_str))
     if "windsurf" in env_lower:
-        windsurf_path = os.path.join(target_dir, ".windsurf", "hooks.json")
-        gateway_cmd = get_security_gateway_command()
-        if merge_hook_json(
-            windsurf_path,
-            "pre_mcp_tool_use",
-            {"matcher": "mcp__.*__(read_file|view_file)", "type": "command", "command": gateway_cmd},
-        ):
-            actions.append("Injected Security Gateway into Windsurf hooks.")
-
-    # 6. Cline Security Gateway
+        actions.extend(_inject_windsurf(target_dir, cmd_str))
     if "cline" in env_lower:
-        cline_dir = os.path.join(target_dir, ".clinerules", "hooks")
-        os.makedirs(cline_dir, exist_ok=True)
-        ps1_blocker = """$inputJson = $input | ConvertFrom-Json
-if ($inputJson.preToolUse.toolName -eq 'read_file' -or $inputJson.preToolUse.toolName -eq 'view_file') {
-    $filePath = $inputJson.preToolUse.parameters.path
-    if (Test-Path $filePath) {
-        $size = (Get-Item $filePath).Length
-        if ($size -gt 1024) {
-            $response = @{ cancel = $true; errorMessage = "[BLOCKED by Context-Pipe] File > 1KB. Use pipe_read_file instead." }
-            $response | ConvertTo-Json -Compress | Write-Output
-            exit 0
-        }
-    }
-}
-$response = @{ cancel = $false }
-$response | ConvertTo-Json -Compress | Write-Output
-"""
-        with open(os.path.join(cline_dir, "PreToolUse.ps1"), "w") as f:
-            f.write(ps1_blocker)
-        actions.append("Injected Security Gateway into Cline hooks (PS1).")
-
-        cline_bash_path = os.path.join(cline_dir, "PreToolUse")
-        cline_bash_content = """#!/bin/bash
-INPUT=$(cat)
-TOOL_NAME=$(echo "$INPUT" | grep -oP '(?<="toolName":")[^"]*')
-if [[ "$TOOL_NAME" == "read_file" ]] || [[ "$TOOL_NAME" == "view_file" ]]; then
-    FILE_PATH=$(echo "$INPUT" | grep -oP '(?<="path":")[^"]*')
-    if [[ -f "$FILE_PATH" ]]; then
-        SIZE=$(wc -c < "$FILE_PATH" 2>/dev/null || stat -f %s "$FILE_PATH" 2>/dev/null || stat -c %s "$FILE_PATH" 2>/dev/null)
-        if [[ "$SIZE" -gt 1024 ]]; then
-            echo '{"cancel": true, "errorMessage": "[BLOCKED by Context-Pipe] File > 1KB. Use pipe_read_file instead."}'
-            exit 0
-        fi
-    fi
-fi
-echo '{"cancel": false}'
-"""
-        with open(cline_bash_path, "w", encoding="utf-8", newline="\n") as f:
-            f.write(cline_bash_content)
-        try:
-            os.chmod(cline_bash_path, 0o755)  # nosec B103
-        except OSError:
-            pass
-        actions.append("Injected Security Gateway into Cline hooks (Bash).")
-
-    # 7. Claude Code Injection
+        actions.extend(_inject_cline(target_dir, cmd_str))
     if "claude" in env_lower:
-        claude_paths = [
-            os.path.join(os.path.expanduser("~"), ".claude", "settings.json"),
-            os.path.join(target_dir, ".claude", "settings.json"),
-        ]
-        for c_path in claude_paths:
-            if merge_hook_json(
-                c_path, "PostToolUse", {"matcher": "mcp__.*__.*", "hooks": [{"type": "command", "command": cmd_str}]}
-            ):
-                actions.append(f"Merged into Claude Code hooks at {c_path}.")
-
-    # 8. Qwen CLI Injection
+        actions.extend(_inject_claude(target_dir, cmd_str))
     if "qwen" in env_lower:
-        qwen_paths = [
-            os.path.join(os.path.expanduser("~"), ".qwen", "settings.json"),
-            os.path.join(target_dir, ".qwen", "settings.json"),
-        ]
-        for q_path in qwen_paths:
-            if merge_hook_json(
-                q_path, "PostToolUse", {"matcher": "mcp__.*__.*", "hooks": [{"type": "command", "command": cmd_str}]}
-            ):
-                actions.append(f"Merged into Qwen CLI hooks at {q_path}.")
-
-    # 9. Codex CLI Injection
+        actions.extend(_inject_qwen(target_dir, cmd_str))
     if "codex" in env_lower:
-        codex_paths = [
-            os.path.join(os.path.expanduser("~"), ".codex", "settings.json"),
-            os.path.join(target_dir, ".codex", "settings.json"),
-        ]
-        for co_path in codex_paths:
-            if merge_hook_json(
-                co_path, "PostToolUse", {"matcher": "mcp__.*__.*", "hooks": [{"type": "command", "command": cmd_str}]}
-            ):
-                actions.append(f"Merged into Codex CLI hooks at {co_path}.")
-
-    # 10. OpenClaw Injection
+        actions.extend(_inject_codex(target_dir, cmd_str))
     if "openclaw" in env_lower:
-        openclaw_plugin_path = os.path.join(target_dir, ".openclaw", "plugins", "context-pipe.ts")
-        os.makedirs(os.path.dirname(openclaw_plugin_path), exist_ok=True)
-        openclaw_plugin_content = f"""/**
- * Context-Pipe Native OpenClaw Plugin
- */
-export default function (api) {{
-  api.on("tool:after", async (event, ctx) => {{
-    const rawContent = ctx.result;
-    if (typeof rawContent !== 'string' || rawContent.length < 500) return;
-    if (rawContent.includes("--- [Context-Pipe: Native Execution] ---")) return;
-    try {{
-      const pythonExe = "{os.path.abspath(sys.executable)}";
-      const payload = {{ hook_event_name: "AfterTool", tool_name: ctx.toolName, tool_response: {{ llmContent: rawContent }} }};
-      const {{ execSync }} = require('child_process');
-      const response = execSync(`"${{pythonExe}}" -m context_pipe.orchestrator wrap`, {{ input: JSON.stringify(payload), encoding: 'utf-8' }});
-      const siftedData = JSON.parse(response);
-      if (siftedData?.tool_response?.llmContent) {{
-         ctx.result = siftedData.tool_response.llmContent;
-      }}
-    }} catch (error) {{ console.error("[Context-Pipe Plugin] failed:", error); }}
-  }});
-}};
-"""
-        with open(openclaw_plugin_path, "w", encoding="utf-8") as f:
-            f.write(openclaw_plugin_content)
-        actions.append("Configured OpenClaw native plugin.")
-
-    # 11. Kilo Code Injection
+        actions.extend(_inject_openclaw(target_dir, cmd_str))
     if "kilocode" in env_lower:
-        kilo_rule_dir = os.path.join(target_dir, ".kilocode", "rules")
-        os.makedirs(kilo_rule_dir, exist_ok=True)
-        kilo_rule_path = os.path.join(kilo_rule_dir, "context.md")
-        with open(kilo_rule_path, "w", encoding="utf-8") as f:
-            f.write(
-                "# Context-Pipe Kilo Code Constraints\n\nEnsure that all raw file reads use the `pipe_read_file` tool to prevent context flooding."
-            )
-        actions.append("Injected Kilo Code workspace rules.")
+        actions.extend(_inject_kilocode(target_dir, cmd_str))
 
     return actions
+

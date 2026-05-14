@@ -284,8 +284,8 @@ By scoping Skills to the A2A boundary, Context-Pipe ensures that high-latency AI
 By default, shell nodes are **disabled** in dynamic pipes. Enabling them requires passing `allow_shell=True` explicitly (or setting the `allow_shell` flag in the MCP tool call). Even then, only the 21 tools in `SHELL_UTILITY_ALLOWLIST` are permitted:
 
 ```
-bash, sh, zsh, fish, python, python3, node, npx, curl, wget,
-grep, awk, sed, cut, sort, uniq, wc, head, tail, cat, echo
+bash, sh, awk, sed, grep, cut, sort, uniq, tr, head, tail,
+wc, cat, echo, printf, xargs, python, python3, jq, yq
 ```
 
 Any node whose command is not in the allowlist AND has `shell: true` raises a `ValueError` and the pipe is rejected before any subprocess is spawned.

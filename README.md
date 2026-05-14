@@ -65,7 +65,7 @@ Every node is a real subprocess. The T-pipe saves a raw copy at any point withou
 A language-agnostic standard with one rule: a node reads `stdin`, transforms content, and writes to `stdout`. Any binary, shell command, Python script, or MCP tool that honours this contract is a valid node. The protocol is defined in [`doc/CONTEXT_PIPE_PROTOCOL.md`](doc/CONTEXT_PIPE_PROTOCOL.md) and is deliberately simple — no SDKs, no registration, no framework coupling.
 
 ### 2. The Orchestration Spine (`orchestrator.py`)
-The execution engine that chains nodes into pipes. Runs each node as a real OS subprocess with `shell=False` enforced (no injection surface). Features: per-node timeout guard (`PIPE_NODE_TIMEOUT_MS`), T-Pipe stream splitting (save raw input to disk before a node processes it), full trace accounting (input/output size + latency per node), and Adaptive Window Pressure (`PIPE_WINDOW_PRESSURE` env var passed to every node).
+The execution engine that chains nodes into pipes. Runs each node as a real OS subprocess with `shell=False` enforced (no injection surface). Features: per-node timeout guard (`PIPE_NODE_TIMEOUT_MS`), T-Pipe stream splitting (save raw input to disk before a node processes it), and full trace accounting (input/output size + latency per node).
 
 ### 3. The Universal Switchboard (`pipes.json` + mappings)
 Data-driven routing that resolves the optimal pipe automatically based on three trigger types: **tool name** (`tool:regex`), **payload size** (`size:>N`), and **default fallback**. Pipe definitions live in `pipes.json` (project-level) and optionally `~/.mcp-pipe.json` (global, merged with local precedence). No code changes required to add, modify, or re-route pipes.
@@ -429,7 +429,6 @@ All four tools in one pipe. Each doing exactly one job.
 |---|---|---|
 | `PIPE_CONFIG_PATH` | `pipes.json` | Absolute path to the project's `pipes.json` config file. |
 | `PIPE_NODE_TIMEOUT_MS` | `30000` | Per-node execution timeout in milliseconds. |
-| `PIPE_WINDOW_PRESSURE` | _(unset)_ | Float `0.0–1.0` passed to each node as an env var. `semantic-sift-cli` reads this and overrides `--rate` accordingly. Set by context-pipe routing when payload pressure is high (cross-project dependency with `semantic-sift`). |
 | `allow_shell` | `false` | Enable arbitrary shell command nodes in dynamic pipes (`pipe_run_dynamic` MCP tool / `run_dynamic_pipe()` API). Requires the final node to be a `semantic-sift` terminal command to guarantee context safety. |
 
 ---

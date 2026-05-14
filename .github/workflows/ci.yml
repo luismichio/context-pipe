@@ -37,7 +37,7 @@ jobs:
       run: mypy context_pipe
 
     - name: Test with pytest (+ coverage gate)
-      run: pytest --tb=short -q --cov=context_pipe --cov=pipe_hook --cov-report=term-missing --cov-fail-under=24
+      run: pytest --tb=short -q --cov=context_pipe --cov=pipe_hook --cov-report=term-missing --cov-fail-under=80
 
     - name: Upload coverage report
       if: matrix.python-version == '3.12'
