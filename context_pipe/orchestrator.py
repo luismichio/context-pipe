@@ -485,9 +485,11 @@ def _reconfigure_io() -> None:
     import sys
     if os.name == "nt":
         if hasattr(sys.stdout, "reconfigure"):
-            sys.stdout.reconfigure(encoding="utf-8")
+            sys.stdout.reconfigure(encoding="utf-8", errors="surrogateescape")
         if hasattr(sys.stderr, "reconfigure"):
-            sys.stderr.reconfigure(encoding="utf-8")
+            sys.stderr.reconfigure(encoding="utf-8", errors="surrogateescape")
+        if hasattr(sys.stdin, "reconfigure"):
+            sys.stdin.reconfigure(encoding="utf-8", errors="surrogateescape")
 
 
 def main():
