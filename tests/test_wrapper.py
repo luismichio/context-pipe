@@ -75,9 +75,12 @@ def test_engine_signature_bypass():
     payload = _make_payload(content)
     config = _make_config("standard-distill")
 
-    result = wrap_payload(payload, config)
-    # Must return the original payload unchanged
-    assert result == payload
+    with patch("context_pipe.wrapper.run_pipe", new_callable=AsyncMock) as mock_run:
+        result = wrap_payload(payload, config)
+        # Must return the original payload unchanged
+        assert result == payload
+        # And must NOT have called the sifter
+        mock_run.assert_not_called()
 
 
 def test_structured_json_bypass():

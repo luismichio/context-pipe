@@ -183,6 +183,31 @@ def test_log_bypass_event_writes_jsonl(isolated_telemetry):
         assert event["type"] == "bypass"
         assert event["reason"] == "test_reason"
 
+def test_get_balance_sheet_aggregates_local_ledger(isolated_telemetry):
+    """get_balance_sheet must correctly aggregate signal/noise from the local JSONL ledger."""
+    # 1. Log a sifting event (100 -> 40 chars = 60 noise removed)
+    tel.log_telemetry("s1", "t1", "tool1", 100, 40, 10.0)
+    # 2. Log a bypass event
+    tel.log_bypass_event("tool2", "reason")
+    
+    # Isolate from semantic_sift to only test local path
+    with patch.dict("sys.modules", {"semantic_sift.telemetry": None}):
+        sheet = tel.get_balance_sheet()
+        assert sheet["noise_removed"] == 60
+        assert sheet["total_events"] == 1
+        assert sheet["bypass_events"] == 1
+
+def test_get_latest_telemetry_reads_local_ledger(isolated_telemetry):
+    """get_latest_telemetry must return the last tool_call from the local ledger."""
+    tel.log_telemetry("s1", "t1", "tool1", 100, 50, 5.0)
+    tel.log_telemetry("s2", "t2", "tool2", 200, 100, 10.0)
+    
+    with patch.dict("sys.modules", {"semantic_sift.telemetry": None}):
+        latest = tel.get_latest_telemetry()
+        assert latest is not None
+        assert latest["tool_key"] == "unknown:tool2"
+        assert latest["original_chars"] == 200
+
 def test_estimate_tokens_basic():
     """estimate_tokens must return a positive integer for non-empty input."""
     assert tel.estimate_tokens("hello world") > 0

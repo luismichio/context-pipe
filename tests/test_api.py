@@ -76,6 +76,25 @@ def test_pipe_tool_trigger_resolves_pipe(tmp_path, monkeypatch):
     assert result == "data"
 
 
+def test_pipe_multi_node_flow(tmp_path, monkeypatch):
+    """Integration: verify multi-node flow through the programmatic API."""
+    monkeypatch.chdir(tmp_path)
+    config = {
+        "pipes": [
+            {
+                "name": "double-pipe",
+                "nodes": [
+                    {"cmd": "python", "args": ["-c", "import sys; sys.stdout.write(sys.stdin.read().upper())"]},
+                    {"cmd": "python", "args": ["-c", "import sys; sys.stdout.write(sys.stdin.read() + '!')"]},
+                ],
+            }
+        ],
+        "mappings": [],
+    }
+    (tmp_path / "pipes.json").write_text(json.dumps(config))
+    result = pipe("hello", pipe_name="double-pipe")
+    assert result == "HELLO!"
+
 def test_pipe_node_error_returns_original(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     config = {

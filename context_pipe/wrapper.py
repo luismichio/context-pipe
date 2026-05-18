@@ -9,8 +9,9 @@ import asyncio
 import logging
 from typing import Dict, Any
 from .platforms import detect_client_id, extract_content, inject_content
-from .orchestrator import run_pipe, resolve_pipe_from_context, check_echo
+from .orchestrator import run_pipe, resolve_pipe_from_context, check_echo, SIFT_SIGNATURE
 from .telemetry import log_telemetry, log_bypass_event
+
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +51,14 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
 
     if debug:
         content_peek = str(raw_content)[:100].replace("\n", " ")
-        logger.debug(f"[CPP DEBUG] Platform: {platform}, Tool: {tool_name}, Content: {content_peek}...")
+        logger.debug(f"[CPP DEBUG] Intercepted '{tool_name}' ({platform}). Content peek: {content_peek}")
 
+    # 1.1 Sift-Centric Signature Bypass
+    # If the content already contains an engine signature, we bypass early.
+    if SIFT_SIGNATURE in str(raw_content):
+        if debug:
+            logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': Engine signature detected.")
+        return _generate_bypass_payload(raw_json, platform)
     # 2. Structured Data Exemption
     # We only bypass if it's strictly machine-readable data (like a tool map or AST).
     # We DO NOT bypass standard MCP text responses (like Firecrawl or GitHub prose).

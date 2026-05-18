@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Metadata Signatures
 # Orchestrator is silent in the Sift-Centric model. Identity is handled by engine nodes.
+SIFT_SIGNATURE = "--- [Semantic-Sift Audit] ---"
 
 
 def get_env_with_venv_path() -> Dict[str, str]:
@@ -272,6 +273,11 @@ async def run_pipe(
     server_registry: Dict[str, Any] | None = None,
 ) -> tuple[str, List[Dict[str, Any]]]:
     """Executes a chain of nodes and tracks context deltas with a timeout guard."""
+    # 0. Early Bypass (Sift-Centric)
+    # If the signature is already present, we bypass the entire pipe to avoid double-sifting.
+    if SIFT_SIGNATURE in input_data:
+        return input_data, []
+
     current_input = input_data
     trace: List[Dict[str, Any]] = []
 
