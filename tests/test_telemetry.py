@@ -18,7 +18,7 @@ import os
 import uuid
 
 import pytest
-
+from unittest.mock import patch
 from context_pipe import telemetry as tel
 
 
@@ -28,8 +28,10 @@ def isolated_telemetry(tmp_path, monkeypatch):
     temp_file = str(tmp_path / "test_telemetry.jsonl")
     monkeypatch.setattr(tel, "TELEMETRY_FILE", temp_file)
     monkeypatch.setattr(tel, "PIPE_TELEMETRY_DISABLED", False)
-    yield temp_file
 
+    # Force fallback to local ledger by masking semantic_sift
+    with patch.dict("sys.modules", {"semantic_sift.telemetry": None}):
+        yield temp_file
 
 def test_log_telemetry_creates_session_entry(isolated_telemetry):
     """log_telemetry must write a session entry with the correct schema."""
@@ -169,6 +171,17 @@ def test_generate_audit_header_format():
     assert "45.2ms" in header
     assert "semantic-sift-cli" in header
 
+
+def test_log_bypass_event_writes_jsonl(isolated_telemetry):
+    """log_bypass_event must write a bypass entry to the local log."""
+    tel.log_bypass_event(tool_name="test_tool", reason="test_reason", platform="test_plat")
+    
+    with open(isolated_telemetry) as f:
+        lines = f.readlines()
+        assert len(lines) == 1
+        event = json.loads(lines[0])
+        assert event["type"] == "bypass"
+        assert event["reason"] == "test_reason"
 
 def test_estimate_tokens_basic():
     """estimate_tokens must return a positive integer for non-empty input."""

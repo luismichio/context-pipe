@@ -27,7 +27,7 @@ When an AI agent executes a tool, middleware (like `sift_hook.py`) can intercept
     *   `postToolUse` / `afterMCPExecution`: Fires after tool use. 
 *   **Payload Schema**: **Blind Hook**. Passes JSON via `stdin`, but typically omits the `tool_name` (e.g., `{"result": "<output>"}`).
 *   **Rule Infusion**: Relies heavily on `.cursorrules` or `.clinerules`.
-*   **Semantic-Sift Strategy**: Must use **Content-Signature Bypass** (`[Semantic-Sift: Native Execution]`) because `tool_name` is missing. Must audit `beforeMCPExecution` during onboarding.
+*   **Semantic-Sift Strategy**: In the Sift-Centric model, the orchestrator remains silent. The engine (`semantic-sift`) uses **Self-Aware Bypass**: it scans the input for its own audit header (`--- [Semantic-Sift Audit] ---`) and skips processing if found. This prevents double-sifting while allowing orchestrators to remain transparent.
 *   **Subagents & Multi-Agent**: Uses an Orchestrator-Worker model. Subagents (Workers) are defined via Markdown files in `.cursor/agents/`. They have isolated contexts but inherit global **Lifecycle Hooks** from `.cursor/hooks.json`, ensuring subconscious sifting applies to subagent edits.
 
 ### OpenCode
@@ -150,10 +150,10 @@ When an AI agent executes a tool, middleware (like `sift_hook.py`) can intercept
 
 To build tools that survive across this fragmented ecosystem, `semantic-sift` adheres to the following universal design principles:
 
-### A. The Content-Signature Bypass
+### A. Self-Aware Node Bypass
 Because **Cursor** and **VS Code** are "Blind Hooks," middleware cannot safely rely on checking if `tool_name == "sift_read_file"`.
-*   **Rule**: ALL native sifting tools running on the MCP server MUST prepend a unique string to their output: `--- [Semantic-Sift: Native Execution] ---`
-*   **Implementation**: `sift_hook.py` must scan `raw_content` for this exact string and instantly `return` to prevent Double-Sifting.
+*   **Rule**: All distillation nodes MUST check their input for an existing audit header (e.g., `--- [Semantic-Sift Audit] ---`). If a header is detected, the node must immediately pass the input to `stdout` unmodified. This ensures that already-refined data is not corrupted by subsequent sifting passes while allowing the orchestrator to remain transparent and silent.
+*   **Implementation**: `sift_hook.py` must scan `raw_content` for this header and instantly `return` to prevent Double-Sifting.
 
 ### B. Structured Data Exemption
 Middleware must never corrupt JSON or machine-readable outputs.

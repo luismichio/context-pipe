@@ -18,7 +18,6 @@ from unittest.mock import patch, AsyncMock
 
 
 from context_pipe.wrapper import wrap_payload
-from context_pipe.orchestrator import CPP_SIGNATURE
 
 
 # ---------------------------------------------------------------------------
@@ -69,9 +68,10 @@ def test_no_matching_pipe_returns_raw():
     assert result == payload
 
 
-def test_cpp_signature_bypass():
-    """Content already containing the CPP signature must be bypassed (no double-sift)."""
-    content = f"already processed content\n\n{CPP_SIGNATURE}"
+def test_engine_signature_bypass():
+    """Content already containing the engine signature must be bypassed (no double-sift)."""
+    signature = "--- [Semantic-Sift Audit] ---"
+    content = f"already processed content\n{signature}"
     payload = _make_payload(content)
     config = _make_config("standard-distill")
 
@@ -88,6 +88,23 @@ def test_structured_json_bypass():
     result = wrap_payload(payload, config)
     assert result == payload
 
+
+def test_large_structured_json_is_sifted():
+    """Structured JSON larger than 10KB must NOT be bypassed (sifted for ROI)."""
+    large_json = json.dumps({"data": "x" * 12000})
+    payload = _make_payload(large_json)
+    config = _make_config("standard-distill")
+
+    sifted = "compressed-json"
+    mock_trace = [{"node": "sift", "input_size": len(large_json), "output_size": len(sifted)}]
+
+    with patch("context_pipe.wrapper.run_pipe", new_callable=AsyncMock) as mock_run:
+        mock_run.return_value = (sifted, mock_trace)
+        result = wrap_payload(payload, config)
+
+    # Should have called run_pipe instead of bypassing
+    mock_run.assert_called_once()
+    assert sifted in result
 
 def test_tool_trigger_routes_to_correct_pipe():
     """A tool name matching the trigger regex must select the correct pipe."""
@@ -130,6 +147,25 @@ def test_size_trigger_routes_to_heavy_pipe():
     pipe_name_small = resolve_pipe_from_context(config, "view_file", 500)
     assert pipe_name_small == "standard-distill"
 
+
+def test_stringified_tool_response_is_handled():
+    """Gemini CLI often passes stringified JSON in tool_response; wrap_payload must handle this."""
+    inner_response = {"output": "noisy log content with lots of text" * 50}
+    payload = json.dumps({
+        "tool_name": "read_file",
+        "tool_response": json.dumps(inner_response)
+    })
+    config = _make_config("standard-distill")
+
+    sifted = "compressed"
+    mock_trace = [{"node": "sift", "input_size": 1000, "output_size": 100}]
+
+    with patch("context_pipe.wrapper.run_pipe", new_callable=AsyncMock) as mock_run:
+        mock_run.return_value = (sifted, mock_trace)
+        result = wrap_payload(payload, config)
+
+    mock_run.assert_called_once()
+    assert sifted in result
 
 def test_run_pipe_exception_falls_back_to_raw():
     """If run_pipe raises, wrap_payload must return the original raw JSON."""

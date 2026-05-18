@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Luis Kobayashi. All rights reserved.
-
 import os
 import json
 import time
 import uuid
 from typing import Optional
 from mcp.server.fastmcp import FastMCP, Context
-from .orchestrator import run_pipe, CPP_SIGNATURE
-from .telemetry import get_balance_sheet, log_telemetry, generate_audit_header
+from .orchestrator import run_pipe
+from .telemetry import get_balance_sheet, log_telemetry
 from .platforms import detect_client_id
 from .onboarding import inject_hooks, verify_installation, resolve_pipes_config, inject_shell_aliases, remove_shell_aliases
 from .a2a import pipe_agent_handoff as _pipe_agent_handoff
@@ -40,29 +39,25 @@ def list_pipes() -> str:
     config = load_config()
     pipes = config.get("pipes", [])
     if not pipes:
-        return f"No pipes configured.\n\n{CPP_SIGNATURE}"
-
+        return "No pipes configured.\n"
     summary = ["Available Context Pipes:"]
     for p in pipes:
         summary.append(f"- {p['name']}: {p.get('description', 'No description')}")
-
-    return "\n".join(summary) + f"\n\n{CPP_SIGNATURE}"
+    return "\n".join(summary)
 
 
 @mcp.tool()
 async def pipe_run(pipe_name: str, input_text: str) -> str:
     """
     Executes a specific context pipe on the provided input text.
-
     Args:
         pipe_name: The name of the pipe to run (e.g., 'standard-distill', 'semantic-refinery').
         input_text: The raw text to be processed through the pipe.
     """
     config = load_config()
     pipe = next((p for p in config.get("pipes", []) if p["name"] == pipe_name), None)
-
     if not pipe:
-        return f"Error: Pipe '{pipe_name}' not found.\n\n{CPP_SIGNATURE}"
+        return f"Error: Pipe '{pipe_name}' not found.\n"
 
     start_t = time.time()
     try:
@@ -82,12 +77,11 @@ async def pipe_run(pipe_name: str, input_text: str) -> str:
             platform=platform,
         )
 
-        # Prepend Audit Header
-        header = generate_audit_header(pipe_name, trace, latency_ms)
-        return f"{header}{result}\n\n{CPP_SIGNATURE}"
-
+        # Silent Orchestrator: No headers or signatures added here.
+        # Identity and headers are now handled by engine nodes.
+        return result
     except Exception as e:
-        return f"Error executing pipe: {str(e)}\n\n{CPP_SIGNATURE}"
+        return f"Error executing pipe: {str(e)}\n"
 
 
 async def _resolve_safe_path(path: str, ctx: Optional[Context] = None) -> str:
@@ -98,7 +92,6 @@ async def _resolve_safe_path(path: str, ctx: Optional[Context] = None) -> str:
 
     resolved_path = os.path.realpath(path)
     workspace_roots = []
-
     if ctx and hasattr(ctx, "session"):
         try:
             roots_result = await ctx.session.list_roots()
@@ -128,7 +121,6 @@ async def pipe_read_file(path: str, pipe_name: str = "standard-distill", ctx: Op
     """
     Reads a local file safely and streams it directly through a context pipe.
     Use this instead of native file readers to prevent context window flooding.
-
     Args:
         path: Absolute or relative path to the file.
         pipe_name: The name of the pipe to run (e.g., 'standard-distill', 'full-refinery').
@@ -138,7 +130,7 @@ async def pipe_read_file(path: str, pipe_name: str = "standard-distill", ctx: Op
         with open(resolved_path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
     except Exception as e:
-        return f"Error reading file: {str(e)}\n\n{CPP_SIGNATURE}"
+        return f"Error reading file: {str(e)}\n"
 
     return await pipe_run(pipe_name, content)
 
@@ -148,14 +140,11 @@ async def pipe_analyze_file(path: str, ctx: Optional[Context] = None) -> str:
     """
     Analyzes a file's size and structure to recommend the optimal context pipe,
     without flooding the context window.
-
     Call this BEFORE pipe_read_file when you are unsure which pipe to use.
     The recommendation tells you exactly which pipe_name to pass to pipe_read_file.
-
     Decision guide:
-      - < 10KB  → 'standard-distill'  (fast heuristic sifting)
-      - >= 10KB → 'semantic-refinery' (neural compression)
-
+      - < 10KB  -> 'standard-distill'  (fast heuristic sifting)
+      - >= 10KB -> 'semantic-refinery' (neural compression)
     Args:
         path: Absolute or relative path to the file.
     """
@@ -163,34 +152,29 @@ async def pipe_analyze_file(path: str, ctx: Optional[Context] = None) -> str:
         resolved_path = await _resolve_safe_path(path, ctx)
         size = os.path.getsize(resolved_path)
     except Exception as e:
-        return f"Error analyzing file: {str(e)}\n\n{CPP_SIGNATURE}"
+        return f"Error analyzing file: {str(e)}\n"
 
     recommendation = "standard-distill"
     if size > 10000:
         recommendation = "semantic-refinery"
 
-    return f"File: {os.path.basename(path)}\nSize: {size} bytes\nRecommendation: Use pipe_read_file with pipe_name='{recommendation}'.\n\n{CPP_SIGNATURE}"
+    return f"File: {os.path.basename(path)}\nSize: {size} bytes\nRecommendation: Use pipe_read_file with pipe_name='{recommendation}'."
 
 
 @mcp.tool()
 def get_pipe_stats() -> str:
     """Returns the Context Balance Sheet (ROI) for the entire pipeline ecosystem."""
     sheet = get_balance_sheet()
-
     # Format the Net Change string
     net_label = "Saved" if sheet["net_change"] < 0 else "Added"
-
     return f"""
 ## 📊 Context-Pipe Balance Sheet
-
 - **Signal Injected (Augmentation):** +{sheet["signal_added"]:,} chars
 - **Noise Incinerated (Reduction):** -{sheet["noise_removed"]:,} chars
 - **Net Context {net_label}:** {abs(sheet["net_change"]):,} chars
 - **Platform Events:** {sheet["total_events"]}
 - **Avg Node Latency:** {sheet["avg_latency_ms"]:.2f}ms
-
-{CPP_SIGNATURE}
-    """
+"""
 
 
 @mcp.tool()
@@ -203,7 +187,6 @@ def pipe_verify() -> str:
     # Auto-resolve pipes.json nodes first
     pipes_path = CONFIG_PATH
     resolve_result = resolve_pipes_config(pipes_path)
-
     report = verify_installation(pipes_path)
 
     lines = ["## Context-Pipe Installation Report", ""]
@@ -232,7 +215,7 @@ def pipe_verify() -> str:
         for node in report["nodes"]:
             icon = "✅" if node["ok"] else "❌"
             resolved = f"`{node['resolved']}`" if node["resolved"] else "not found in PATH"
-            lines.append(f"{icon} `{node['cmd']}` → {resolved}")
+            lines.append(f"{icon} `{node['cmd']}` -> {resolved}")
 
     # overall
     lines.append("")
@@ -245,7 +228,7 @@ def pipe_verify() -> str:
     else:
         lines.append("**Overall: ❌ Action required — see items above.**")
 
-    return "\n".join(lines) + f"\n\n{CPP_SIGNATURE}"
+    return "\n".join(lines)
 
 
 @mcp.tool()
@@ -258,13 +241,12 @@ def pipe_audit_last() -> str:
     from .telemetry import get_latest_telemetry
     last = get_latest_telemetry()
     if not last:
-        return f"No telemetry events found in the ledger.\n\n{CPP_SIGNATURE}"
+        return "No telemetry events found in the ledger.\n"
 
     reduction = (1 - (last["final_chars"] / last["original_chars"])) * 100 if last["original_chars"] > 0 else 0
 
     return f"""
 ## 🔍 Context-Pipe Audit: Last Event
-
 - **Tool Call:** `{last['tool_key']}`
 - **Original Size:** {last['original_chars']:,} chars
 - **Final Size:** {last['final_chars']:,} chars
@@ -273,16 +255,13 @@ def pipe_audit_last() -> str:
 - **Platform:** {last['platform']}
 - **Agent Label:** {last['agent']}
 - **Session ID:** `{last['session_id']}`
-
-{CPP_SIGNATURE}
-    """
+"""
 
 
 @mcp.tool()
 def pipe_onboard(environment: str, target_dir: Optional[str] = None) -> str:
     """
     Initializes Context-Pipe hooks and commands in the current project.
-
     Args:
         environment: The IDE/CLI environment (e.g., 'Cursor', 'VSCode', 'Gemini').
         target_dir: Optional directory to onboard. Defaults to current directory.
@@ -290,9 +269,9 @@ def pipe_onboard(environment: str, target_dir: Optional[str] = None) -> str:
     path = target_dir or os.getcwd()
     actions = inject_hooks(path, environment)
     if not actions:
-        return f"Context-Pipe is already active or no targets found in {path}.\n\n{CPP_SIGNATURE}"
+        return f"Context-Pipe is already active or no targets found in {path}.\n"
 
-    return "Onboarding Successful:\n" + "\n".join([f"- {a}" for a in actions]) + f"\n\n{CPP_SIGNATURE}"
+    return "Onboarding Successful:\n" + "\n".join([f"- {a}" for a in actions])
 
 
 @mcp.tool()
@@ -335,15 +314,14 @@ def pipe_agent_handoff(
         pipe_name=pipe_name or None,
         from_agent=from_agent or None,
         to_agent=to_agent or None,
-    ) + f"\n\n{CPP_SIGNATURE}"
+    )
 
 
 @mcp.prompt()
 def pipe_dashboard() -> str:
     """Returns a dashboard overview of the current context-pipe configuration."""
     return f"""
-# ⛓️ Context-Pipe Dashboard
-
+# 🎮 Context-Pipe Dashboard
 You are currently connected to the Context-Pipe Orchestrator.
 
 ## Active Pipes
@@ -354,9 +332,7 @@ You are currently connected to the Context-Pipe Orchestrator.
 
 ## Instructions
 To protect your context window, always consider streaming large tool outputs through the optimal pipe.
-
-{CPP_SIGNATURE}
-    """
+"""
 
 
 @mcp.tool()
@@ -399,12 +375,13 @@ async def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool =
     try:
         nodes = json.loads(nodes_json)
     except json.JSONDecodeError as exc:
-        return f"Error: nodes_json is not valid JSON — {exc}\n\n{CPP_SIGNATURE}"
+        return f"Error: nodes_json is not valid JSON — {exc}\n"
 
     start_t = time.time()
     try:
         result, trace = await run_dynamic_pipe(nodes, input_text, allow_shell=allow_shell)
         latency_ms = (time.time() - start_t) * 1000
+
         platform = detect_client_id()
         log_telemetry(
             session_id=SESSION_ID,
@@ -416,12 +393,12 @@ async def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool =
             latency_ms=latency_ms,
             platform=platform,
         )
-        header = generate_audit_header("dynamic", trace, latency_ms)
-        return f"{header}{result}\n\n{CPP_SIGNATURE}"
+
+        return result
     except ValueError as exc:
-        return f"Error: {exc}\n\n{CPP_SIGNATURE}"
+        return f"Error: {exc}\n"
     except Exception as exc:
-        return f"Error executing dynamic pipe: {exc}\n\n{CPP_SIGNATURE}"
+        return f"Error executing dynamic pipe: {exc}\n"
 
 
 @mcp.tool()
@@ -435,20 +412,19 @@ def pipe_list_shadow_tools() -> str:
     step that ensures your nodes_json references real, resolvable commands.
 
     Workflow:
-      1. pipe_list_shadow_tools()          ← discover available nodes
-      2. Construct nodes_json array        ← must end with semantic-sift-cli
-      3. pipe_run_dynamic(nodes_json, ...) ← execute the graph
+      1. pipe_list_shadow_tools()          -> discover available nodes
+      2. Construct nodes_json array        -> must end with semantic-sift-cli
     """
     tools = list_shadow_tools(CONFIG_PATH)
     if not tools:
-        return f"No context-processing tools found (no pipes.json and no known CLI tools on PATH).\n\n{CPP_SIGNATURE}"
+        return "No context-processing tools found (no pipes.json and no known CLI tools on PATH).\n"
 
     lines = ["| Name | Source | Description | Nodes |", "|---|---|---|---|"]
     for t in tools:
         nodes_str = ", ".join(f"`{n}`" for n in t["nodes"]) if t["nodes"] else "—"
         lines.append(f"| {t['name']} | {t['source']} | {t['description']} | {nodes_str} |")
 
-    return "\n".join(lines) + f"\n\n{CPP_SIGNATURE}"
+    return "\n".join(lines)
 
 
 @mcp.tool()
@@ -467,10 +443,11 @@ def pipe_install_aliases(shells: str = "") -> str:
     shell_list = shells.split() if shells.strip() else None
     results = inject_shell_aliases(shells=shell_list)
     if not results:
-        return f"cpipe alias already up-to-date — no profile files were modified.\n\n{CPP_SIGNATURE}"
+        return "cpipe alias already up-to-date — no profile files were modified.\n"
+
     lines = ["cpipe alias installed:"] + [f"  - {r}" for r in results]
     lines.append("\nRestart your shell (or source the profile) to activate `cpipe`.")
-    return "\n".join(lines) + f"\n\n{CPP_SIGNATURE}"
+    return "\n".join(lines)
 
 
 @mcp.tool()
@@ -483,8 +460,9 @@ def pipe_remove_aliases() -> str:
     """
     results = remove_shell_aliases()
     if not results:
-        return f"No cpipe alias block found in any profile — nothing removed.\n\n{CPP_SIGNATURE}"
-    return "cpipe alias removed:\n" + "\n".join(f"  - {r}" for r in results) + f"\n\n{CPP_SIGNATURE}"
+        return "No cpipe alias block found in any profile — nothing removed.\n"
+
+    return "cpipe alias removed:\n" + "\n".join(f"  - {r}" for r in results)
 
 
 def main():

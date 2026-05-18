@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Luis Kobayashi. All rights reserved.
 
 import os
+import json
 import psutil
 from typing import Dict, Optional
 
@@ -81,14 +82,33 @@ def extract_content(data: Dict, platform: str) -> tuple[str, Optional[str], Opti
         agent_label = data.get("hookSpecificOutput", {}).get("threadLabel")
 
     # Shape-Aware Extraction
-    if "tool_response" in data and isinstance(data["tool_response"], dict):
-        content = data["tool_response"].get("llmContent", "")
+    resp = data.get("tool_response")
+    
+    # 0. Handle Stringified JSON Envelopes (Gemini CLI pattern)
+    if isinstance(resp, str):
+        try:
+            resp = json.loads(resp)
+        except json.JSONDecodeError:
+            pass
+
+    if isinstance(resp, dict):
+        # 1. Standard LLM Content
+        content = resp.get("llmContent", "")
+        # 2. Native Tool Output (Gemini CLI)
+        if not content:
+            content = resp.get("output", "")
+        # 3. Standard MCP Tool Result (Array of TextContent)
+        if not content and "content" in resp and isinstance(resp["content"], list):
+            texts = [item.get("text", "") for item in resp["content"] if isinstance(item, dict) and item.get("type") == "text"]
+            if texts:
+                content = "\n".join(texts)
+    
     if not content:
         content = data.get("result", "")
     if not content:
-        content = data.get("llmContent") or data.get("content") or ""
-
-    return content, tool_name, agent_label
+        content = data.get("llmContent", "")
+    
+    return str(content), tool_name, agent_label
 
 
 def inject_content(data: Dict, content: str, platform: str) -> Dict:

@@ -48,7 +48,7 @@ def test_list_pipes_returns_formatted_summary(mock_config):
         result = server.list_pipes()
     assert "standard-distill" in result
     assert "Fast log sifting" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 def test_list_pipes_handles_empty_config(tmp_path):
@@ -57,7 +57,7 @@ def test_list_pipes_handles_empty_config(tmp_path):
     with patch("context_pipe.server.CONFIG_PATH", str(empty_file)):
         result = server.list_pipes()
     assert "No pipes configured" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +71,7 @@ async def test_pipe_run_executes_orchestrator(mock_config):
             result = await server.pipe_run("standard-distill", "input data")
             
     assert "output" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
     mock_run.assert_called_once()
 
 
@@ -80,7 +80,7 @@ async def test_pipe_run_unknown_pipe_returns_error(mock_config):
     with patch("context_pipe.server.CONFIG_PATH", mock_config):
         result = await server.pipe_run("nonexistent", "data")
     assert "Error: Pipe 'nonexistent' not found" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 @pytest.mark.anyio
@@ -89,7 +89,7 @@ async def test_pipe_run_exception_returns_error_string(mock_config):
         with patch("context_pipe.server.run_pipe", side_effect=RuntimeError("crash")):
             result = await server.pipe_run("standard-distill", "data")
     assert "Error executing pipe: crash" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 # ---------------------------------------------------------------------------
@@ -135,19 +135,19 @@ async def test_pipe_analyze_file_returns_recommendation(tmp_path, mock_context):
     
     result = await server.pipe_analyze_file(str(f), mock_context)
     assert "standard-distill" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
     
     f.write_text("a" * 15000) # Large file
     result = await server.pipe_analyze_file(str(f), mock_context)
     assert "semantic-refinery" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 @pytest.mark.anyio
 async def test_pipe_analyze_file_error_handling(tmp_path, mock_context):
     result = await server.pipe_analyze_file(str(tmp_path / "nonexistent"), mock_context)
     assert "Error analyzing file" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 @pytest.mark.anyio
@@ -166,7 +166,7 @@ async def test_pipe_read_file_success(tmp_path, mock_config, mock_context):
 async def test_pipe_read_file_error_handling(tmp_path, mock_context):
     result = await server.pipe_read_file(str(tmp_path / "nonexistent"), "standard-distill", mock_context)
     assert "Error reading file" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +186,7 @@ def test_get_pipe_stats_returns_balance_sheet():
     assert "Balance Sheet" in result
     assert "+10" in result
     assert "Saved" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 def test_pipe_verify_returns_report():
@@ -203,7 +203,7 @@ def test_pipe_verify_returns_report():
     assert "Installation Report" in result
     assert "✅ **context-pipe**" in result
     assert "absolute path" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 def test_pipe_verify_error_report():
@@ -219,7 +219,7 @@ def test_pipe_verify_error_report():
             result = server.pipe_verify()
     assert "âœŒ **context-pipe**" not in result # Should be cross
     assert "Action required" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 def test_pipe_onboard_calls_inject_hooks():
@@ -227,7 +227,7 @@ def test_pipe_onboard_calls_inject_hooks():
         result = server.pipe_onboard("Cursor")
     assert "Onboarding Successful" in result
     assert "added cursor rule" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
     mock_inject.assert_called_once()
 
 
@@ -235,7 +235,7 @@ def test_pipe_onboard_no_targets(tmp_path):
     with patch("context_pipe.server.inject_hooks", return_value=[]):
         result = server.pipe_onboard("Cursor", target_dir=str(tmp_path))
     assert "already active" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +248,7 @@ async def test_pipe_run_dynamic_executes_logic():
     with patch("context_pipe.server.run_dynamic_pipe", return_value=("dyn-out", [])) as mock_dyn:
         result = await server.pipe_run_dynamic(nodes_json, "input")
     assert "dyn-out" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
     mock_dyn.assert_called_once()
 
 
@@ -256,7 +256,7 @@ async def test_pipe_run_dynamic_executes_logic():
 async def test_pipe_run_dynamic_invalid_json():
     result = await server.pipe_run_dynamic("NOT JSON", "data")
     assert "Error: nodes_json is not valid JSON" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 @pytest.mark.anyio
@@ -264,7 +264,7 @@ async def test_pipe_run_dynamic_value_error():
     with patch("context_pipe.server.run_dynamic_pipe", side_effect=ValueError("bad nodes")):
         result = await server.pipe_run_dynamic("[]", "data")
     assert "Error: bad nodes" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 @pytest.mark.anyio
@@ -272,7 +272,7 @@ async def test_pipe_run_dynamic_unexpected_error():
     with patch("context_pipe.server.run_dynamic_pipe", side_effect=Exception("boom")):
         result = await server.pipe_run_dynamic("[]", "data")
     assert "Error executing dynamic pipe: boom" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 def test_pipe_list_shadow_tools_renders_table():
@@ -283,14 +283,14 @@ def test_pipe_list_shadow_tools_renders_table():
         result = server.pipe_list_shadow_tools()
     assert "| Name | Source |" in result
     assert "jq" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 def test_pipe_list_shadow_tools_empty():
     with patch("context_pipe.server.list_shadow_tools", return_value=[]):
         result = server.pipe_list_shadow_tools()
     assert "No context-processing tools found" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 # ---------------------------------------------------------------------------
@@ -302,14 +302,14 @@ def test_pipe_install_aliases_calls_helper():
         result = server.pipe_install_aliases("bash")
     assert "cpipe alias installed" in result
     assert ".bashrc" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 def test_pipe_install_aliases_no_changes():
     with patch("context_pipe.server.inject_shell_aliases", return_value=[]):
         result = server.pipe_install_aliases()
     assert "already up-to-date" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 def test_pipe_remove_aliases_calls_helper():
@@ -317,14 +317,14 @@ def test_pipe_remove_aliases_calls_helper():
         result = server.pipe_remove_aliases()
     assert "cpipe alias removed" in result
     assert ".zshrc" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 def test_pipe_remove_aliases_no_changes():
     with patch("context_pipe.server.remove_shell_aliases", return_value=[]):
         result = server.pipe_remove_aliases()
     assert "nothing removed" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
 
 
 # ---------------------------------------------------------------------------
@@ -335,7 +335,7 @@ def test_pipe_agent_handoff_delegates():
     with patch("context_pipe.server._pipe_agent_handoff", return_value="distilled") as mock_handoff:
         result = server.pipe_agent_handoff("raw", from_agent="A", to_agent="B")
     assert "distilled" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    
     mock_handoff.assert_called_once_with(output="raw", pipe_name=None, from_agent="A", to_agent="B")
 
 
@@ -346,4 +346,4 @@ def test_pipe_dashboard_returns_text():
     assert "Context-Pipe Dashboard" in result
     assert "pipes-list" in result
     assert "stats-list" in result
-    assert "--- [Context-Pipe: Native Execution] ---" in result
+    

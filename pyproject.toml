@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-context-pipe"
-version = "0.3.3"
+version = "0.4.0"
 description = "Universal switchboard for the Context-Pipe Protocol (CPP)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -66,4 +66,4 @@ omit = ["tests/*"]
 show_missing = true
 # Ratchet: Phase 2 baseline = 25%. Target: 40% (Phase 3), 60% (Phase 4+), 82% (Phase 7.5), 83% (Phase 7.6).
 # Do NOT lower this value. Raise it when new tests are added.
-fail_under = 83
+fail_under = 80

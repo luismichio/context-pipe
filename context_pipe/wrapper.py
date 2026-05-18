@@ -9,8 +9,8 @@ import asyncio
 import logging
 from typing import Dict, Any
 from .platforms import detect_client_id, extract_content, inject_content
-from .orchestrator import run_pipe, resolve_pipe_from_context, CPP_SIGNATURE, check_echo
-from .telemetry import log_telemetry, generate_audit_header
+from .orchestrator import run_pipe, resolve_pipe_from_context, check_echo
+from .telemetry import log_telemetry, log_bypass_event
 
 logger = logging.getLogger(__name__)
 
@@ -52,35 +52,49 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
         content_peek = str(raw_content)[:100].replace("\n", " ")
         logger.debug(f"[CPP DEBUG] Platform: {platform}, Tool: {tool_name}, Content: {content_peek}...")
 
-    # 2. Signature Check (Bypass)
-    if CPP_SIGNATURE in str(raw_content):
-        if debug:
-            logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': Signature detected.")
-        return _generate_bypass_payload(raw_json, platform)
-
-    # 2.5 Structured Data Exemption
-    # Do not pipe valid JSON dictionaries or lists (e.g., Serena outputs)
+    # 2. Structured Data Exemption
+    # We only bypass if it's strictly machine-readable data (like a tool map or AST).
+    # We DO NOT bypass standard MCP text responses (like Firecrawl or GitHub prose).
     try:
-        parsed = json.loads(str(raw_content))
-        if isinstance(parsed, (dict, list)):
-            if debug:
-                logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': Structured JSON detected.")
-            return _generate_bypass_payload(raw_json, platform)
+        stripped = str(raw_content).strip()
+        if stripped.startswith(("{", "[")) and stripped.endswith(("}", "]")):
+            parsed = json.loads(stripped)
+            if isinstance(parsed, (dict, list)):
+                # Standard MCP text envelope: {"content": [{"type": "text", "text": "..."}]}
+                is_mcp_text = (
+                    isinstance(parsed, dict) 
+                    and "content" in parsed 
+                    and isinstance(parsed["content"], list)
+                    and len(parsed["content"]) > 0
+                    and isinstance(parsed["content"][0], dict)
+                    and parsed["content"][0].get("type") == "text"
+                )
+
+                if not is_mcp_text:
+                    # Final safety: If it's a very large JSON (e.g. a big data dump), 
+                    # we SHOULD sift it to save tokens, even if it's structured.
+                    if len(stripped) < 10000:
+                        if debug:
+                            logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': Structured JSON detected.")
+                        log_bypass_event(tool_name=str(tool_name), reason="Structured JSON detected", platform=platform, agent_label=agent_label)
+                        return _generate_bypass_payload(raw_json, platform)
     except (json.JSONDecodeError, TypeError):
         pass
-
-    # 4. Dynamic Routing
+    
+    # 3. Dynamic Routing
     pipe_name = resolve_pipe_from_context(config, str(tool_name), len(str(raw_content)))
     if not pipe_name:
         if debug:
             logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': No routing match found.")
+        log_bypass_event(tool_name=str(tool_name), reason="No routing match found", platform=platform, agent_label=agent_label)
         return _generate_bypass_payload(raw_json, platform)
 
-    # 3. Guard: Echo Detection (Disk-Based)
-    # Scoped to pipe_name to prevent false suppression cross-pipe
-    if check_echo(str(raw_content), pipe_name=pipe_name):
+    # 4. Guard: Echo Detection (Disk-Based)
+    # Scoped to pipe_name with index -1 to prevent collision with node_index 0 in run_pipe
+    if check_echo(str(raw_content), pipe_name=pipe_name, node_index=-1):
         if debug:
             logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': Echo Guard hit (recently processed).")
+        log_bypass_event(tool_name=str(tool_name), reason="Echo Guard hit", platform=platform, pipe_name=pipe_name, agent_label=agent_label)
         return _generate_bypass_payload(raw_json, platform)
 
     pipe = next((p for p in config.get("pipes", []) if p["name"] == pipe_name), None)
@@ -117,12 +131,9 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
                 agent_label=agent_label,
             )
 
-        # 7. Audit Header
-        header = generate_audit_header(pipe_name, trace, latency_ms)
-
-        # 8. Inject & Signature
-        final_content = f"{header}{sifted_content}\n\n{CPP_SIGNATURE}"
-        data = inject_content(data, final_content, platform)
+        # 7. Inject (Silent Orchestrator)
+        # Orchestrator is now transparent; headers and signatures are handled by engine nodes.
+        data = inject_content(data, sifted_content, platform)
 
         return json.dumps(data)
     except Exception:

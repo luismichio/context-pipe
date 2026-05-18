@@ -133,20 +133,20 @@ During onboarding, the engine performs a recursive crawl of the workspace (up to
 *   **Gemini/OpenClaw**: Detects `AfterTool` or `PreCompress` event names. Extracts `tool_response.llmContent`.
     *   **Decision Schema**: Uses the explicit `{"decision": "deny", "reason": "..."}` schema for content modification.
     *   **UI Note**: In the Gemini CLI, a successful interception will display as **`Tool result blocked:`** followed by the reason (the sifted text). This is expected platform behavior, as the CLI interprets the protocol-level "denial" of the original text as a security block.
-*   **Reinjection**: Injects ROI metrics into Gemini's `additionalContext` or prepends the **Audit Header** to the text result.
+*   **Reinjection**: Injects ROI metrics into Gemini's `additionalContext`.
 *   **OpenCode**: Plugin hook (`tool.execute.after`) is registered but currently inactive for MCP tools — see compatibility note in Section 1. The `AGENTS.md` SOP mandate is the active strategy.
 
 ### 2. Blind Hooks (IDEs)
 *   **VS Code & Cursor**: Scans the incoming JSON for keys like `result` or `tool_response.llmContent`.
-*   **Reinjection**: Overwrites the found key with the piped text, prepended with the Audit Header and the CPP Signature.
+*   **Reinjection**: Overwrites the found key with the piped text. In the Sift-Centric model, the orchestrator remains silent; headers and signatures are provided by the engine nodes (e.g., `semantic-sift`).
 
 ---
 
-## 6. The Context-Pipe Signature (Bypass)
+## 6. Self-Aware Node Bypass
 
-To prevent **Double-Sifting** and infinite loops:
-1.  All processed content is appended with: `\n\n--- [Context-Pipe: Native Execution] ---`.
-2.  The wrapper explicitly scans content for this signature and the legacy `--- [Semantic-Sift Audit] ---` signature. If found, it instantly bypasses processing.
+To prevent **Double-Sifting** and infinite loops in the Sift-Centric model:
+1.  **Orchestrator Silence**: The `context-pipe` orchestrator does not append signatures or headers.
+2.  **Engine Self-Awareness**: Engine nodes (e.g., `semantic-sift`) are responsible for their own bypass logic. They scan their input for an existing audit header (e.g., `--- [Semantic-Sift Audit] ---`). If found, they immediately pass the data through unmodified. This allows the orchestrator to remain transparent while ensuring data integrity.
 
 ---
 *Building High-Fidelity Infrastructure for the Studio of Two.*

@@ -179,6 +179,8 @@ def _cmd_stats(_args: argparse.Namespace) -> int:
     print(f"  Avg Node Latency:    {sheet['avg_latency_ms']:.2f}ms")
     if sheet.get("fallback_events", 0) > 0:
         print(f"  Hook Fallbacks:      {sheet['fallback_events']} (pipe failed; raw input passed through)")
+    if sheet.get("bypass_events", 0) > 0:
+        print(f"  Hook Bypasses:       {sheet['bypass_events']} (opted for Native Execution)")
     print("-----------------------------------------\n")
     return 0
 

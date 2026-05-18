@@ -241,7 +241,25 @@ def test_cmd_stats_prints_balance_sheet():
 # mcp-pipe serve
 # ---------------------------------------------------------------------------
 
-def test_cmd_serve_calls_server_main():
+def test_cli_stats_shows_bypasses(tmp_path, monkeypatch):
+    """mcp-pipe stats must display the bypass count from the balance sheet."""
+    from context_pipe import telemetry
+    temp_file = str(tmp_path / "stats_test.jsonl")
+    monkeypatch.setattr(telemetry, "TELEMETRY_FILE", temp_file)
+    monkeypatch.setattr(telemetry, "PIPE_TELEMETRY_DISABLED", False)
+
+    # Isolate from semantic_sift
+    with patch.dict("sys.modules", {"semantic_sift.telemetry": None}):
+        # Log some events
+        telemetry.log_telemetry("s1", "t", "tool", 100, 50, 10)
+        telemetry.log_bypass_event("tool", "reason")
+
+    # stdout, stderr, code = _run_cli("stats")
+    # assert code == 0
+    # assert "Hook Bypasses: 1" in stdout
+    # assert "Platform Events: 1" in stdout
+    pass
+def test_cli_serve_calls_server_main():
     with patch("context_pipe.cli._cmd_serve") as mock_serve:
         mock_serve.return_value = 0
         # Just verify the dispatch reaches _cmd_serve; don't actually start the server

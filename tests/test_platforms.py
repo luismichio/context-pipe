@@ -111,6 +111,29 @@ def test_extract_content_llm_content_key():
     assert content == "direct llmContent"
 
 
+def test_extract_content_stringified_envelope():
+    # Gemini CLI pattern: tool_response is a stringified JSON
+    import json
+    inner = {"output": "markdown content"}
+    data = {"tool_name": "read_file", "tool_response": json.dumps(inner)}
+    content, name, label = extract_content(data, "Gemini CLI")
+    assert content == "markdown content"
+
+def test_extract_content_mcp_array():
+    # Standard MCP pattern
+    data = {
+        "tool": "scrape",
+        "tool_response": {
+            "content": [
+                {"type": "text", "text": "part 1"},
+                {"type": "text", "text": "part 2"}
+            ]
+        }
+    }
+    content, name, label = extract_content(data, "Generic CLI")
+    assert content == "part 1\npart 2"
+    assert name == "scrape"
+
 def test_extract_content_unknown_tool_defaults():
     data = {}
     content, tool, agent = extract_content(data, "Generic CLI")

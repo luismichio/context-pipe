@@ -5,6 +5,20 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-05-18
+
+### 🔄 Architectural Refinement: Sift-Centric Transparency
+- **Silent Orchestrator**: Transitioned `context-pipe` into a fully transparent layer. The orchestrator no longer generates audit headers or appends signatures, significantly reducing agent context clutter.
+- **Vocal Engine Integration**: Delegation of visible identity and headers to engine nodes (e.g., `semantic-sift`).
+- **Unified ROI Ledger**: Refactored `telemetry.py` to utilize the `semantic-sift` local ledger when available, ensuring a single "Context Balance Sheet" for the Studio of Two ecosystem.
+- **One Pulse Mandate**: Enforced the "One Pulse" rule where only the engine layer performs cloud telemetry pulses, preventing double-counting.
+- **Self-Aware Bypass**: Replaced rigid orchestrator signatures with engine-level self-awareness to prevent double-sifting while allowing transparent multi-node piping.
+
+### 🐛 Fixed (Subconscious Infrastructure)
+- **Robust Content Extraction**: Fixed a critical bug in `platforms.py` where Gemini CLI hooks would bypass documentation reads due to stringified JSON envelopes and a dangerous greedy fallback to the system tool list.
+- **Project Root Discovery**: Enhanced the orchestrator to automatically discover `pipes.json` by traversing upwards from the CWD until a `.git` boundary is hit, ensuring consistent sifting in subdirectories.
+- **Nesting-Aware Telemetry Discovery**: Updated the telemetry opt-in check to recursively search for the `SIFT_TELEMETRY_OPTED_IN` key within `.gemini/settings.json`, resolving a gap where pulses were silenced in Gemini CLI hook subprocesses.
+
 ## [0.3.3] — 2026-05-14
 
 ### 🛡️ Phase 10: Dynamic Sandboxing via MCP Roots
@@ -20,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Documentation Fidelity**: 
   - Aligned `SHELL_UTILITY_ALLOWLIST` in `ARCHITECTURE.md` to precisely reflect the 20 actual tools permitted by `dynamic.py`.
   - Removed outdated references to `shell: true` and `PIPE_WINDOW_PRESSURE`.
-  - Updated legacy signatures in `CONTEXT_PIPE_PROTOCOL.md` to use the correct `[Context-Pipe: Native Execution]`.
+  - Updated legacy signatures in `CONTEXT_PIPE_PROTOCOL.md` to use the engine-level audit header.
 
 ## [0.3.1] — 2026-05-13
 

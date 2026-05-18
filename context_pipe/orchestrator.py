@@ -22,7 +22,7 @@ from .config_loader import resolve_placeholders
 logger = logging.getLogger(__name__)
 
 # Metadata Signatures
-CPP_SIGNATURE = "--- [Context-Pipe: Native Execution] ---"
+# Orchestrator is silent in the Sift-Centric model. Identity is handled by engine nodes.
 
 
 def get_env_with_venv_path() -> Dict[str, str]:
@@ -453,18 +453,35 @@ async def run_pipe(
 
 def load_config(config_path: str = "pipes.json") -> Dict[str, Any]:
     """
-    Loads ``pipes.json`` with a two-location fallback.
+    Loads ``pipes.json`` with a robust traversal discovery.
 
     Resolution order:
     1. ``config_path`` as given (absolute or relative to CWD).
-    2. The package root directory (parent of ``context_pipe/``), which is
-       where ``pipes.json`` lives in both installed and editable layouts.
+    2. Upward traversal from CWD until ``pipes.json`` or ``.git`` is found.
+    3. The package root directory (parent of ``context_pipe/``).
 
-    Returns an empty scaffold ``{"pipes": [], "mappings": []}`` if the file
-    is not found or is not valid JSON.
+    Returns an empty scaffold if the file is not found.
     """
     config: Dict[str, Any] = {"pipes": [], "mappings": []}
     search_paths = [config_path]
+    
+    # 2. Upward Traversal Discovery
+    if not os.path.isabs(config_path):
+        curr = os.path.abspath(os.getcwd())
+        while True:
+            candidate = os.path.join(curr, config_path)
+            if os.path.exists(candidate):
+                search_paths.append(candidate)
+                break
+            # Stop at root or .git boundary
+            if os.path.exists(os.path.join(curr, ".git")):
+                break
+            parent = os.path.dirname(curr)
+            if parent == curr:
+                break
+            curr = parent
+
+    # 3. Package Root Fallback
     if not os.path.isabs(config_path):
         search_paths.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), config_path))
 

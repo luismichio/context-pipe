@@ -1,8 +1,43 @@
 import os
 import sys
 import shutil
-from context_pipe.orchestrator import resolve_pipe_from_context, resolve_node_cmd
+from context_pipe.orchestrator import resolve_pipe_from_context, resolve_node_cmd, load_config
+import json
 
+def test_load_config_traversal(tmp_path):
+    # Create sub/sub/sub structure
+    sub = tmp_path / "a" / "b" / "c"
+    sub.mkdir(parents=True)
+
+    # Create pipes.json at root
+    config = {"pipes": [{"name": "root-pipe"}]}
+    (tmp_path / "pipes.json").write_text(json.dumps(config))
+
+    # Run load_config from deep sub
+    old_cwd = os.getcwd()
+    os.chdir(str(sub))
+    try:
+        loaded = load_config("pipes.json")
+        assert loaded["pipes"][0]["name"] == "root-pipe"
+    finally:
+        os.chdir(old_cwd)
+
+def test_load_config_absolute_path(tmp_path):
+    config_file = tmp_path / "abs_pipes.json"
+    config = {"pipes": [{"name": "abs-pipe"}]}
+    config_file.write_text(json.dumps(config))
+    loaded = load_config(str(config_file))
+    assert loaded["pipes"][0]["name"] == "abs-pipe"
+
+def test_load_config_invalid_json(tmp_path):
+    config_file = tmp_path / "broken.json"
+    config_file.write_text("{ broken }")
+    loaded = load_config(str(config_file))
+    assert loaded == {"pipes": [], "mappings": []}
+
+def test_load_config_nonexistent():
+    loaded = load_config("this_file_does_not_exist_at_all.json")
+    assert loaded == {"pipes": [], "mappings": []}
 
 def test_resolve_pipe_tool_trigger():
     config = {

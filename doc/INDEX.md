@@ -54,7 +54,7 @@ Welcome to the central hub for the **Context-Pipe Platform (CPP)**. This directo
 *   **Intent**: The language-agnostic standard for context engineering.
 *   **Topics**:
     *   Standard I/O requirements.
-    *   The Native Execution Signature (Double-Sifting Protection).
+    *   Self-Aware Node Bypass (Double-Sifting Protection).
     *   Dynamic Discovery standards.
 
 ### 6. [`doc/INTEGRATION_ENCYCLOPEDIA.md`](INTEGRATION_ENCYCLOPEDIA.md)

@@ -140,7 +140,7 @@ Once both servers are connected, ask your AI assistant to configure the workspac
 **What Onboarding Does:**
 1. **Creates `pipes.json`**: If the file is missing, it creates a default configuration with production-grade templates for logs (`standard-distill`) and code (`semantic-refinery`).
 2. **Auto-Links Sift**: Discovers the absolute path to `semantic-sift-cli` and rewrites every `pipes.json` node to use it (idempotent).
-3. **Git Protection**: Automatically appends internal artifacts (`.pipe_cache/`, `.pipe_identity`, `.pipe_telemetry.json`) to the project's `.gitignore` file.
+3. **Git Protection**: Automatically appends internal artifacts (`.pipe_cache/`, `.pipe_identity`, `.pipe_telemetry.jsonl`) to the project's `.gitignore` file.
 4. **Injects Hooks**: Automatically configures `.cursor/hooks.json`, `.github/hooks/`, and `opencode.json` hooks. For **Gemini CLI**, it registers both `AfterTool` and `PreCompress` hooks in `.gemini/settings.json`.
 5. **Injects Rules**: Creates slash commands like `/pipe-run` and `/pipe-stats` in Cursor rules and Gemini CLI commands.
 6. **Injects Mandates**: Adds the Agent SOP mandate to `AGENTS.md` and other instruction files.
@@ -339,12 +339,13 @@ Context-Pipe tracks every character saved. You can view your **Context Balance S
 *   **IDE**: Use the `/pipe-stats` slash command (if onboarded).
 
 ### Audit Headers
-Every piped output includes a Markdown header:
+In the Sift-Centric model, the orchestrator is **silent**. Audit headers are generated and prepended by the engine nodes (e.g., `semantic-sift`) rather than the orchestrator itself.
+
 ```markdown
---- [Context-Pipe: standard-distill] ---
-📊 Context: 65.4% Reduction (120.4KB -> 41.5KB)
+--- [Semantic-Sift Audit] ---
+📊 Reduction: 65.4% (120.4KB -> 41.5KB)
+🛡️ Guard: Trace-Verified (No Echo)
 ⚡ Latency: 145.2ms
-Nodes: context-pipe-ingest → semantic-sift-cli
 -----------------------------
 ```
 
