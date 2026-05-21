@@ -209,15 +209,43 @@ def generate_audit_header(pipe_name: str, trace: List[Dict[str, Any]], latency_m
     reduction = (1 - (end_size / start_size)) * 100 if start_size > 0 else 0
     reduction_label = f"{reduction:.1f}% Reduction" if reduction >= 0 else f"{abs(reduction):.1f}% Augmentation"
 
+    warning_line = "âš ï¸  WARNING: Content distilled. Line numbers DO NOT match raw source." if reduction > 0 else "âœ”ï¸  Guard: Trace-Verified (No Echo)"
+
     header = [
         f"--- [Context-Pipe: {pipe_name}] ---",
-        f"📊 Context: {reduction_label} ({start_size / 1024:.1f}KB -> {end_size / 1024:.1f}KB)",
-        f"⚡ Latency: {latency_ms:.1f}ms",
-        "Nodes: " + " → ".join([n["node"] for n in trace if "node" in n]),
+        f"ðŸ“Š Context: {reduction_label} ({start_size / 1024:.1f}KB -> {end_size / 1024:.1f}KB)",
+        f"{warning_line}",
+        f"âš¡ Latency: {latency_ms:.1f}ms",
+        "Nodes: " + " -> ".join([n["node"] for n in trace if "node" in n]),
         "-----------------------------\n",
     ]
     return "\n".join(header)
 
+
+def log_unmapped_event(
+    tool_name: str,
+    original_size: int,
+    platform: str = "unknown",
+    agent_label: Optional[str] = None
+) -> None:
+    """Records an unmapped heavy tool call event."""
+    if PIPE_TELEMETRY_DISABLED:
+        return
+
+    try:
+        event = {
+            "type": "unmapped",
+            "tool_name": tool_name,
+            "original_chars": original_size,
+            "platform": platform,
+            "agent": agent_label or "Main",
+            "timestamp": time.ctime()
+        }
+        with _TELEMETRY_LOCK:
+            with open(TELEMETRY_FILE, "a", encoding="utf-8") as f:
+                f.write(json.dumps(event) + "\n")
+    except Exception:
+        pass
 
 def log_fallback_event(tool_name: str, reason: str) -> None:
     """
@@ -301,6 +329,7 @@ def get_balance_sheet() -> Dict[str, Any]:
         "avg_latency_ms": 0.0,
         "fallback_events": 0,
         "bypass_events": 0,
+        "unmapped_events": 0,
     }
 
     # 1. Process Semantic-Sift Ledger (JSON)
@@ -337,6 +366,9 @@ def get_balance_sheet() -> Dict[str, Any]:
                             continue
                         if event.get("type") == "bypass":
                             results["bypass_events"] += 1
+                            continue
+                        if event.get("type") == "unmapped":
+                            results["unmapped_events"] += 1
                             continue
                         if event.get("type") == "tool_call":
                             results["total_events"] += 1
