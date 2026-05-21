@@ -40,6 +40,7 @@ jobs:
           CIBW_ENVIRONMENT_LINUX: PATH="$PATH:$HOME/.cargo/bin"
           CIBW_BUILD: cp310-* cp311-* cp312-* cp313-*
           CIBW_ARCHS_MACOS: x86_64 arm64
+          MACOSX_DEPLOYMENT_TARGET: "10.12"
 
       - uses: actions/upload-artifact@v4
         with:

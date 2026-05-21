@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts
-          cp ../../target/${{ matrix.target }}/release/cpipe${{ matrix.suffix }} artifacts/cpipe-${{ matrix.target }}${{ matrix.suffix }}
+          cp target/${{ matrix.target }}/release/cpipe${{ matrix.suffix }} artifacts/cpipe-${{ matrix.target }}${{ matrix.suffix }}
           cd artifacts
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
             7z a cpipe-${{ matrix.target }}.zip cpipe-${{ matrix.target }}${{ matrix.suffix }}
