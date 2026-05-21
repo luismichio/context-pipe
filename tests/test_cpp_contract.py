@@ -28,7 +28,6 @@ def _node(cmd="echo-mock", args=None, help_msg=None):
     return n
 
 
-from unittest.mock import AsyncMock
 def _mock_proc(stdout="output", stderr="", returncode=0):
     proc = MagicMock()
     # communicate is awaited, so it should be an AsyncMock returning bytes

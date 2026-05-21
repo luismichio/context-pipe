@@ -156,4 +156,3 @@ async def test_tee_trace_includes_tee_path(tmp_path):
     assert "tee_path" in trace_with_tee[0]
     assert trace_with_tee[0]["tee_path"] == sink
     assert "tee_path" not in trace_without_tee[0]
- assert "tee_path" not in trace_without_tee[0]

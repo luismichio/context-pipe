@@ -243,7 +243,3 @@ def test_mcp_node_sift_terminal_guard_exempt():
 
 
 
-validate_nodes(nodes, allow_shell=False)
-
-
-
