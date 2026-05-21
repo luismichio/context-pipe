@@ -5,9 +5,14 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.2] — 2026-05-22
 
-## [0.4.0] — 2026-05-22
+### 🛡️ CI/CD & Reliability
+- **Linux Wheel Fix**: Skipped `i686` and `musllinux` builds to resolve `libatomic` dependency issues during Rustup installation.
+- **macOS Build Fix**: Resolved `delocate-wheel` error by setting `MACOSX_DEPLOYMENT_TARGET` to `10.12`.
+- **Binary Path Fix**: Corrected target paths in `release-binaries.yml`.
+
+## [0.4.1] — 2026-05-22
 
 ### ⚫ Phase 8: The "Studio of Two" Endgame (Rust Core) — ✅ Complete
 - **Rust Rewrite**: Ported the core stream orchestrator to Rust, achieving ultimate native speed and zero Python/Node memory bloat. (`crates/cpipe` — dual lib + bin targets, <2ms startup, 500× faster than Python cold-start.)
