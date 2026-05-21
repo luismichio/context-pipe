@@ -6,7 +6,7 @@ T-Pipe (Stream Splitting) contract tests — Phase 6.1
 All tests use mock subprocesses; no real nodes are required.
 """
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 
 from context_pipe.orchestrator import run_pipe

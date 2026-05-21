@@ -4,7 +4,7 @@
 """Tests for context_pipe/dynamic.py — Phase 7.1 + Bash/Shell Synergy."""
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 from context_pipe.dynamic import (
     run_dynamic_pipe,
