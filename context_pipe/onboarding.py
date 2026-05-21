@@ -19,7 +19,7 @@ def check_for_updates() -> str:
         from . import __version__
         
         req = urllib.request.Request("https://pypi.org/pypi/mcp-context-pipe/json", headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=2) as response:
+        with urllib.request.urlopen(req, timeout=2) as response:  # nosec B310
             data = json.loads(response.read())
             latest = data["info"]["version"]
             if latest != __version__:
