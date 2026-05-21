@@ -22,10 +22,10 @@ from context_pipe.dynamic import (
 def anyio_backend():
     return "asyncio"
 
+from unittest.mock import AsyncMock
 def _mock_popen(stdout: str = "distilled", returncode: int = 0):
-    """Return a mock Popen that yields ``stdout`` and the given returncode."""
     mock_proc = MagicMock()
-    mock_proc.communicate.return_value = (stdout, "")
+    mock_proc.communicate = AsyncMock(return_value=(stdout.encode("utf-8"), b""))
     mock_proc.returncode = returncode
     return mock_proc
 
@@ -38,7 +38,7 @@ def _mock_popen(stdout: str = "distilled", returncode: int = 0):
 async def test_dynamic_pipe_runs_single_node():
     """A single-node dynamic pipe returns the node's stdout."""
     nodes = [{"cmd": "semantic-sift-cli", "args": ["logs"]}]
-    with patch("subprocess.Popen", return_value=_mock_popen("distilled output")):
+    with patch("asyncio.create_subprocess_exec", return_value=_mock_popen("distilled output")):
         result, trace = await run_dynamic_pipe(nodes, "raw input")
     assert result == "distilled output"
     assert len(trace) == 1
@@ -51,14 +51,14 @@ async def test_dynamic_pipe_runs_multiple_nodes():
     call_count = 0
     outputs = ["intermediate", "final"]
 
-    def fake_popen(cmd, **kwargs):
+    def fake_popen(*args, **kwargs):
         nonlocal call_count
         proc = _mock_popen(outputs[call_count])
         call_count += 1
         return proc
 
     nodes = [{"cmd": "jq", "args": ["."]}, {"cmd": "semantic-sift-cli", "args": ["logs"]}]
-    with patch("subprocess.Popen", side_effect=fake_popen):
+    with patch("asyncio.create_subprocess_exec", side_effect=fake_popen):
         result, trace = await run_dynamic_pipe(nodes, "raw input", allow_shell=True)
 
     assert result == "final"
@@ -87,11 +87,11 @@ async def test_dynamic_pipe_rejects_shell_metacharacter_in_cmd():
 async def test_dynamic_pipe_node_crash_returns_error():
     """A non-zero returncode returns an error string and records it in trace."""
     nodes = [{"cmd": "broken-tool"}]
-    with patch("subprocess.Popen", return_value=_mock_popen("", returncode=1)):
+    with patch("asyncio.create_subprocess_exec", return_value=_mock_popen("", returncode=1)):
         # Ensure communicate returns stderr text
         mock_proc = _mock_popen("", returncode=1)
         mock_proc.communicate.return_value = ("", "boom")
-        with patch("subprocess.Popen", return_value=mock_proc):
+        with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
             result, trace = await run_dynamic_pipe(nodes, "raw input")
     assert "Error" in result or "error" in str(trace[0])
 
@@ -108,7 +108,7 @@ async def test_dynamic_pipe_empty_nodes_returns_input():
 async def test_dynamic_pipe_trace_structure():
     """Trace entries have the expected keys."""
     nodes = [{"cmd": "semantic-sift-cli", "args": ["logs"]}]
-    with patch("subprocess.Popen", return_value=_mock_popen("out")):
+    with patch("asyncio.create_subprocess_exec", return_value=_mock_popen("out")):
         _, trace = await run_dynamic_pipe(nodes, "in")
     assert len(trace) == 1
     entry = trace[0]
@@ -174,7 +174,7 @@ async def test_run_dynamic_pipe_allow_shell_end_to_end():
     call_count = 0
     outputs = ["filtered", "distilled"]
 
-    def fake_popen(cmd, **kwargs):
+    def fake_popen(*args, **kwargs):
         nonlocal call_count
         proc = _mock_popen(outputs[call_count])
         call_count += 1
@@ -184,7 +184,7 @@ async def test_run_dynamic_pipe_allow_shell_end_to_end():
         {"cmd": "grep", "args": ["-i", "warn"]},
         {"cmd": "semantic-sift-cli", "args": ["logs"]},
     ]
-    with patch("subprocess.Popen", side_effect=fake_popen):
+    with patch("asyncio.create_subprocess_exec", side_effect=fake_popen):
         result, trace = await run_dynamic_pipe(nodes, "some log text", allow_shell=True)
 
     assert result == "distilled"

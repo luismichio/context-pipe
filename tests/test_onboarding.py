@@ -49,10 +49,11 @@ def test_discover_sift_executable_finds_via_which(tmp_path, monkeypatch):
     fake_exe = tmp_path / "semantic-sift-cli.exe"
     fake_exe.write_text("#!/bin/sh\necho 0.1.0")
     fake_exe.chmod(0o755)
-
+    import sys
+    monkeypatch.setattr(sys, "prefix", sys.base_prefix)
     with patch("shutil.which", return_value=str(fake_exe)):
         result = discover_sift_executable()
-    assert result == str(fake_exe)
+        assert result == str(fake_exe)
 
 
 # ---------------------------------------------------------------------------

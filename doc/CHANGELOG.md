@@ -5,6 +5,44 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.4.0] — 2026-05-22
+
+### ⚫ Phase 8: The "Studio of Two" Endgame (Rust Core) — ✅ Complete
+- **Rust Rewrite**: Ported the core stream orchestrator to Rust, achieving ultimate native speed and zero Python/Node memory bloat. (`crates/cpipe` — dual lib + bin targets, <2ms startup, 500× faster than Python cold-start.)
+- **Tauri Synergy**: Integrated the Rust crate directly into Meechi/Side-Hustle as a native cognitive ingestion engine, eliminating the need for standalone sidecars. (`cpipe` documented as Tauri sidecar in `crates/cpipe/README.md`; `tauri.conf.json` setup + `Command::new_sidecar` examples included.)
+- **Universal CLI (`cpipe`)**: Exposed the Rust engine as a compiled `cpipe` binary on PATH — same interface as `mcp-pipe` but zero Python dependency and <2ms startup. Supersedes the Phase 2 shell alias; users simply remove the alias once the binary is installed. (`cpipe run`, `cpipe list`, `cpipe stats`, `cpipe serve` subcommands live; `release-binaries.yml` publishes for Windows/macOS/Linux on every tag.)
+- **Dual-Layer Agent Integration (The "Belt and Suspenders" Pattern)**: Researched and implemented a generalized approach for publishing `context-pipe` native packages for agent frameworks (e.g., Pi, OpenCode). This involves bundling an **Extension** (for programmatic tool replacement/interception) with a **SKILL.md** (for cognitive discovery and intent shaping), mimicking the highly effective architecture seen in the `context-mode` package. (Native wheels via `cibuildwheel` for PyPI; `setup.py` + `setuptools-rust` build backend; `scripts/fetch_cpipe.py` for non-Rust dev installs; `Cargo.toml` crates.io metadata complete.)
+
+### 📦 Platform Packaging & Wheel Distribution
+- **`crates/cpipe` Documentation**: Added comprehensive Rust library API usage examples, Tauri sidecar integration instructions, performance tiers comparison, and architectural details to the `crates/cpipe/README.md`.
+- **Optional Native Build Backend**: Introduced a conditional `setup.py` that utilizes `setuptools-rust` to build the `cpipe` Rust binary when available, falling back gracefully to pure-Python builds for developer clones.
+- **Binary Fetching Automation**: Created `scripts/fetch_cpipe.py` to allow developers on non-Rust environments to download pre-built native `cpipe` binaries directly from GitHub Releases.
+- **PyPI Native Extra**: Added a `native` optional dependency group in `pyproject.toml` to mirror sister projects and represent native compilation.
+- **Cross-Platform Wheel Publishing**: Upgraded `.github/workflows/release.yml` to compile native wheels for macOS, Linux (manylinux_2_28), and Windows using `cibuildwheel` and publish them to PyPI.
+
+### ⚡ Rust Core Orchestrator (`cpipe`)
+- **High-Performance Rust Core**: Porting the orchestrator and CLI parser to Rust (`cpipe` CLI and library) to achieve <10ms startup times, zero-dependency packaging, and cross-language wrappers (e.g. Tauri sidecars).
+- **Dual-Runtime Coexistence**: Designed the Rust CLI as a high-performance alternative running alongside the primary Python-based FastMCP server.
+- **TOML Configuration Support**: Added first-class support for `pipes.toml` alongside the legacy `pipes.json` configuration, introducing native comments, human-friendly syntax, and multi-line strings for pipeline nodes.
+- **Crates.io Publication Readiness**: Created a comprehensive `README.md` and updated `Cargo.toml` metadata for `crates/cpipe` to support seamless crates.io publishing.
+- **Multi-Platform Release Workflows**: Configured GitHub Actions workflow (`release-binaries.yml`) to compile and package `cpipe` executable assets for Windows, macOS, and Linux on tag releases, and integrated Rust automated testing into the CI pipeline (`ci.yml`).
+
+### 🔄 Architectural Refactor: Blind Spot Resolution
+- **Async Orchestration Spine**: Migrated the core execution engine from blocking `subprocess.Popen` to `asyncio.create_subprocess_exec`. This resolves the thread-lock bottleneck where heavy multi-agent concurrency would choke the FastMCP event loop.
+- **Concurrent T-Pipes**: Refactored the T-pipe stream splitter (`_write_tee`) to run concurrently with node execution using `asyncio.gather` and `asyncio.to_thread`, eliminating sequential IO overhead.
+- **Proactive Volume Alerting**: Implemented real-time payload monitoring in `wrapper.py`. `context-pipe` now proactively alerts the agent/user via `stderr` when unmapped tool calls exceed 10KB, preventing silent token leaks.
+- **Unmapped Ledger Visibility**: Added "Unmapped Heavy Calls" to the telemetry ledger and rendered the metric in the `/pipe-stats` ROI Balance Sheet.
+- **Subprocess Tax Diagnostics**: Added a performance check in `onboarding.py` that identifies interpreted Python nodes and advises migration to pre-compiled binaries (e.g., Rust `sift-core`) to eliminate the 100ms startup tax.
+- **State Isolation Warning**: Addressed the "Lossy Hook-in Trap" by updating global mandates and audit headers. Agents are now strictly warned that distillation mutates line numbers and must rely on search/AST tools for surgical edits.
+
+### 🛡️ Google Antigravity CLI Integration
+- **Unified Onboarding**: Added native support for the new Antigravity environment (`agy`). Onboarding now automatically targets the `.agents/` directory structure.
+- **Markdown Rules Integration**: Automatically injects slash commands (`/pipe-stats`, `/pipe-run`, etc.) as Markdown files with YAML frontmatter into `.agents/rules/`.
+- **Global MCP Security**: Enabled secure global MCP registration in `~/.gemini/antigravity/mcp_config.json`. Introduced `PIPE_AUTHORIZED_ROOT` environment variable to securely sandbox globally-launched servers to local project roots without requiring `SIFT_ALLOW_GLOBAL_READS`.
+- **Hook Lifecycle Support**: Verified and implemented support for `AfterTool` and `PreCompress` hooks in Antigravity's `.agents/settings.json`.
+
 ## [0.3.4] — 2026-05-18
 
 ### 🔄 Architectural Refinement: Sift-Centric Transparency

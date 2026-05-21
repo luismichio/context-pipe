@@ -29,10 +29,13 @@ def _node(cmd="echo-mock", args=None, help_msg=None):
     return n
 
 
+from unittest.mock import AsyncMock
 def _mock_proc(stdout="output", stderr="", returncode=0):
     proc = MagicMock()
-    proc.communicate.return_value = (stdout, stderr)
+    # communicate is awaited, so it should be an AsyncMock returning bytes
+    proc.communicate = AsyncMock(return_value=(stdout.encode("utf-8"), stderr.encode("utf-8")))
     proc.returncode = returncode
+    # create_subprocess_exec returns the proc directly, it's a coroutine so it returns proc
     return proc
 
 
@@ -48,7 +51,7 @@ def anyio_backend():
 @pytest.mark.anyio
 async def test_single_node_happy_path():
     proc = _mock_proc(stdout="distilled output")
-    with patch("subprocess.Popen", return_value=proc):
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         result, trace = await run_pipe(_pipe([_node()]), "raw input")
 
     assert result == "distilled output"
@@ -67,7 +70,7 @@ async def test_multi_node_chaining():
     proc_a = _mock_proc(stdout="step-one")
     proc_b = _mock_proc(stdout="step-two")
 
-    with patch("subprocess.Popen", side_effect=[proc_a, proc_b]):
+    with patch("asyncio.create_subprocess_exec", side_effect=[proc_a, proc_b]):
         result, trace = await run_pipe(_pipe([_node("node-a"), _node("node-b")]), "start")
 
     assert result == "step-two"
@@ -83,7 +86,7 @@ async def test_multi_node_chaining():
 @pytest.mark.anyio
 async def test_nonzero_returncode_returns_error():
     proc = _mock_proc(stdout="", stderr="something went wrong", returncode=1)
-    with patch("subprocess.Popen", return_value=proc):
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         result, trace = await run_pipe(_pipe([_node("bad-node")]), "data")
 
     assert "bad-node" in result
@@ -97,7 +100,7 @@ async def test_nonzero_returncode_returns_error():
 
 @pytest.mark.anyio
 async def test_file_not_found_returns_help_msg():
-    with patch("subprocess.Popen", side_effect=FileNotFoundError):
+    with patch("asyncio.create_subprocess_exec", side_effect=FileNotFoundError):
         result, trace = await run_pipe(
             _pipe([_node("missing-cli", help_msg="Install missing-cli via pip install missing-cli")]),
             "data",
@@ -115,9 +118,10 @@ async def test_file_not_found_returns_help_msg():
 @pytest.mark.anyio
 async def test_timeout_kills_process_and_returns_error():
     proc = _mock_proc(stdout="", stderr="")
-    proc.communicate.side_effect = [subprocess.TimeoutExpired(cmd="slow-node", timeout=1), ("", "")]
+    import asyncio
+    proc.communicate.side_effect = [asyncio.TimeoutError, (b"", b"")]
 
-    with patch("subprocess.Popen", return_value=proc):
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         result, trace = await run_pipe(_pipe([_node("slow-node")]), "data")
 
     assert "Timeout" in result

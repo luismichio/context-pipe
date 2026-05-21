@@ -11,7 +11,7 @@ The ecosystem of MCP clients falls into specific architectural categories regard
 ### Explicitly Supported (Smart & Blind Hooks)
 These environments have dedicated logic implemented in `pipe_hook.py` for payload extraction and reinjection.
 
-*   **Gemini CLI**: 
+*   **Gemini CLI & Antigravity**: 
     *   **Architecture**: Native platform event hooks (`AfterTool`, `PreCompress`). 
     *   **Support**: Full support for standard piping and lifecycle "Compaction" events.
 *   **Claude Code, Qwen CLI & Codex CLI**:
@@ -130,9 +130,9 @@ During onboarding, the engine performs a recursive crawl of the workspace (up to
 ## 5. Payload Structures & Interception Logic (`wrapper.py`)
 
 ### 1. Smart Hooks (CLI Agents & Plugins)
-*   **Gemini/OpenClaw**: Detects `AfterTool` or `PreCompress` event names. Extracts `tool_response.llmContent`.
+*   **Gemini/Antigravity/OpenClaw**: Detects `AfterTool` or `PreCompress` event names. Extracts `tool_response.llmContent`.
     *   **Decision Schema**: Uses the explicit `{"decision": "deny", "reason": "..."}` schema for content modification.
-    *   **UI Note**: In the Gemini CLI, a successful interception will display as **`Tool result blocked:`** followed by the reason (the sifted text). This is expected platform behavior, as the CLI interprets the protocol-level "denial" of the original text as a security block.
+    *   **UI Note**: In the Gemini/Antigravity CLI, a successful interception will display as **`Tool result blocked:`** followed by the reason (the sifted text). This is expected platform behavior, as the CLI interprets the protocol-level "denial" of the original text as a security block.
 *   **Reinjection**: Injects ROI metrics into Gemini's `additionalContext`.
 *   **OpenCode**: Plugin hook (`tool.execute.after`) is registered but currently inactive for MCP tools — see compatibility note in Section 1. The `AGENTS.md` SOP mandate is the active strategy.
 

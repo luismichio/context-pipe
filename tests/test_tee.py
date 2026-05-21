@@ -27,9 +27,10 @@ def _node(cmd="echo-mock", args=None, tee=None):
     return n
 
 
+from unittest.mock import AsyncMock
 def _mock_proc(stdout="output", stderr="", returncode=0):
     proc = MagicMock()
-    proc.communicate.return_value = (stdout, stderr)
+    proc.communicate = AsyncMock(return_value=(stdout.encode("utf-8"), stderr.encode("utf-8")))
     proc.returncode = returncode
     return proc
 
@@ -49,7 +50,7 @@ async def test_tee_writes_raw_input_to_file(tmp_path):
     tee = {"sink": "file", "path": sink}
 
     proc = _mock_proc(stdout="distilled")
-    with patch("subprocess.Popen", return_value=proc):
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         result, trace = await run_pipe(_pipe([_node(tee=tee)]), "raw input")
 
     assert result == "distilled"
@@ -68,7 +69,7 @@ async def test_tee_append_mode(tmp_path):
     tee = {"sink": "file", "path": sink, "mode": "append"}
 
     proc = _mock_proc(stdout="out")
-    with patch("subprocess.Popen", return_value=proc):
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         await run_pipe(_pipe([_node(tee=tee)]), "first call")
         await run_pipe(_pipe([_node(tee=tee)]), "second call")
 
@@ -88,7 +89,7 @@ async def test_tee_overwrite_mode(tmp_path):
     tee = {"sink": "file", "path": sink, "mode": "overwrite"}
 
     proc = _mock_proc(stdout="out")
-    with patch("subprocess.Popen", return_value=proc):
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         await run_pipe(_pipe([_node(tee=tee)]), "first call")
         await run_pipe(_pipe([_node(tee=tee)]), "second call")
 
@@ -108,7 +109,7 @@ async def test_tee_path_token_substitution(tmp_path):
     tee = {"sink": "file", "path": template}
 
     proc = _mock_proc(stdout="out")
-    with patch("subprocess.Popen", return_value=proc):
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         await run_pipe(_pipe([_node(tee=tee)]), "data", tool_name="bash")
 
     # _write_tee is called inside run_pipe; verify a resolved file exists
@@ -129,7 +130,7 @@ async def test_tee_failure_does_not_interrupt_chain(tmp_path):
     tee = {"sink": "file", "path": str(tmp_path / "raw.log")}
 
     proc = _mock_proc(stdout="distilled")
-    with patch("subprocess.Popen", return_value=proc), \
+    with patch("asyncio.create_subprocess_exec", return_value=proc), \
          patch("builtins.open", side_effect=OSError("disk full")):
         result, trace = await run_pipe(_pipe([_node(tee=tee)]), "raw input")
 
@@ -149,7 +150,7 @@ async def test_tee_trace_includes_tee_path(tmp_path):
     tee = {"sink": "file", "path": sink}
 
     proc = _mock_proc(stdout="out")
-    with patch("subprocess.Popen", return_value=proc):
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
         _, trace_with_tee = await run_pipe(_pipe([_node(tee=tee)]), "data")
         _, trace_without_tee = await run_pipe(_pipe([_node()]), "data")
 

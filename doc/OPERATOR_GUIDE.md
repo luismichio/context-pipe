@@ -367,7 +367,8 @@ Replace `'Cursor'` with your active environment (e.g., `'Gemini'`, `'VSCode'`, `
 3.  **Security Gateways**: Injects blocking hooks into Windsurf and Cline to proactively prevent large native file reads.
 4.  **Subagent Shielding**: Recursively discovers specialized agent configs (e.g., in `.cursor/agents/`) and applies context protection to them.
 5.  **Refinery Auto-Link**: Discovers `semantic-sift-cli` across all known locations (current venv, system PATH, pipx, sibling venv directories) and writes its **absolute path** into `pipes.json`. This means context-pipe and semantic-sift can live in completely separate virtual environments — no manual linking required.
-6.  **Slash Command Injection** *(Phase 4)*: Injects `/pipe-stats` and `/pipe-run` as first-class slash commands into IDEs that support them:
+6.  **Performance Diagnostics**: Scans nodes for interpreted Python tax and warns if compiled binaries should be used.
+7.  **Slash Command Injection** *(Phase 4)*: Injects `/pipe-stats` and `/pipe-run` as first-class slash commands into IDEs that support them:
     - **Gemini CLI**: writes `.gemini/commands/pipe-stats.md` and `pipe-run.md`.
     - **OpenCode**: adds entries to the `commands` block in `opencode.json`.
     - **Cursor**: adds an `onInit` hook in `.cursor/mcp.json`.
@@ -492,16 +493,16 @@ Incoming content or task
 | `pipe_list_shadow_tools()` | Always before `pipe_run_dynamic` | Discover available nodes |
 | `pipe_run_dynamic(nodes_json, input_text)` | One-off graphs with no named pipe | Must end with `semantic-sift-cli` |
 | `pipe_agent_handoff(output, ...)` | At every A2A boundary | Pass `pipe_name` if content type known |
-| `get_pipe_stats()` | Anytime; proactively after heavy sessions | Reports cumulative ROI |
+| `get_pipe_stats()` | Anytime; proactively after heavy sessions | Reports cumulative ROI and Unmapped Heavy Calls (silent token leaks) |
 
 ### Slash Commands (injected by `pipe_onboard`)
 
 | Command | IDE | What the agent does |
 |---|---|---|
-| `/pipe-stats` | Cursor, Gemini, OpenCode | Calls `get_pipe_stats`, displays Balance Sheet |
-| `/pipe-run` | Cursor, Gemini, OpenCode | `list_pipes` → user picks → `pipe_run` |
-| `/pipe-dynamic` | Cursor, Gemini, OpenCode | `pipe_list_shadow_tools` → build graph → confirm → `pipe_run_dynamic` |
-| `/pipe-handoff` | Cursor, Gemini, OpenCode | `pipe_agent_handoff` at named A2A boundary |
+| `/pipe-stats` | Cursor, Gemini, Antigravity, OpenCode | Calls `get_pipe_stats`, displays Balance Sheet |
+| `/pipe-run` | Cursor, Gemini, Antigravity, OpenCode | `list_pipes` → user picks → `pipe_run` |
+| `/pipe-dynamic` | Cursor, Gemini, Antigravity, OpenCode | `pipe_list_shadow_tools` → build graph → confirm → `pipe_run_dynamic` |
+| `/pipe-handoff` | Cursor, Gemini, Antigravity, OpenCode | `pipe_agent_handoff` at named A2A boundary |
 
 ---
 

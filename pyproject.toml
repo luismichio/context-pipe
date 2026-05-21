@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-context-pipe"
-version = "0.3.4"
+version = "0.4.0"
 description = "Universal switchboard for the Context-Pipe Protocol (CPP)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -28,6 +28,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Install the pre-built Rust cpipe binary for maximum performance.
+# The PyPI wheel already includes cpipe for your platform.
+# For editable/dev installs, run: python scripts/fetch_cpipe.py
+native = []
+
 dev = [
   "pytest",
   "pytest-cov",
