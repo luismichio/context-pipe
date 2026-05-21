@@ -27,7 +27,6 @@ def _node(cmd="echo-mock", args=None, tee=None):
     return n
 
 
-from unittest.mock import AsyncMock
 def _mock_proc(stdout="output", stderr="", returncode=0):
     proc = MagicMock()
     proc.communicate = AsyncMock(return_value=(stdout.encode("utf-8"), stderr.encode("utf-8")))
@@ -157,3 +156,4 @@ async def test_tee_trace_includes_tee_path(tmp_path):
     assert "tee_path" in trace_with_tee[0]
     assert trace_with_tee[0]["tee_path"] == sink
     assert "tee_path" not in trace_without_tee[0]
+ assert "tee_path" not in trace_without_tee[0]

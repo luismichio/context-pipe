@@ -22,7 +22,6 @@ from context_pipe.dynamic import (
 def anyio_backend():
     return "asyncio"
 
-from unittest.mock import AsyncMock
 def _mock_popen(stdout: str = "distilled", returncode: int = 0):
     mock_proc = MagicMock()
     mock_proc.communicate = AsyncMock(return_value=(stdout.encode("utf-8"), b""))
@@ -241,6 +240,10 @@ def test_mcp_node_sift_terminal_guard_exempt():
     nodes = [{"type": "mcp", "server": "firecrawl", "tool": "scrape"}]
     # Should not raise even without sift terminal because no shell utility was used
     _validate_nodes(nodes, allow_shell=False)
+
+
+
+validate_nodes(nodes, allow_shell=False)
 
 
 

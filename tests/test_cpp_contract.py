@@ -5,9 +5,8 @@ CPP Contract Tests — Phase 7.1
 Mock-subprocess suite validating run_pipe() stdin/stdout/error/timeout contract
 without requiring semantic-sift-cli installed on PATH.
 """
-import subprocess
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 
 from context_pipe.orchestrator import run_pipe

@@ -4,7 +4,6 @@ import sys
 import json
 import hashlib
 import time
-import subprocess
 import argparse
 import re
 import os
@@ -385,61 +384,76 @@ async def run_pipe(
 
         start_size = len(current_input)
 
-        # T-Pipe: write raw input to sink before node processes it
-        tee_path: Optional[str] = None  # type: ignore[no-redef]
         tee_config = node.get("tee")
-        if tee_config:
-            tee_path = _write_tee(tee_config, current_input, node["cmd"], tool_name)
 
-        try:
-            # High-Fidelity OS Piping (shell=False enforced — no injection surface)
-            process = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                errors="replace",
-                shell=False,
-                env=process_env,
-            )
+        async def do_tee() -> Optional[str]:
+            if tee_config:
+                return await asyncio.to_thread(_write_tee, tee_config, current_input, node["cmd"], tool_name)
+            return None
 
+        async def do_process() -> tuple[str, str, int, Optional[str]]:
             try:
-                stdout, stderr = process.communicate(input=current_input, timeout=node_timeout)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                stdout, stderr = process.communicate()
-                
-                if stdout is None:
-                    stdout = ""
-                if stderr is None:
-                    stderr = ""
-                
-                error_text = f"--- [Context-Pipe: Timeout] ---\nNode {node['cmd']} exceeded {node_timeout}s."
-                trace.append({"node": node["cmd"], "error": "Timeout"})
-                if is_optional:
-                    continue
-                return error_text, trace
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=process_env,
+                )
 
-            if stdout is None:
-                stdout = ""
-            if stderr is None:
-                stderr = ""
+                try:
+                    stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                        process.communicate(input=current_input.encode("utf-8", errors="replace")),
+                        timeout=node_timeout
+                    )
+                except asyncio.TimeoutError:
+                    try:
+                        process.kill()
+                    except ProcessLookupError:
+                        pass
+                    stdout_bytes, stderr_bytes = await process.communicate()
+                    return "", "", -1, "Timeout"
 
-            if process.returncode != 0:
-                # Record error in trace
-                trace.append({"node": node["cmd"], "error": stderr.strip()})
-                if is_optional:
-                    continue
-                return f"Error in node {node['cmd']}: {stderr}", trace
+                return (
+                    stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else "",
+                    stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else "",
+                    process.returncode or 0,
+                    None
+                )
+            except FileNotFoundError:
+                return "", "", -1, "FileNotFound"
+            except Exception as e:
+                return "", "", -1, f"Unexpected error: {str(e)}"
 
-        except FileNotFoundError:
+        tee_result, proc_result = await asyncio.gather(do_tee(), do_process())
+        tee_path = tee_result
+        stdout, stderr, returncode, err_reason = proc_result
+
+        if err_reason == "Timeout":
+            error_text = f"--- [Context-Pipe: Timeout] ---\nNode {node['cmd']} exceeded {node_timeout}s."
+            trace.append({"node": node["cmd"], "error": "Timeout"})
+            if is_optional:
+                continue
+            return error_text, trace
+        elif err_reason == "FileNotFound":
             help_msg = node.get("help_msg", f"Command '{node['cmd']}' not found in system PATH.")
             error_text = f"--- [Context-Pipe: Dependency Error] ---\n{help_msg}"
             trace.append({"node": node["cmd"], "error": "FileNotFound"})
             if is_optional:
                 continue
             return error_text, trace
+        elif err_reason:
+            error_text = f"--- [Context-Pipe: Error] ---\n{err_reason}"
+            trace.append({"node": node["cmd"], "error": err_reason})
+            if is_optional:
+                continue
+            return error_text, trace
+
+        if returncode != 0:
+            trace.append({"node": node["cmd"], "error": stderr.strip()})
+            if is_optional:
+                continue
+            return f"Error in node {node['cmd']}: {stderr}", trace
 
         end_size = len(stdout)
         entry: Dict[str, Any] = {  # type: ignore[no-redef]
@@ -591,6 +605,8 @@ def main():
             print(f"Avg Node Latency:  {sheet['avg_latency_ms']:.2f}ms")
             if sheet.get("fallback_events", 0) > 0:
                 print(f"âš ï¸  Hook Fallbacks: {sheet['fallback_events']} (pipe failed; raw input passed through)")
+            if sheet.get("unmapped_events", 0) > 0:
+                print(f"âš ï¸  Unmapped Heavy Calls: {sheet['unmapped_events']} (leaking raw tokens; update pipes.json)")
             print("-----------------------------------------\n")
 
     except Exception as e:

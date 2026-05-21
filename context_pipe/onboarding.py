@@ -11,39 +11,47 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 
-def check_for_updates() -> Optional[str]:
-    """
-    Checks the GitHub API for the latest release tag and compares it to the local version.
-    Returns an update warning string if a newer version is available, else None.
-    """
-    import urllib.request
-    import json
-    from importlib.metadata import version, PackageNotFoundError
-
+def check_for_updates() -> str:
+    """Checks if a newer version of Context-Pipe is available on PyPI."""
     try:
-        local_version = version("mcp-context-pipe")
-    except PackageNotFoundError:
-        return None  # Development/editable mode or not installed via pip
-
-    url = "https://api.github.com/repos/luismichio/context-pipe/releases/latest"
-    req = urllib.request.Request(url, headers={"User-Agent": f"Context-Pipe-CLI/{local_version}"})
-    
-    try:
-        with urllib.request.urlopen(req, timeout=1.5) as response:  # nosec B310
-            data = json.loads(response.read().decode("utf-8"))
-            latest_tag = data.get("tag_name", "")
-            
-            # Simple version comparison assuming vX.Y.Z format
-            latest_version = latest_tag.lstrip("v")
-            if latest_version and latest_version != local_version:
-                return (
-                    f"⚠️ Update Available: A newer version ({latest_tag}) is available. "
-                    f"Run `pip install --upgrade mcp-context-pipe` to apply."
-                )
+        import urllib.request
+        import json
+        from . import __version__
+        
+        req = urllib.request.Request("https://pypi.org/pypi/mcp-context-pipe/json", headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=2) as response:
+            data = json.loads(response.read())
+            latest = data["info"]["version"]
+            if latest != __version__:
+                return f"ðŸ”„ Update available: v{latest} (Current: v{__version__}). Run: pip install -U mcp-context-pipe"
     except Exception:
         pass
-    
-    return None
+    return ""
+
+def check_performance_tax(pipes_json_path: str) -> str:
+    """Scans pipes.json for Python interpreted nodes and warns about the Subprocess Tax."""
+    try:
+        import json
+        with open(pipes_json_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+            
+        has_python_node = False
+        for pipe in config.get("pipes", []):
+            for node in pipe.get("nodes", []):
+                cmd = str(node.get("cmd", "")).lower()
+                args = " ".join(str(a).lower() for a in node.get("args", []))
+                
+                if cmd == "python" or cmd == "python3" or cmd.endswith(".py") or ".py " in args:
+                    has_python_node = True
+                    break
+            if has_python_node:
+                break
+                
+        if has_python_node:
+            return "âš ï¸  Performance Notice: You are piping data through interpreted Python nodes. For high-concurrency agent loops, consider migrating to pre-compiled binaries (e.g., Rust/Go) to eliminate the ~100ms Python startup tax."
+    except Exception:
+        pass
+    return ""  # Development/editable mode or not installed via pip
 
 DEFAULT_PIPES_CONFIG = {
     "version": "1.0",
@@ -1086,6 +1094,104 @@ def _inject_kilocode(target_dir: str, cmd_str: str) -> list[str]:
     actions.append("Injected Kilo Code workspace rules.")
     return actions
 
+def _inject_antigravity(target_dir: str, cmd_str: str) -> list[str]:
+    actions = []
+    import sys
+    import json
+
+    # 1. Rules in .agents/rules/
+    antigravity_rules_dir = os.path.join(target_dir, ".agents", "rules")
+    os.makedirs(antigravity_rules_dir, exist_ok=True)
+
+    rule_template = """---
+description: {description}
+globs: []
+alwaysApply: false
+---
+{prompt}
+"""
+
+    antigravity_commands = {
+        "pipe-stats.md": (
+            "View Context-Pipe ROI Balance Sheet",
+            "Call get_pipe_stats from the context-pipe MCP server. Display chars saved, chars added, avg latency, total events, and net ROI. If net savings > 0, summarise the top contributing pipe by name.",
+        ),
+        "pipe-run.md": (
+            "Run a named Context-Pipe on the current context",
+            "1. Call `list_pipes()` from the `context-pipe` MCP server to show available pipes.\n2. If the user has not specified a pipe name, ask them to choose from the list.\n3. Ask the user to confirm or paste the input text to process, or use the current conversation context.\n4. Call `pipe_run(pipe_name, input_text)`.\n5. Display the audit header (compression ratio, latency) and the distilled result.",
+        ),
+        "pipe-dynamic.md": (
+            "Build and run an ad-hoc Context-Pipe from available tools",
+            "1. Call `pipe_list_shadow_tools()` from the `context-pipe` MCP server to discover available nodes (configured pipes + PATH tools like jq, rg, markitdown, pandoc).\n2. Based on the user's goal, construct a `nodes_json` array. Rules:\n   - Every array MUST end with a sifting node: `{\"cmd\": \"semantic-sift-cli\", \"args\": [\"semantic\"]}`.\n   - Shell utilities (grep, awk, jq, rg) require `allow_shell=True` - only use when the final node is a sifter.\n   - Never put shell metacharacters (|, ;, &, $) in a `cmd` value - use `args` instead.\n3. Show the user the proposed node graph and confirm before executing.\n4. Call `pipe_run_dynamic(nodes_json, input_text, allow_shell=<bool>)`.\n5. Display the audit header and distilled result.",
+        ),
+        "pipe-handoff.md": (
+            "Distil agent output before passing it to another agent",
+            "Use this at any agent-to-agent handoff boundary to prevent context flooding.\n1. Identify the output text from Agent A and the name of Agent B that will consume it.\n2. Call `pipe_agent_handoff(output, from_agent=\"<A>\", to_agent=\"<B>\")` from the `context-pipe` MCP server.\n   - If you know the content type, pass `pipe_name` explicitly (e.g. `pipe_name=\"semantic-refinery\"`). \n   - Otherwise omit `pipe_name` and routing is determined automatically by pipes.json mappings.\n3. Pass the returned distilled text as the input to Agent B.",
+        ),
+    }
+
+    for filename, (description, prompt) in antigravity_commands.items():
+        text = rule_template.format(description=description, prompt=prompt)
+        with open(os.path.join(antigravity_rules_dir, filename), "w", encoding="utf-8") as f:
+            f.write(text)
+    actions.append("Added /pipe-stats, /pipe-run, /pipe-dynamic, /pipe-handoff rules to Antigravity (.agents/rules/).")
+
+    # 2. Global MCP Config
+    global_mcp_path = os.path.expanduser("~/.gemini/antigravity/mcp_config.json")
+    
+    def update_mcp_config(path: str) -> bool:
+        data: dict = {"mcpServers": {}}
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                pass
+        
+        if "mcpServers" not in data:
+            data["mcpServers"] = {}
+        
+        py_exe = os.path.abspath(sys.executable)
+        entry_point = "context_pipe.server"
+        
+        existing = data["mcpServers"].get("context-pipe", {})
+        if existing.get("command") == py_exe and entry_point in (existing.get("args") or []):
+            return False
+            
+        data["mcpServers"]["context-pipe"] = {
+            "command": py_exe,
+            "args": ["-m", entry_point],
+            "env": {"PIPE_CONFIG_PATH": os.path.abspath(os.path.join(target_dir, "pipes.json")),
+                    "PIPE_AUTHORIZED_ROOT": os.path.abspath(target_dir)}
+        }
+        
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        return True
+
+    if update_mcp_config(global_mcp_path):
+        actions.append(f"Registered Context-Pipe in Antigravity global MCP config ({global_mcp_path}).")
+
+    # 3. Hooks
+    antigravity_settings_path = os.path.join(target_dir, ".agents", "settings.json")
+    
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if os.name == "nt":
+        hook_cmd = f"$env:GEMINI_SESSION_ID='true'; $env:PYTHONPATH='{root_dir}'; {cmd_str}"
+    else:
+        hook_cmd = f"GEMINI_SESSION_ID=true PYTHONPATH='{root_dir}' {cmd_str}"
+
+    for hook_key in ["AfterTool", "PreCompress"]:
+        if merge_hook_json(
+            antigravity_settings_path,
+            hook_key,
+            {"name": "context-pipe", "type": "command", "command": hook_cmd, "timeout": 10000},
+        ):
+            actions.append(f"Injected Context-Pipe into Antigravity {hook_key} hooks.")
+
+    return actions
+
 def inject_hooks(target_dir: str, environment: str) -> list[str]:
     """Automates the injection of Context-Pipe hooks into various IDEs/CLIs."""
     import json
@@ -1131,6 +1237,10 @@ def inject_hooks(target_dir: str, environment: str) -> list[str]:
     if update_warning:
         actions.append(update_warning)
 
+    perf_warning = check_performance_tax(pipes_json_path)
+    if perf_warning:
+        actions.append(perf_warning)
+
     # Dispatch to specialized helpers based on environment
     if "cursor" in env_lower:
         actions.extend(_inject_cursor(target_dir, cmd_str))
@@ -1154,6 +1264,8 @@ def inject_hooks(target_dir: str, environment: str) -> list[str]:
         actions.extend(_inject_openclaw(target_dir, cmd_str))
     if "kilocode" in env_lower:
         actions.extend(_inject_kilocode(target_dir, cmd_str))
+    if "antigravity" in env_lower:
+        actions.extend(_inject_antigravity(target_dir, cmd_str))
 
     return actions
 
