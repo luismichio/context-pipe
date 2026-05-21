@@ -92,6 +92,10 @@ async def _resolve_safe_path(path: str, ctx: Optional[Context] = None) -> str:
 
     resolved_path = os.path.realpath(path)
     workspace_roots = []
+    
+    if os.environ.get("PIPE_AUTHORIZED_ROOT"):
+        workspace_roots.append(os.path.realpath(os.environ["PIPE_AUTHORIZED_ROOT"]))
+        
     if ctx and hasattr(ctx, "session"):
         try:
             roots_result = await ctx.session.list_roots()

@@ -2,6 +2,7 @@
 # Copyright (c) 2026 Luis Kobayashi. All rights reserved.
 
 import os
+import sys
 import json
 import time
 import uuid
@@ -10,7 +11,7 @@ import logging
 from typing import Dict, Any
 from .platforms import detect_client_id, extract_content, inject_content
 from .orchestrator import run_pipe, resolve_pipe_from_context, check_echo, SIFT_SIGNATURE
-from .telemetry import log_telemetry, log_bypass_event
+from .telemetry import log_telemetry, log_bypass_event, log_unmapped_event
 
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,11 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     # 3. Dynamic Routing
     pipe_name = resolve_pipe_from_context(config, str(tool_name), len(str(raw_content)))
     if not pipe_name:
+        content_len = len(str(raw_content))
+        if content_len > 10240:
+            sys.stderr.write(f"\n[Context-Pipe Alert: Unmapped heavy tool call '{tool_name}' ({content_len/1024:.1f}KB) detected. Add to pipes.json to optimize.]\n")
+            log_unmapped_event(tool_name=str(tool_name), original_size=content_len, platform=platform, agent_label=agent_label)
+            
         if debug:
             logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': No routing match found.")
         log_bypass_event(tool_name=str(tool_name), reason="No routing match found", platform=platform, agent_label=agent_label)

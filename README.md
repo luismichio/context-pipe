@@ -3,7 +3,7 @@
 **The Universal Standard for Context Engineering.**
 
 [![CI](https://github.com/luismichio/context-pipe/actions/workflows/ci.yml/badge.svg)](https://github.com/luismichio/context-pipe/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/Tests-243%20Passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-256%20Passing-brightgreen)](tests/)
 [![Python](https://img.shields.io/pypi/pyversions/mcp-context-pipe)](https://pypi.org/project/mcp-context-pipe/)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue)](LICENSE.md)
 [![OSI](https://img.shields.io/badge/OSI-Approved-brightgreen)](https://opensource.org/licenses/Apache-2.0)
@@ -79,6 +79,9 @@ IDE hooks that apply pipes transparently after every tool call — without the a
 ### 6. The A2A Bridge (`a2a.py`)
 `pipe_agent_handoff()` distils Agent A's output before it enters Agent B's context window. Framework-agnostic — no monkey-patching. Works in CrewAI task callbacks, Google ADK transfer hooks, LangGraph edge functions, or any custom handoff point. Available as both a Python function and an MCP tool. Returns the original output unchanged on any error, so the agent chain is never interrupted.
 
+### 7. The Native Rust Core (`crates/cpipe`)
+`cpipe` is the high-performance Rust heart of the Context-Pipe ecosystem. It ports the full orchestration engine — config merging, placeholder resolution, stream routing, and the self-aware bypass guard — to a pre-compiled native binary with **<2ms startup latency** (500× faster than the Python runtime). It coexists with the Python server: MCP tools stay in Python (FastMCP), while the Rust binary is available as a **Tauri sidecar**, a **standalone CLI** (`cpipe run`, `cpipe list`, `cpipe serve`), or a **Cargo library** for direct embedding in Rust applications. See [`crates/cpipe/README.md`](crates/cpipe/README.md) for the full API.
+
 ---
 
 ## ✨ What Makes This Different
@@ -101,7 +104,21 @@ IDE hooks that apply pipes transparently after every tool call — without the a
 
 ---
 
-## ⚡ Quickstart (60 seconds)
+## 🧠 The Architecture: Semantic Enums (Solving Schema Bloat)
+In standard MCP setups, exposing multiple capabilities (PDF parsing, log searching, HTML cleaning) means exposing multiple tools. This causes **Schema Bloat**: the LLM's system prompt fills with thousands of tokens of complex tool instructions. For Small Language Models (SLMs), this pushes out chat history, overwhelms the context window, and leads to hallucinations.
+
+`context-pipe` solves this through **Semantic Enums**.
+Instead of teaching the AI *how* to use complex command-line utilities, you expose a **single tool**: `pipe_run(input, pipe_name)`. The `pipe_name` parameter is simply an Enum of your predefined pipelines (e.g., `["parse-and-clean-pdf", "extract-critical-errors"]`).
+
+This perfectly separates **Intent** from **Execution**:
+* **The LLM provides the Intent:** *"I need the clean text of this PDF, so I'll call the `parse-and-clean-pdf` pipe."*
+* **`pipes.json` provides the Execution:** `[pandoc -> jq -> semantic-sift]`
+
+By using brief, concise pipe names, you achieve extreme **prompt compression**. The AI gets a menu of high-level "buttons to push" rather than reading an instruction manual for every utility on the host machine. Better yet, if you upgrade your backend tooling (e.g., swapping `pandoc` for `markitdown`), you **never have to update the LLM's prompt**. The AI still calls the same pipe; the engine behind it just gets faster.
+
+---
+
+## 🚀 Quickstart (60 seconds)
 
 ```bash
 # 1. Install
@@ -168,7 +185,7 @@ uv pip install -e .[neural]         # torch, transformers, llmlingua
 
 ### 2. Connect the MCP
 
-> **CRITICAL**: For exact configuration paths for Cursor, Gemini, OpenCode, VS Code, and Claude, reference the **[Master Configuration Matrix](doc/INTEGRATION_ENCYCLOPEDIA.md#2-master-configuration-matrix-installation)**.
+> **CRITICAL**: For exact configuration paths for Cursor, Gemini, Antigravity, OpenCode, VS Code, and Claude, reference the **[Master Configuration Matrix](doc/INTEGRATION_ENCYCLOPEDIA.md#2-master-configuration-matrix-installation)**.
 
 ### 3. Connect a Refinery
 Context-Pipe is the "Switchboard," but it needs a "Refinery" to distill data. **[Semantic-Sift](https://github.com/luismichio/semantic-sift)** is the flagship intelligence engine for this ecosystem. It uses heuristic sieves and neural models (BERT/ONNX) to incinerate noise (timestamps, boilerplate) while preserving 95% of the signal.
@@ -188,7 +205,7 @@ Edit `pipes.json` (see `pipes.json.example`) to define your high-fidelity contex
 Once connected, ask your AI Assistant to configure your workspace:
 > *"Run `pipe_onboard(environment='Cursor')` to configure this project."*
 
-`pipe_onboard` **auto-detects your IDE** if `environment` is omitted — it inspects environment variables and parent-process names to fingerprint 12+ platforms (Cursor, Gemini, OpenCode, VS Code, Windsurf, Claude, Cline, etc.). Pass `environment` explicitly only when auto-detection is ambiguous.
+`pipe_onboard` **auto-detects your IDE** if `environment` is omitted — it inspects environment variables and parent-process names to fingerprint 12+ platforms (Cursor, Gemini, Antigravity, OpenCode, VS Code, Windsurf, Claude, Cline, etc.). Pass `environment` explicitly only when auto-detection is ambiguous.
 
 ---
 
@@ -201,7 +218,7 @@ Detailed documentation is available in the [`doc/`](./doc) directory.
 *   **[doc/OPERATOR_GUIDE.md](doc/OPERATOR_GUIDE.md)**: Definitive guide for setup, terminal mastery, and `pipes.json` configuration.
 *   **[doc/ARCHITECTURE.md](doc/ARCHITECTURE.md)**: Technical specifications of the orchestration spine and switchboard.
 *   **[doc/CONTEXT_PIPE_PROTOCOL.md](doc/CONTEXT_PIPE_PROTOCOL.md)**: The language-agnostic standard for tool interoperability.
-*   **[doc/INTEGRATION_ENCYCLOPEDIA.md](doc/INTEGRATION_ENCYCLOPEDIA.md)**: Master Compatibility Matrix for Cursor, VS Code, Gemini, and Claude.
+*   **[doc/INTEGRATION_ENCYCLOPEDIA.md](doc/INTEGRATION_ENCYCLOPEDIA.md)**: Master Compatibility Matrix for Cursor, VS Code, Gemini/Antigravity, and Claude.
 
 ---
 
@@ -233,6 +250,42 @@ def pipe(
 ```
 
 The function always returns the original `text` unchanged on any error (subprocess failure, missing config, etc.), so it is safe to use as a drop-in filter.
+
+### Rust Library (`cpipe`)
+
+For Rust or Tauri applications, embed the native core directly:
+
+```rust
+use cpipe::config::load_pipes_config;
+use cpipe::orchestrator::run_pipe;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config = load_pipes_config();
+    let pipe = config.pipes.iter().find(|p| p.name == "standard-distill")
+        .ok_or("Pipe not found")?;
+
+    let (output, _telemetry) = run_pipe(
+        pipe,
+        "raw context text here",
+        Some("my-tool"), None, &config.servers,
+    ).await;
+
+    println!("{output}");
+    Ok(())
+}
+```
+
+Add to your `Cargo.toml`:
+```toml
+[dependencies]
+cpipe = { git = "https://github.com/luismichio/context-pipe", path = "crates/cpipe" }
+```
+
+Pre-built binaries for Windows, macOS (Intel & Apple Silicon), and Linux are available on the [GitHub Releases](https://github.com/luismichio/context-pipe/releases) page, or download via:
+```bash
+python scripts/fetch_cpipe.py
+```
 
 ---
 
@@ -437,7 +490,7 @@ All four tools in one pipe. Each doing exactly one job.
 
 ### OpenCode — MCP Tool Output Interception
 
-The "subconscious interceptor" feature (`pipe_hook.py`) works transparently for **Cursor, VS Code, Gemini CLI, and Claude Desktop** by injecting hook handlers that fire after every tool call.
+The "subconscious interceptor" feature (`pipe_hook.py`) works transparently for **Cursor, VS Code, Gemini CLI, Antigravity CLI, and Claude Desktop** by injecting hook handlers that fire after every tool call.
 
 **OpenCode is the exception.** The `tool.execute.after` hook is declared in the OpenCode plugin `Hooks` interface but is **never triggered** by the OpenCode runtime (confirmed via source audit of `session/processor.ts`, `session/llm.ts`, `tool/registry.ts`, `agent.ts`). The plugin's output mutation code is silently a no-op.
 

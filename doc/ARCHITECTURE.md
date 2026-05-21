@@ -53,7 +53,7 @@ This means the decades of compounding value locked inside the MCP ecosystem beco
 The heart of the platform is a high-performance Python-based engine designed to execute multi-node data pipelines at the OS level.
 
 ### Standard Stream Execution
-The orchestrator utilizes `subprocess.Popen` to create memory-resident pipes between nodes.
+The orchestrator utilizes `asyncio.create_subprocess_exec` to create memory-resident pipes between nodes.
 - **`stdin` (The Input)**: Each node reads data from its standard input.
 - **`stdout` (The Output)**: The node's transformed data is captured and passed to the next node's `stdin`.
 - **`stderr` (The Error Stream)**: Redirected to a trace map to ensure node failures are reported without polluting the data stream.
@@ -85,7 +85,7 @@ In addition to standard binary nodes, Context-Pipe supports first-class MCP node
 ```
 run_pipe()
   │
-  ├─── binary branch: subprocess.Popen(cmd) ────┐
+  ├─── binary branch: asyncio.create_subprocess_exec(cmd) ────┐
   │                                             │
   └─── MCP branch: _run_mcp_node() ─────────────┤
           │                                     │
@@ -253,7 +253,7 @@ A node in `pipes.json` may declare an optional `tee` object:
 
 ### Execution Order
 
-The tee fires **before** `subprocess.Popen` — raw node input is persisted even if the node itself crashes. Written content is the raw input plus a separator:
+The tee fires **before** `asyncio.create_subprocess_exec` — raw node input is persisted even if the node itself crashes. Written content is the raw input plus a separator:
 
 ```
 --- [Context-Pipe: Tee @ <node_cmd> | <iso_timestamp>] ---
@@ -304,7 +304,10 @@ Dynamic pipes that include shell nodes **must** end with a `semantic-sift` termi
 
 ---
 
-## 10. Global Configuration (`context_pipe/config_loader.py`)
+## 10. Secure Global Configuration
+To support secure global MCP registration (e.g., in Antigravity), the orchestrator utilizes PIPE_AUTHORIZED_ROOT. When a server is launched from a global config file, this variable explicitly sets the authorized workspace boundary, preventing the need for insecure global read permissions.
+
+## 10b. Global Configuration (`context_pipe/config_loader.py`)
 
 `load_pipes_config()` merges two sources with **local precedence**:
 
@@ -402,6 +405,53 @@ curl -s https://example.com | mcp-pipe tool firecrawl scrape | mcp-pipe run sema
 ### Relationship to MCP Nodes
 
 MCP tool calls can also be defined *inside* `pipes.json` pipe definitions — the orchestrator calls them mid-chain transparently. `mcp-pipe tool` is the complementary surface: it exposes that same MCP call capability as a direct shell subcommand, one tool at a time, composable with any terminal pipeline. Both share the `servers` registry schema in `pipes.json`.
+
+---
+
+## 13. The Native Rust Core (`crates/cpipe`)
+
+### Motivation
+
+The Python-based FastMCP server carries a mandatory cold-start tax (~1000ms) due to interpreter startup. For real-time IDE hooks, Tauri sidecars, and shell-first workflows this latency is unacceptable. `cpipe` is the Rust port of the orchestration engine that eliminates this tax entirely.
+
+### Coexistence Design
+
+`cpipe` is explicitly *not* a replacement for the Python server. The two runtimes are complementary:
+
+| Surface | Runtime | Role |
+| :--- | :--- | :--- |
+| MCP Tools (`pipe_run`, `pipe_read_file`, …) | Python (FastMCP) | AI assistant integration, complex logic |
+| Standalone CLI (`cpipe run`, `cpipe list`, …) | Rust (`cpipe`) | Terminal workflows, shell hooks, low-latency |
+| Tauri Sidecar | Rust (`cpipe`) | Desktop apps — zero Python dependency |
+| Cargo Library | Rust (`cpipe`) | Direct embedding in Rust/Tauri applications |
+
+### Ported Engine Rules
+
+`cpipe` faithfully implements the full **Context-Pipe Protocol (CPP)**:
+
+1. **Config Merging**: Loads and merges `pipes.json` (or `pipes.toml`) with global `~/.mcp-pipe.json`. Local config takes precedence.
+2. **Placeholder Resolution**: Recursively resolves `${VAR}` tokens against process environment variables.
+3. **Stream Routing**: Chains `stdin`/`stdout` between nodes via `tokio::process::Command`. Timeout guard is active per-node (`PIPE_NODE_TIMEOUT_MS`).
+4. **Self-Aware Bypass**: Detects the sifting signature (`--- [Semantic-Sift Audit] ---`) and skips redundant re-processing, preventing infinite sifting loops.
+5. **Path Security**: `resolve_safe_path()` validates file paths against `PIPE_AUTHORIZED_ROOT` and the client-reported workspace roots (`CLIENT_ROOTS`) before any I/O, mirroring the Python server's safety contract.
+
+### TOML Configuration Support
+
+`cpipe` adds first-class support for `pipes.toml` alongside the legacy `pipes.json`. TOML advantages: inline comments, multi-line strings for complex node arguments, and human-friendly syntax. Both formats are loaded and merged transparently — no migration required.
+
+### Distribution
+
+- **GitHub Releases**: Pre-built binaries for `x86_64-pc-windows-msvc`, `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`.
+- **PyPI Wheels**: `cibuildwheel` compiles and bundles the `cpipe` binary inside the platform wheel — no Rust toolchain needed by end users.
+- **Cargo**: `crates/cpipe` is publishable to crates.io with full library + binary dual targets.
+- **Developer Fetch**: `python scripts/fetch_cpipe.py` downloads the matching release binary for the current platform.
+
+### Release Workflow
+
+Two parallel GitHub Actions workflows fire on `v*` tags:
+
+- **`release.yml`**: Builds Python wheels (via `cibuildwheel`) for Windows/macOS/Linux and publishes to PyPI. The `CIBW_BEFORE_BUILD: pip install setuptools-rust` step compiles and embeds `cpipe` inside the wheel automatically.
+- **`release-binaries.yml`**: Compiles standalone `cpipe` executables for all four target triples and uploads them as GitHub Release assets.
 
 ---
 *High-Fidelity Infrastructure for the Studio of Two.*
