@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: mcp-context-pipe
-Version: 0.2.4
+Version: 0.3.4
 Summary: Universal switchboard for the Context-Pipe Protocol (CPP)
 Author: Luis Kobayashi
 License: Apache-2.0
@@ -17,12 +17,14 @@ Description-Content-Type: text/markdown
 License-File: LICENSE.md
 Requires-Dist: mcp>=1.0
 Requires-Dist: psutil>=5.9
+Provides-Extra: native
 Provides-Extra: dev
 Requires-Dist: pytest; extra == "dev"
 Requires-Dist: pytest-cov; extra == "dev"
 Requires-Dist: pytest-anyio; extra == "dev"
 Requires-Dist: ruff; extra == "dev"
 Requires-Dist: mypy; extra == "dev"
+Requires-Dist: bandit; extra == "dev"
 Dynamic: license-file
 
 # ⛓️ Context-Pipe
@@ -30,7 +32,7 @@ Dynamic: license-file
 **The Universal Standard for Context Engineering.**
 
 [![CI](https://github.com/luismichio/context-pipe/actions/workflows/ci.yml/badge.svg)](https://github.com/luismichio/context-pipe/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/Tests-242%20Passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-243%20Passing-brightgreen)](tests/)
 [![Python](https://img.shields.io/pypi/pyversions/mcp-context-pipe)](https://pypi.org/project/mcp-context-pipe/)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue)](LICENSE.md)
 [![OSI](https://img.shields.io/badge/OSI-Approved-brightgreen)](https://opensource.org/licenses/Apache-2.0)
@@ -92,7 +94,7 @@ Every node is a real subprocess. The T-pipe saves a raw copy at any point withou
 A language-agnostic standard with one rule: a node reads `stdin`, transforms content, and writes to `stdout`. Any binary, shell command, Python script, or MCP tool that honours this contract is a valid node. The protocol is defined in [`doc/CONTEXT_PIPE_PROTOCOL.md`](doc/CONTEXT_PIPE_PROTOCOL.md) and is deliberately simple — no SDKs, no registration, no framework coupling.
 
 ### 2. The Orchestration Spine (`orchestrator.py`)
-The execution engine that chains nodes into pipes. Runs each node as a real OS subprocess with `shell=False` enforced (no injection surface). Features: per-node timeout guard (`PIPE_NODE_TIMEOUT_MS`), T-Pipe stream splitting (save raw input to disk before a node processes it), full trace accounting (input/output size + latency per node), and Adaptive Window Pressure (`PIPE_WINDOW_PRESSURE` env var passed to every node).
+The execution engine that chains nodes into pipes. Runs each node as a real OS subprocess with `shell=False` enforced (no injection surface). Features: per-node timeout guard (`PIPE_NODE_TIMEOUT_MS`), T-Pipe stream splitting (save raw input to disk before a node processes it), and full trace accounting (input/output size + latency per node).
 
 ### 3. The Universal Switchboard (`pipes.json` + mappings)
 Data-driven routing that resolves the optimal pipe automatically based on three trigger types: **tool name** (`tool:regex`), **payload size** (`size:>N`), and **default fallback**. Pipe definitions live in `pipes.json` (project-level) and optionally `~/.mcp-pipe.json` (global, merged with local precedence). No code changes required to add, modify, or re-route pipes.
@@ -117,7 +119,9 @@ IDE hooks that apply pipes transparently after every tool call — without the a
 | **Dynamic Pipes** | AI agents construct and execute ad-hoc node lists at runtime via `pipe_run_dynamic` — no `pipes.json` entry required. | [Dynamic Pipes](#dynamic-pipes) |
 | **Shadow MCP Registry** | Keep utility MCP servers invisible to the agent's tool list until needed. `pipe_list_shadow_tools` queries them on demand. | [Shadow MCP Registry](#shadow-mcp-registry) |
 | **A2A Agent Handoff** | Distil Agent A's output before it enters Agent B's context window — framework-agnostic, no monkey-patching. | [A2A Handoff](#-a2a-agent-to-agent-handoff) |
-| **T-Pipe Stream Splitting** | Save a raw copy of any node's input to disk before it is distilled — for audit, debugging, and quality measurement. | [T-Pipe Nodes](#3-t-pipe-nodes-stream-splitting) |
+| **Version Awareness** | Proactive GitHub-backed update alerts in `pipe_verify` and `pipe_onboard` to ensure environment parity. | [Health Checks](doc/OPERATOR_GUIDE.md) |
+| **Stream Integrity** | Hardened orchestration engine with non-UTF8 robustness (`errors="replace"`) and null-safe reading. | [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) |
+| **T-Pipe Stream Splitting** | Save a raw copy of any node's input to disk before it is distilled — for audit, debugging, and quality measurement. | [3. T-Pipe Nodes (Stream Splitting)](#3-t-pipe-nodes-stream-splitting) |
 | **Adaptive Window Pressure** | Signals remaining context headroom to every node; `semantic-sift` auto-adjusts `--rate` accordingly. | [Environment Variables](#️-environment-variables) |
 | **Global Config** | Share pipe definitions and MCP server registries across all projects — local `pipes.json` always wins. | [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) |
 | **Shell Alias Injection** | `pipe_install_aliases` writes `mcp-pipe` / `cpipe` into your shell profile — terminal-ready without venv activation. | [Terminal Usage](#-terminal-usage-mcp-pipe-cli) |
@@ -126,7 +130,21 @@ IDE hooks that apply pipes transparently after every tool call — without the a
 
 ---
 
-## ⚡ Quickstart (60 seconds)
+## 🧠 The Architecture: Semantic Enums (Solving Schema Bloat)
+In standard MCP setups, exposing multiple capabilities (PDF parsing, log searching, HTML cleaning) means exposing multiple tools. This causes **Schema Bloat**: the LLM's system prompt fills with thousands of tokens of complex tool instructions. For Small Language Models (SLMs), this pushes out chat history, overwhelms the context window, and leads to hallucinations.
+
+`context-pipe` solves this through **Semantic Enums**.
+Instead of teaching the AI *how* to use complex command-line utilities, you expose a **single tool**: `pipe_run(input, pipe_name)`. The `pipe_name` parameter is simply an Enum of your predefined pipelines (e.g., `["parse-and-clean-pdf", "extract-critical-errors"]`).
+
+This perfectly separates **Intent** from **Execution**:
+* **The LLM provides the Intent:** *"I need the clean text of this PDF, so I'll call the `parse-and-clean-pdf` pipe."*
+* **`pipes.json` provides the Execution:** `[pandoc -> jq -> semantic-sift]`
+
+By using brief, concise pipe names, you achieve extreme **prompt compression**. The AI gets a menu of high-level "buttons to push" rather than reading an instruction manual for every utility on the host machine. Better yet, if you upgrade your backend tooling (e.g., swapping `pandoc` for `markitdown`), you **never have to update the LLM's prompt**. The AI still calls the same pipe; the engine behind it just gets faster.
+
+---
+
+## 🚀 Quickstart (60 seconds)
 
 ```bash
 # 1. Install
@@ -193,7 +211,7 @@ uv pip install -e .[neural]         # torch, transformers, llmlingua
 
 ### 2. Connect the MCP
 
-> **CRITICAL**: For exact configuration paths for Cursor, Gemini, OpenCode, VS Code, and Claude, reference the **[Master Configuration Matrix](doc/INTEGRATION_ENCYCLOPEDIA.md#2-master-configuration-matrix-installation)**.
+> **CRITICAL**: For exact configuration paths for Cursor, Gemini, Antigravity, OpenCode, VS Code, and Claude, reference the **[Master Configuration Matrix](doc/INTEGRATION_ENCYCLOPEDIA.md#2-master-configuration-matrix-installation)**.
 
 ### 3. Connect a Refinery
 Context-Pipe is the "Switchboard," but it needs a "Refinery" to distill data. **[Semantic-Sift](https://github.com/luismichio/semantic-sift)** is the flagship intelligence engine for this ecosystem. It uses heuristic sieves and neural models (BERT/ONNX) to incinerate noise (timestamps, boilerplate) while preserving 95% of the signal.
@@ -213,7 +231,7 @@ Edit `pipes.json` (see `pipes.json.example`) to define your high-fidelity contex
 Once connected, ask your AI Assistant to configure your workspace:
 > *"Run `pipe_onboard(environment='Cursor')` to configure this project."*
 
-`pipe_onboard` **auto-detects your IDE** if `environment` is omitted — it inspects environment variables and parent-process names to fingerprint 12+ platforms (Cursor, Gemini, OpenCode, VS Code, Windsurf, Claude, Cline, etc.). Pass `environment` explicitly only when auto-detection is ambiguous.
+`pipe_onboard` **auto-detects your IDE** if `environment` is omitted — it inspects environment variables and parent-process names to fingerprint 12+ platforms (Cursor, Gemini, Antigravity, OpenCode, VS Code, Windsurf, Claude, Cline, etc.). Pass `environment` explicitly only when auto-detection is ambiguous.
 
 ---
 
@@ -226,7 +244,7 @@ Detailed documentation is available in the [`doc/`](./doc) directory.
 *   **[doc/OPERATOR_GUIDE.md](doc/OPERATOR_GUIDE.md)**: Definitive guide for setup, terminal mastery, and `pipes.json` configuration.
 *   **[doc/ARCHITECTURE.md](doc/ARCHITECTURE.md)**: Technical specifications of the orchestration spine and switchboard.
 *   **[doc/CONTEXT_PIPE_PROTOCOL.md](doc/CONTEXT_PIPE_PROTOCOL.md)**: The language-agnostic standard for tool interoperability.
-*   **[doc/INTEGRATION_ENCYCLOPEDIA.md](doc/INTEGRATION_ENCYCLOPEDIA.md)**: Master Compatibility Matrix for Cursor, VS Code, Gemini, and Claude.
+*   **[doc/INTEGRATION_ENCYCLOPEDIA.md](doc/INTEGRATION_ENCYCLOPEDIA.md)**: Master Compatibility Matrix for Cursor, VS Code, Gemini/Antigravity, and Claude.
 
 ---
 
@@ -398,6 +416,7 @@ Server definitions live in a `servers` block in `pipes.json` or `~/.mcp-pipe.jso
 Context-Pipe is a foundational member of the **Studio of Two** infrastructure. It is designed to work in high-fidelity harmony with:
 
 *   **[Semantic-Sift](https://github.com/luismichio/semantic-sift)**: The intelligent refinery for agentic context. Sift is the flagship distillation engine for Context-Pipe, providing the mathematical and neural sifting nodes used in our standard templates.
+*   **[std-context-lab](https://github.com/luismichio/std-context-lab)**: The official integration laboratory. This repository is strictly used for end-to-end integration testing, bug discovery, and verifying cross-repo compatibility between `context-pipe` and `semantic-sift`.
 
 ---
 
@@ -453,7 +472,6 @@ All four tools in one pipe. Each doing exactly one job.
 |---|---|---|
 | `PIPE_CONFIG_PATH` | `pipes.json` | Absolute path to the project's `pipes.json` config file. |
 | `PIPE_NODE_TIMEOUT_MS` | `30000` | Per-node execution timeout in milliseconds. |
-| `PIPE_WINDOW_PRESSURE` | _(unset)_ | Float `0.0–1.0` passed to each node as an env var. `semantic-sift-cli` reads this and overrides `--rate` accordingly. Set by context-pipe routing when payload pressure is high (cross-project dependency with `semantic-sift`). |
 | `allow_shell` | `false` | Enable arbitrary shell command nodes in dynamic pipes (`pipe_run_dynamic` MCP tool / `run_dynamic_pipe()` API). Requires the final node to be a `semantic-sift` terminal command to guarantee context safety. |
 
 ---
@@ -462,7 +480,7 @@ All four tools in one pipe. Each doing exactly one job.
 
 ### OpenCode — MCP Tool Output Interception
 
-The "subconscious interceptor" feature (`pipe_hook.py`) works transparently for **Cursor, VS Code, Gemini CLI, and Claude Desktop** by injecting hook handlers that fire after every tool call.
+The "subconscious interceptor" feature (`pipe_hook.py`) works transparently for **Cursor, VS Code, Gemini CLI, Antigravity CLI, and Claude Desktop** by injecting hook handlers that fire after every tool call.
 
 **OpenCode is the exception.** The `tool.execute.after` hook is declared in the OpenCode plugin `Hooks` interface but is **never triggered** by the OpenCode runtime (confirmed via source audit of `session/processor.ts`, `session/llm.ts`, `tool/registry.ts`, `agent.ts`). The plugin's output mutation code is silently a no-op.
 

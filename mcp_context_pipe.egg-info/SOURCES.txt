@@ -1,6 +1,7 @@
 LICENSE.md
 README.md
 pyproject.toml
+setup.py
 context_pipe/__init__.py
 context_pipe/a2a.py
 context_pipe/api.py
