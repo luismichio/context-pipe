@@ -107,7 +107,7 @@ async def _resolve_safe_path(path: str, ctx: Optional[Context] = None) -> str:
             if part:
                 workspace_roots.append(os.path.realpath(part))
 
-    # 2. Config-file roots — survives client env-var override because the
+    # 2. Config-file roots  survives client env-var override because the
     #    client can only inject env vars, not rewrite file contents.
     try:
         cfg = load_config()
@@ -209,7 +209,7 @@ def get_pipe_stats() -> str:
     # Format the Net Change string
     net_label = "Saved" if sheet["net_change"] < 0 else "Added"
     return f"""
-## 📊 Context-Pipe Balance Sheet
+##  Context-Pipe Balance Sheet
 - **Signal Injected (Augmentation):** +{sheet["signal_added"]:,} chars
 - **Noise Incinerated (Reduction):** -{sheet["noise_removed"]:,} chars
 - **Net Context {net_label}:** {abs(sheet["net_change"]):,} chars
@@ -234,27 +234,27 @@ def pipe_verify() -> str:
 
     # context-pipe
     cp = report["context_pipe"]
-    lines.append(f"{'✅' if cp['ok'] else '❌'} **context-pipe**: {cp['detail']}")
+    lines.append(f"{'' if cp['ok'] else ''} **context-pipe**: {cp['detail']}")
 
     # pipes.json
     pc = report["pipes_config"]
-    lines.append(f"{'✅' if pc['ok'] else '❌'} **pipes.json** (`{pc['path']}`): {pc['detail']}")
+    lines.append(f"{'' if pc['ok'] else ''} **pipes.json** (`{pc['path']}`): {pc['detail']}")
 
     # semantic-sift
     ss = report["semantic_sift"]
     if ss["ok"]:
-        lines.append(f"✅ **semantic-sift-cli**: {ss['version']} — `{ss['path']}`")
+        lines.append(f" **semantic-sift-cli**: {ss['version']}  `{ss['path']}`")
         if resolve_result["updated"]:
             lines.append("   > pipes.json nodes updated to use absolute path.")
     else:
-        lines.append(f"❌ **semantic-sift-cli**: {ss['detail']}")
+        lines.append(f" **semantic-sift-cli**: {ss['detail']}")
 
     # node resolution
     if report["nodes"]:
         lines.append("")
         lines.append("### Pipe Node Resolution")
         for node in report["nodes"]:
-            icon = "✅" if node["ok"] else "❌"
+            icon = "" if node["ok"] else ""
             resolved = f"`{node['resolved']}`" if node["resolved"] else "not found in PATH"
             lines.append(f"{icon} `{node['cmd']}` -> {resolved}")
 
@@ -265,9 +265,9 @@ def pipe_verify() -> str:
         lines.append("")
 
     if report["overall"]:
-        lines.append("**Overall: ✅ All systems operational.**")
+        lines.append("**Overall:  All systems operational.**")
     else:
-        lines.append("**Overall: ❌ Action required — see items above.**")
+        lines.append("**Overall:  Action required  see items above.**")
 
     return "\n".join(lines)
 
@@ -287,7 +287,7 @@ def pipe_audit_last() -> str:
     reduction = (1 - (last["final_chars"] / last["original_chars"])) * 100 if last["original_chars"] > 0 else 0
 
     return f"""
-## 🔍 Context-Pipe Audit: Last Event
+##  Context-Pipe Audit: Last Event
 - **Tool Call:** `{last['tool_key']}`
 - **Original Size:** {last['original_chars']:,} chars
 - **Final Size:** {last['final_chars']:,} chars
@@ -327,7 +327,7 @@ def pipe_agent_handoff(
 
     ALWAYS call this at agent-to-agent handoff boundaries to prevent context
     flooding regardless of framework (CrewAI, Google ADK, LangGraph, custom).
-    Returns unchanged output on any error — the agent chain is never interrupted.
+    Returns unchanged output on any error  the agent chain is never interrupted.
 
     When to call:
       - Any time one agent's output becomes another agent's input.
@@ -362,7 +362,7 @@ def pipe_agent_handoff(
 def pipe_dashboard() -> str:
     """Returns a dashboard overview of the current context-pipe configuration."""
     return f"""
-# 🎮 Context-Pipe Dashboard
+#  Context-Pipe Dashboard
 You are currently connected to the Context-Pipe Orchestrator.
 
 ## Active Pipes
@@ -383,7 +383,7 @@ async def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool =
     Use this when no named pipe in pipes.json fits and you need to compose a
     one-off processing graph on the fly.
 
-    Mandatory workflow — always follow this sequence:
+    Mandatory workflow  always follow this sequence:
       1. Call pipe_list_shadow_tools() to discover available nodes.
       2. Construct nodes_json from those capabilities.
       3. Call this tool.
@@ -392,7 +392,7 @@ async def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool =
       - Every array MUST end with a sifting node to guarantee context safety:
         [{"cmd": "semantic-sift-cli", "args": ["semantic"]}]
       - Shell utilities (grep, awk, jq, rg, etc.) require allow_shell=True.
-      - Never put shell metacharacters (|, ;, &, $, `) in a cmd value — use args[] instead.
+      - Never put shell metacharacters (|, ;, &, $, `) in a cmd value  use args[] instead.
       - Each node must have a "cmd" key; "args" is optional.
 
     Examples:
@@ -416,7 +416,7 @@ async def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool =
     try:
         nodes = json.loads(nodes_json)
     except json.JSONDecodeError as exc:
-        return f"Error: nodes_json is not valid JSON — {exc}\n"
+        return f"Error: nodes_json is not valid JSON  {exc}\n"
 
     start_t = time.time()
     try:
@@ -462,7 +462,7 @@ def pipe_list_shadow_tools() -> str:
 
     lines = ["| Name | Source | Description | Nodes |", "|---|---|---|---|"]
     for t in tools:
-        nodes_str = ", ".join(f"`{n}`" for n in t["nodes"]) if t["nodes"] else "—"
+        nodes_str = ", ".join(f"`{n}`" for n in t["nodes"]) if t["nodes"] else ""
         lines.append(f"| {t['name']} | {t['source']} | {t['description']} | {nodes_str} |")
 
     return "\n".join(lines)
@@ -475,7 +475,7 @@ def pipe_install_aliases(shells: str = "") -> str:
 
     cpipe is a convenience alias for mcp-pipe. On POSIX systems it is added
     to ~/.bashrc and/or ~/.zshrc; on Windows it targets the PowerShell profile.
-    Safe to run multiple times — the alias block is idempotently updated.
+    Safe to run multiple times  the alias block is idempotently updated.
 
     Args:
         shells: Optional space-separated list of shells to target
@@ -484,7 +484,7 @@ def pipe_install_aliases(shells: str = "") -> str:
     shell_list = shells.split() if shells.strip() else None
     results = inject_shell_aliases(shells=shell_list)
     if not results:
-        return "cpipe alias already up-to-date — no profile files were modified.\n"
+        return "cpipe alias already up-to-date  no profile files were modified.\n"
 
     lines = ["cpipe alias installed:"] + [f"  - {r}" for r in results]
     lines.append("\nRestart your shell (or source the profile) to activate `cpipe`.")
@@ -501,7 +501,7 @@ def pipe_remove_aliases() -> str:
     """
     results = remove_shell_aliases()
     if not results:
-        return "No cpipe alias block found in any profile — nothing removed.\n"
+        return "No cpipe alias block found in any profile  nothing removed.\n"
 
     return "cpipe alias removed:\n" + "\n".join(f"  - {r}" for r in results)
 

@@ -23,7 +23,7 @@ def check_for_updates() -> str:
             data = json.loads(response.read())
             latest = data["info"]["version"]
             if latest != __version__:
-                return f"ðŸ”„ Update available: v{latest} (Current: v{__version__}). Run: pip install -U mcp-context-pipe"
+                return f" Update available: v{latest} (Current: v{__version__}). Run: pip install -U mcp-context-pipe"
     except Exception:
         pass
     return ""
@@ -48,7 +48,7 @@ def check_performance_tax(pipes_json_path: str) -> str:
                 break
                 
         if has_python_node:
-            return "âš ï¸  Performance Notice: You are piping data through interpreted Python nodes. For high-concurrency agent loops, consider migrating to pre-compiled binaries (e.g., Rust/Go) to eliminate the ~100ms Python startup tax."
+            return "  Performance Notice: You are piping data through interpreted Python nodes. For high-concurrency agent loops, consider migrating to pre-compiled binaries (e.g., Rust/Go) to eliminate the ~100ms Python startup tax."
     except Exception:
         pass
     return ""  # Development/editable mode or not installed via pip
@@ -100,18 +100,33 @@ DEFAULT_PIPES_CONFIG = {
 
 
 def build_runtime_hook_command(env_vars: dict[str, str] | None = None) -> str:
-    """Builds the absolute command string to invoke the context-pipe wrapper."""
+    """Builds the absolute command string to invoke the context-pipe wrapper.
+
+    On Windows (PowerShell), the returned command is prefixed with the ``&``
+    call operator so that a double-quoted executable path is treated as a
+    command rather than a string literal, preventing the
+    ``Unexpected token '-W'`` parser error (Bug REPORT_027).
+    """
     python_exe = os.path.abspath(sys.executable)
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     root_dir_esc = root_dir.replace("\\", "/")
-    
+
     env_setup = ""
     if env_vars:
         env_setup = "".join(f"os.environ['{k}']='{v}'; " for k, v in env_vars.items())
         env_setup = "import os; " + env_setup
 
     # We use a python inline script to set sys.path and invoke main, ensuring it's shell-agnostic
-    return f'"{python_exe}" -W ignore -c "{env_setup}import sys; sys.path.insert(0, \'{root_dir_esc}\'); from context_pipe.orchestrator import main; main()" wrap'
+    cmd = f'"{python_exe}" -W ignore -c "{env_setup}import sys; sys.path.insert(0, \'{root_dir_esc}\'); from context_pipe.orchestrator import main; main()" wrap'
+
+    # PowerShell requires the `&` call operator when the command starts with a
+    # quoted path; without it the shell treats the string as a literal and raises
+    # "Unexpected token '-W' in expression or statement." (Bug REPORT_027)
+    if os.name == "nt":
+        cmd = f"& {cmd}"
+
+    return cmd
+
 
 
 def discover_sift_executable() -> Optional[str]:
@@ -181,9 +196,9 @@ def resolve_pipes_config(pipes_json_path: str) -> Dict[str, Any]:
     with the discovered absolute executable path.
 
     Returns a dict with keys:
-        - 'sift_path': str | None — resolved path or None
-        - 'updated': bool — whether pipes.json was modified
-        - 'pipes_path': str — path that was read/written
+        - 'sift_path': str | None  resolved path or None
+        - 'updated': bool  whether pipes.json was modified
+        - 'pipes_path': str  path that was read/written
     """
     result: Dict[str, Any] = {"sift_path": None, "updated": False, "pipes_path": pipes_json_path}
 
@@ -279,10 +294,10 @@ def verify_installation(pipes_json_path: Optional[str] = None) -> Dict[str, Any]
             report["semantic_sift"]["version"] = version_output
             report["semantic_sift"]["detail"] = f"Found at {sift_exe}"
         except subprocess.TimeoutExpired:
-            # Cold-start timeout — binary exists and is linked, treat as a warning not a failure
+            # Cold-start timeout  binary exists and is linked, treat as a warning not a failure
             report["semantic_sift"]["ok"] = True
             report["semantic_sift"]["version"] = "installed (cold-start timeout on version check)"
-            report["semantic_sift"]["detail"] = f"Found at {sift_exe} — binary is linked correctly"
+            report["semantic_sift"]["detail"] = f"Found at {sift_exe}  binary is linked correctly"
         except OSError as e:
             report["semantic_sift"]["detail"] = f"Found but failed to run: {e}"
     else:
@@ -419,54 +434,72 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
 
     is_new_cp = is_context_pipe_hook(new_hook)
 
-    if new_hook in hooks_list:
-        return False  # Exactly present, nothing to do
-
+    # Filter out existing context-pipe hooks if we are adding a new one (idempotency/cleanup)
     if is_new_cp:
-        # Filter out any existing context-pipe hook to replace it with the new version (idempotency)
-        hooks_list = [h for h in hooks_list if not is_context_pipe_hook(h)]
-        exists = False
-    else:
-        # Prevent duplicates for non-context-pipe hooks using command/dict matching
-        def get_commands(obj: Any) -> List[str]:
-            cmds = []
-            if isinstance(obj, dict):
-                if "command" in obj and isinstance(obj["command"], str):
-                    cmds.append(obj["command"])
-                if "hooks" in obj and isinstance(obj["hooks"], list):
-                    for h in obj["hooks"]:
-                        cmds.extend(get_commands(h))
-            elif isinstance(obj, list):
-                for item in obj:
-                    cmds.extend(get_commands(item))
-            return cmds
-
-        new_cmds = get_commands(new_hook)
-        if new_cmds:
-            def get_core_target(cmd: str) -> str:
-                if "context_pipe.orchestrator wrap" in cmd:
-                    return "context_pipe.orchestrator wrap"
-                return cmd
-
-            normalized_new = [get_core_target(c) for c in new_cmds]
-
-            def hook_has_target(hook_obj: Any, target: str) -> bool:
-                return any(get_core_target(c) == target for c in get_commands(hook_obj))
-
-            hooks_list = [h for h in hooks_list if not any(hook_has_target(h, t) for t in normalized_new)]
-            exists = False
-        else:
-            exists = new_hook in hooks_list
-
-    if not exists:
-        data["hooks"][hook_key] = [new_hook] + hooks_list
+        new_hooks_list = [h for h in hooks_list if not is_context_pipe_hook(h)]
+        changed = len(new_hooks_list) != len(hooks_list)
+        if new_hook in new_hooks_list:
+            # Already exactly present and others cleaned up
+            if changed:
+                data["hooks"][hook_key] = new_hooks_list
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                return True
+            return False
+        
+        data["hooks"][hook_key] = [new_hook] + new_hooks_list
         dir_path = os.path.dirname(path)
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
         return True
-    return False
+
+    # For non-context-pipe hooks, use the old deduplication logic
+    if new_hook in hooks_list:
+        return False
+
+    def get_commands(obj: Any) -> List[str]:
+        cmds = []
+        if isinstance(obj, dict):
+            if "command" in obj and isinstance(obj["command"], str):
+                cmds.append(obj["command"])
+            if "hooks" in obj and isinstance(obj["hooks"], list):
+                for h in obj["hooks"]:
+                    cmds.extend(get_commands(h))
+        elif isinstance(obj, list):
+            for item in obj:
+                cmds.extend(get_commands(item))
+        return cmds
+
+    new_cmds = get_commands(new_hook)
+    if new_cmds:
+        def get_core_target(cmd: str) -> str:
+            if "context_pipe.orchestrator wrap" in cmd:
+                return "context_pipe.orchestrator wrap"
+            return cmd
+
+        normalized_new = [get_core_target(c) for c in new_cmds]
+
+        def hook_has_target(hook_obj: Any, target: str) -> bool:
+            return any(get_core_target(c) == target for c in get_commands(hook_obj))
+
+        new_hooks_list = [h for h in hooks_list if not any(hook_has_target(h, t) for t in normalized_new)]
+        data["hooks"][hook_key] = [new_hook] + new_hooks_list
+        dir_path = os.path.dirname(path)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        return True
+    
+    data["hooks"][hook_key] = [new_hook] + hooks_list
+    dir_path = os.path.dirname(path)
+    if dir_path:
+        os.makedirs(dir_path, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    return True
 
 
 def get_env_tool_names(environment: str) -> Dict[str, str]:
@@ -542,7 +575,7 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: Any = "u
         if not os.path.exists(target):
             continue
 
-        tier1_text = """# 🚨 CRITICAL INSTRUCTION: FILE I/O OVERRIDE
+        tier1_text = """#  CRITICAL INSTRUCTION: FILE I/O OVERRIDE
 **WARNING**: Using native file readers will flood the context window and destroy the session.
 
 - **REQUIRED**: Standard practice in this Studio is to use `pipe_read_file(path)` and `pipe_analyze_file(path)` for all large local file reads (>1KB)."""
@@ -559,14 +592,14 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: Any = "u
 - NEVER read raw outputs from `{tools["web"]}` or search tools. Pipe them through `pipe_run("rerank-and-sift", raw_output)`.
 - For ANY tool output exceeding 100 lines (logs, API responses, search results), route through a context pipe before presenting to the user.
 
-## 2. Named Pipes — When to Use `pipe_run`
+## 2. Named Pipes  When to Use `pipe_run`
 - Call `list_pipes()` first to see all available named pipes in this project.
 - Use `pipe_run(pipe_name, input_text)` when:
   - A named pipe exists that matches the content type (e.g. `semantic-refinery` for code, `standard-distill` for logs).
   - You want a reproducible, audited transformation that is tracked in the Balance Sheet.
-- After every `pipe_run`, the audit header shows compression ratio and latency — include this in your response to the user.
+- After every `pipe_run`, the audit header shows compression ratio and latency  include this in your response to the user.
 
-## 3. Dynamic Pipes — When to Use `pipe_run_dynamic`
+## 3. Dynamic Pipes  When to Use `pipe_run_dynamic`
 - Use `pipe_run_dynamic` when no named pipe fits and you need to compose a one-off processing graph.
 - **Workflow** (always follow this sequence):
   1. Call `pipe_list_shadow_tools()` to discover available nodes (configured pipes + PATH tools like `jq`, `rg`, `markitdown`).
@@ -574,19 +607,19 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: Any = "u
   3. Call `pipe_run_dynamic(nodes_json, input_text)`.
 - **Rules**:
   - Every `nodes_json` array MUST end with `{{\"cmd\": \"semantic-sift-cli\", \"args\": [\"semantic\"]}}` or equivalent sifting node.
-  - Shell utilities (`grep`, `awk`, `jq`, `rg`, etc.) require `allow_shell=True` — only use when the final node is a sifter.
-  - Never put shell metacharacters (`|`, `;`, `&`, `$`) in a `cmd` value — use `args` instead.
-- **Example** — extract ERROR lines then distil:
+  - Shell utilities (`grep`, `awk`, `jq`, `rg`, etc.) require `allow_shell=True`  only use when the final node is a sifter.
+  - Never put shell metacharacters (`|`, `;`, `&`, `$`) in a `cmd` value  use `args` instead.
+- **Example**  extract ERROR lines then distil:
   ```json
   [{{\"cmd\": \"grep\", \"args\": [\"ERROR\"]}}, {{\"cmd\": \"semantic-sift-cli\", \"args\": [\"logs\"]}}]
   ```
 
-## 4. A2A Agent Handoff — When to Use `pipe_agent_handoff`
+## 4. A2A Agent Handoff  When to Use `pipe_agent_handoff`
 - ALWAYS call `pipe_agent_handoff(output, from_agent="X", to_agent="Y")` when passing one agent's output to another agent's context window.
 - This prevents context flooding at multi-agent boundaries regardless of framework (CrewAI, ADK, LangGraph, custom).
 - If you know the content type, pass `pipe_name` explicitly (e.g. `pipe_name="semantic-refinery"`). Otherwise omit it and routing is automatic.
 
-## 5. Observability — Balance Sheet
+## 5. Observability  Balance Sheet
 - Call `get_pipe_stats()` at any time to see cumulative ROI: chars saved, chars added, avg latency, total events.
 - After significant processing sessions, proactively report the Balance Sheet to the user so they can see the value delivered."""
             full_payload = f"\n{block_id}\n{tier1_text}{tier2_text}\n{block_end}\n"
@@ -617,7 +650,7 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: Any = "u
 
 
 # ---------------------------------------------------------------------------
-# Shell alias injection (Phase 2 — Standard Shell Aliases)
+# Shell alias injection (Phase 2  Standard Shell Aliases)
 # ---------------------------------------------------------------------------
 
 #: Marker written on either side of the managed alias block so it can be
@@ -801,7 +834,7 @@ def remove_shell_aliases() -> List[str]:
 def _inject_cursor(target_dir: str, cmd_str: str) -> list[str]:
     actions = []
     cursor_path = os.path.join(target_dir, ".cursor", "hooks.json")
-    if merge_hook_json(cursor_path, "postToolUse", {"command": cmd_str}, version=1):
+    if merge_hook_json(cursor_path, "postToolUse", {"name": "context-pipe", "command": cmd_str}, version=1):
         actions.append("Injected Context-Pipe into Cursor hooks.")
 
     cursor_rules_dir = os.path.join(target_dir, ".cursor", "rules")
@@ -881,7 +914,7 @@ Use this at any agent-to-agent handoff boundary to prevent context flooding.
 def _inject_vscode_github(target_dir: str, cmd_str: str) -> list[str]:
     actions = []
     vscode_path = os.path.join(target_dir, ".github", "hooks", "context-pipe.json")
-    if merge_hook_json(vscode_path, "PostToolUse", {"type": "command", "command": cmd_str}):
+    if merge_hook_json(vscode_path, "PostToolUse", {"name": "context-pipe", "type": "command", "command": cmd_str}):
         actions.append("Injected Context-Pipe into VS Code/GitHub hooks.")
     return actions
 

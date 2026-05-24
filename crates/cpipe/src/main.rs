@@ -10,6 +10,7 @@ use std::fs;
 use std::io::{self, Read, IsTerminal};
 use std::path::PathBuf;
 
+
 #[derive(Parser)]
 #[command(name = "cpipe")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
@@ -26,7 +27,7 @@ enum Commands {
         /// Name of the pipe
         pipe_name: String,
         /// Path to pipes configuration
-        #[arg(long, default_value = "pipes.json")]
+        #[arg(long, default_value = "pipes.json", aliases = ["config_path"])]
         config: String,
         /// Read input from this file instead of stdin
         #[arg(long, aliases = ["input_file"])]
@@ -58,17 +59,47 @@ enum Commands {
     /// List configured pipes and PATH tools
     List {
         /// Path to pipes configuration
-        #[arg(long, default_value = "pipes.json")]
+        #[arg(long, default_value = "pipes.json", aliases = ["config_path"])]
         config: String,
     },
     /// Print the Context Balance Sheet (ROI)
     Stats,
     /// Start the MCP server (stdio transport)
     Serve,
+    /// Directly invoke an MCP tool from the shell
+    Tool {
+        /// MCP server registry key
+        server: String,
+        /// Name of the tool to call
+        tool_name: Option<String>,
+        /// Static arguments (key=value). May be repeated.
+        #[arg(long, short = 'a')]
+        arg: Vec<String>,
+        /// Argument key for stdin content
+        #[arg(long, default_value = "content")]
+        input_key: String,
+        /// Read input from this file instead of stdin
+        #[arg(long, aliases = ["input_file"])]
+        input_file: Option<String>,
+        /// Path to pipes configuration
+        #[arg(long, default_value = "pipes.json", aliases = ["config_path"])]
+        config: String,
+        /// List all tools available on the named server and exit
+        #[arg(long)]
+        list_tools: bool,
+        /// Print timing/telemetry to stderr
+        #[arg(short, long)]
+        verbose: bool,
+    },
+    /// Install or remove the cpipe shell alias
+    Aliases {
+        #[command(subcommand)]
+        action: AliasAction,
+    },
     /// Verify the health of the context-pipe + semantic-sift installation
     Verify {
         /// Path to pipes configuration
-        #[arg(long, default_value = "pipes.json")]
+        #[arg(long, default_value = "pipes.json", aliases = ["config_path"])]
         config: String,
     },
     /// Distil agent output before passing it to another agent
@@ -86,9 +117,21 @@ enum Commands {
         #[arg(long, aliases = ["pipe-name", "pipe_name"])]
         pipe_name: Option<String>,
         /// Path to pipes configuration
-        #[arg(long, default_value = "pipes.json")]
+        #[arg(long, default_value = "pipes.json", aliases = ["config_path"])]
         config: String,
     },
+}
+
+#[derive(Subcommand)]
+enum AliasAction {
+    /// Add cpipe alias to shell profile(s)
+    Install {
+        /// Explicit shell(s) to target
+        #[arg(long, value_parser = ["bash", "zsh", "sh", "pwsh"])]
+        shells: Vec<String>,
+    },
+    /// Remove the managed cpipe alias block
+    Remove,
 }
 
 fn read_input(input_file: Option<&str>) -> io::Result<String> {
@@ -109,7 +152,6 @@ fn slice_lines(text: &str, start_line: Option<usize>, end_line: Option<usize>) -
     if start_line.is_none() && end_line.is_none() {
         return text.to_string();
     }
-    
     let mut lines = Vec::new();
     let mut start = 0;
     for (i, c) in text.char_indices() {
@@ -121,24 +163,19 @@ fn slice_lines(text: &str, start_line: Option<usize>, end_line: Option<usize>) -
     if start < text.len() {
         lines.push(&text[start..]);
     }
-    
     let start_idx = match start_line {
         Some(s) => if s > 0 { s - 1 } else { 0 },
         None => 0,
     };
-    
     let end_idx = match end_line {
         Some(e) => e,
         None => lines.len(),
     };
-    
     let start_idx = std::cmp::min(start_idx, lines.len());
     let end_idx = std::cmp::min(end_idx, lines.len());
-    
     if start_idx >= end_idx {
         return String::new();
     }
-    
     lines[start_idx..end_idx].concat()
 }
 
@@ -164,7 +201,7 @@ async fn cmd_run(
             std::process::exit(1);
         }
     };
-    
+
     let mut input = match read_input(input_file) {
         Ok(s) => s,
         Err(e) => {
@@ -175,12 +212,11 @@ async fn cmd_run(
     if input.is_empty() {
         return;
     }
-    
     input = slice_lines(&input, start_line, end_line);
     if input.is_empty() {
         return;
     }
-    
+
     let start_time_str = chrono::Utc::now().to_rfc3339();
     let start_t = std::time::Instant::now();
     let (result, trace) = run_pipe(
@@ -206,7 +242,7 @@ async fn cmd_run(
         pipe_name,
         "tier",
     );
-    
+
     if verbose {
         let header = generate_audit_header(pipe_name, &trace, latency_ms);
         print!("{}", header);
@@ -220,7 +256,6 @@ async fn cmd_run(
 fn normalize_relaxed_json(raw: &str) -> String {
     let mut result = String::new();
     let mut chars = raw.chars().peekable();
-    
     while let Some(&c) = chars.peek() {
         match c {
             '"' => {
@@ -304,7 +339,7 @@ async fn cmd_run_dynamic(nodes_json: &str, input_file: Option<&str>, allow_shell
         eprintln!("cpipe: error: {}", e);
         std::process::exit(1);
     }
-    
+
     let input = match read_input(input_file) {
         Ok(s) => s,
         Err(e) => {
@@ -315,14 +350,14 @@ async fn cmd_run_dynamic(nodes_json: &str, input_file: Option<&str>, allow_shell
     if input.is_empty() {
         return;
     }
-    
+
     let config = load_pipes_config();
     let pipe = Pipe {
         name: "dynamic".to_string(),
         description: "Ad-hoc dynamic pipe".to_string(),
         nodes,
     };
-    
+
     let start_time_str = chrono::Utc::now().to_rfc3339();
     let start_t = std::time::Instant::now();
     let (result, trace) = run_pipe(
@@ -333,7 +368,7 @@ async fn cmd_run_dynamic(nodes_json: &str, input_file: Option<&str>, allow_shell
         &config.servers,
     ).await;
     let latency_ms = start_t.elapsed().as_secs_f64() * 1000.0;
-    
+
     let platform = "Generic CLI";
     log_telemetry(
         "cli",
@@ -348,7 +383,7 @@ async fn cmd_run_dynamic(nodes_json: &str, input_file: Option<&str>, allow_shell
         "dynamic",
         "tier",
     );
-    
+
     if verbose {
         let header = generate_audit_header("dynamic", &trace, latency_ms);
         print!("{}", header);
@@ -362,17 +397,16 @@ async fn cmd_run_dynamic(nodes_json: &str, input_file: Option<&str>, allow_shell
 fn cmd_list(config_path: &str) {
     let path = PathBuf::from(config_path);
     let tools = cpipe::shadow::list_shadow_tools(Some(&path));
-    
     if tools.is_empty() {
         println!("No pipes configured and no known CLI tools found on PATH.");
         let abs_path = std::fs::canonicalize(&path).unwrap_or(path);
         println!("  Config searched: {:?}  |  ~/.mcp-pipe.json", abs_path);
         return;
     }
-    
+
     let pipe_tools: Vec<_> = tools.iter().filter(|t| t.source != "PATH").collect();
     let path_tools: Vec<_> = tools.iter().filter(|t| t.source == "PATH").collect();
-    
+
     if !pipe_tools.is_empty() {
         println!("\nConfigured Pipes:");
         for t in pipe_tools {
@@ -382,7 +416,7 @@ fn cmd_list(config_path: &str) {
             }
         }
     }
-    
+
     if !path_tools.is_empty() {
         println!("\nCurated CLI Tools on PATH:");
         for t in path_tools {
@@ -405,16 +439,15 @@ fn cmd_stats() {
 
 async fn cmd_verify(config_path: &str) {
     let py_interpreter = cpipe::orchestrator::find_python_interpreter();
-    
     let py_code = format!(
         "import json; \
-         from context_pipe.onboarding import verify_installation, resolve_pipes_config; \
-         resolve_pipes_config(r'{}'); \
-         print(json.dumps(verify_installation(r'{}')))",
+        from context_pipe.onboarding import verify_installation, resolve_pipes_config; \
+        resolve_pipes_config(r'{}'); \
+        print(json.dumps(verify_installation(r'{}')))",
         config_path,
         config_path
     );
-    
+
     let output = match std::process::Command::new(&py_interpreter)
         .args(&["-c", &py_code])
         .output()
@@ -425,7 +458,7 @@ async fn cmd_verify(config_path: &str) {
             std::process::exit(1);
         }
     };
-    
+
     if !output.status.success() {
         eprintln!(
             "cpipe: verify error: Python script failed: {}",
@@ -433,7 +466,7 @@ async fn cmd_verify(config_path: &str) {
         );
         std::process::exit(1);
     }
-    
+
     let stdout_str = String::from_utf8_lossy(&output.stdout);
     let report_val: serde_json::Value = match serde_json::from_str(&stdout_str) {
         Ok(v) => v,
@@ -442,9 +475,123 @@ async fn cmd_verify(config_path: &str) {
             std::process::exit(1);
         }
     };
-    
     let report = cpipe::server::format_verify_report(report_val);
     println!("{}", report);
+}
+
+fn cmd_aliases(action: AliasAction) {
+    let py_interpreter = cpipe::orchestrator::find_python_interpreter();
+    let py_code = match action {
+        AliasAction::Install { shells } => {
+            let shells_str = shells.join(" ");
+            format!(
+                "from context_pipe.onboarding import inject_shell_aliases; \
+                inject_shell_aliases('{}'.split())",
+                shells_str
+            )
+        }
+        AliasAction::Remove => {
+            "from context_pipe.onboarding import remove_shell_aliases; \
+            remove_shell_aliases()".to_string()
+        }
+    };
+
+    let output = match std::process::Command::new(&py_interpreter)
+        .args(&["-c", &py_code])
+        .output()
+    {
+        Ok(out) => out,
+        Err(e) => {
+            eprintln!("cpipe: aliases error: Failed to run python script: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    if !output.status.success() {
+        eprintln!(
+            "cpipe: aliases error: Python script failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        std::process::exit(1);
+    }
+    
+    print!("{}", String::from_utf8_lossy(&output.stdout));
+}
+
+async fn cmd_tool(
+    server_key: &str,
+    tool_name: Option<&str>,
+    args: &[String],
+    input_key: &str,
+    input_file: Option<&str>,
+    config_path: &str,
+    list_tools: bool,
+    verbose: bool,
+) {
+    let path = std::path::PathBuf::from(config_path);
+    let config = load_pipes_config_with_path(Some(&path));
+    
+    if !config.servers.contains_key(server_key) {
+        eprintln!("cpipe: error: MCP server '{}' not found in config.", server_key);
+        std::process::exit(1);
+    }
+
+    if list_tools {
+        eprintln!("cpipe: list-tools not yet implemented in Rust core.");
+        std::process::exit(1);
+    }
+
+    let tool_name = match tool_name {
+        Some(n) => n,
+        None => {
+            eprintln!("cpipe: error: tool_name is required unless --list-tools is used.");
+            std::process::exit(1);
+        }
+    };
+
+    let mut static_args = serde_json::Map::new();
+    for a in args {
+        if let Some((k, v)) = a.split_once('=') {
+            static_args.insert(k.to_string(), serde_json::Value::String(v.to_string()));
+        }
+    }
+
+    let node = Node {
+        cmd: String::new(), 
+        args: serde_json::Value::Object(static_args),
+        node_type: "mcp".to_string(),
+        server: Some(server_key.to_string()),
+        tool: Some(tool_name.to_string()),
+        input_key: Some(input_key.to_string()),
+        ..Default::default()
+    };
+
+    let input = match read_input(input_file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("cpipe: error: Cannot read input: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let start_t = std::time::Instant::now();
+    let env = std::collections::HashMap::new();
+    match cpipe::orchestrator::run_mcp_node(&node, &input, &config.servers, &env).await {
+        Ok(result) => {
+            if verbose {
+                let latency_ms = start_t.elapsed().as_secs_f64() * 1000.0;
+                eprintln!("[cpipe:tool] Latency: {:.2}ms", latency_ms);
+            }
+            print!("{}", result);
+            if !result.ends_with('\n') {
+                println!();
+            }
+        }
+        Err(e) => {
+            eprintln!("cpipe: tool error: {}", e);
+            std::process::exit(1);
+        }
+    }
 }
 
 async fn cmd_handoff(
@@ -464,21 +611,18 @@ async fn cmd_handoff(
             }
         }
     };
-    
     if input.is_empty() {
         return;
     }
-    
+
     let path = std::path::PathBuf::from(config_path);
     let config = load_pipes_config_with_path(Some(&path));
-    
     let tool_name = if from_agent.is_empty() { "a2a" } else { from_agent };
-    
     let resolved_name = match pipe_name {
         Some(name) if !name.is_empty() => Some(name.to_string()),
         _ => cpipe::orchestrator::resolve_pipe_from_context(&config, tool_name, input.len()),
     };
-    
+
     let resolved_name = match resolved_name {
         Some(name) => name,
         None => {
@@ -489,7 +633,7 @@ async fn cmd_handoff(
             return;
         }
     };
-    
+
     let pipe = match config.pipes.iter().find(|p| p.name == resolved_name) {
         Some(p) => p,
         None => {
@@ -500,10 +644,9 @@ async fn cmd_handoff(
             return;
         }
     };
-    
+
     let start_time_str = chrono::Utc::now().to_rfc3339();
     let start_t = std::time::Instant::now();
-    
     let (result, _trace) = cpipe::orchestrator::run_pipe(
         pipe,
         &input,
@@ -511,10 +654,9 @@ async fn cmd_handoff(
         None,
         &config.servers,
     ).await;
-    
     let latency_ms = start_t.elapsed().as_secs_f64() * 1000.0;
     let session_id = format!("a2a-{}-{}", from_agent, to_agent);
-    
+
     cpipe::telemetry::log_telemetry(
         &session_id,
         &start_time_str,
@@ -528,7 +670,7 @@ async fn cmd_handoff(
         &resolved_name,
         "tier",
     );
-    
+
     print!("{}", result);
     if !result.is_empty() && !result.ends_with('\n') {
         println!();
@@ -557,6 +699,12 @@ async fn main() {
                 eprintln!("cpipe: serve error: {}", e);
                 std::process::exit(1);
             }
+        }
+        Commands::Tool { server, tool_name, arg, input_key, input_file, config, list_tools, verbose } => {
+            cmd_tool(&server, tool_name.as_deref(), &arg, &input_key, input_file.as_deref(), &config, list_tools, verbose).await;
+        }
+        Commands::Aliases { action } => {
+            cmd_aliases(action);
         }
         Commands::Verify { config } => {
             cmd_verify(&config).await;

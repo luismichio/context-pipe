@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Luis Kobayashi. All rights reserved.
 
 """
-context_pipe/dynamic.py — Ad-hoc (dynamic) pipe execution.
+context_pipe/dynamic.py  Ad-hoc (dynamic) pipe execution.
 
 Allows AI agents to construct and execute a pipe from a node list at runtime,
 without requiring a pre-declared entry in pipes.json.
@@ -23,7 +23,7 @@ _SHELL_METACHAR_RE = re.compile(r"[|;&$`>]")
 KNOWN_SHADOW_TOOLS: list[str] = ["jq", "yq", "markitdown", "pandoc", "rg", "fd", "bat"]
 
 # Shell utilities permitted as dynamic pipe nodes when allow_shell=True.
-# These are data-processing utilities only — no network, no exec, no privilege escalation.
+# These are data-processing utilities only  no network, no exec, no privilege escalation.
 # The final node in any pipe that includes a shell utility MUST be semantic-sift-cli
 # to guarantee context safety.
 SHELL_UTILITY_ALLOWLIST: frozenset[str] = frozenset(
@@ -90,7 +90,7 @@ def _validate_nodes(nodes: list[dict], allow_shell: bool = False) -> None:
         if _SHELL_METACHAR_RE.search(cmd):
             raise ValueError(
                 f"Node cmd '{cmd}' contains shell metacharacters. "
-                "Use args[] for arguments — cmd must be a bare executable name."
+                "Use args[] for arguments  cmd must be a bare executable name."
             )
         # Bare executable name (first token) for allowlist check.
         exe = cmd.strip().split()[0] if cmd.strip() else cmd
@@ -135,7 +135,7 @@ async def run_dynamic_pipe(
         server_registry: Optional registry of MCP servers for MCP nodes.
 
     Returns:
-        ``(result, trace)`` — same contract as ``run_pipe()``.
+        ``(result, trace)``  same contract as ``run_pipe()``.
 
     Raises:
         ValueError: on malformed node definitions, shell metacharacters in cmd,

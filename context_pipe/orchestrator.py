@@ -46,10 +46,10 @@ def resolve_node_cmd(cmd: str) -> str:
     Resolves a pipe node command to an executable path at runtime.
 
     Resolution order (most specific to least):
-    1. Absolute path that already exists on disk — used as-is.
-    2. shutil.which() — resolves from the active PATH (covers venv Scripts/bin, system PATH).
+    1. Absolute path that already exists on disk  used as-is.
+    2. shutil.which()  resolves from the active PATH (covers venv Scripts/bin, system PATH).
     3. Common user-level install locations (~/.local/bin, pipx).
-    4. Bare command returned unchanged — FileNotFoundError surfaces naturally via Popen,
+    4. Bare command returned unchanged  FileNotFoundError surfaces naturally via Popen,
        and the node's help_msg is shown to the user.
     """
     # 1. Already an absolute path that exists
@@ -72,7 +72,7 @@ def resolve_node_cmd(cmd: str) -> str:
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate)
 
-    # 4. Return bare command — Popen will raise FileNotFoundError, help_msg surfaces the error
+    # 4. Return bare command  Popen will raise FileNotFoundError, help_msg surfaces the error
     return cmd
 
 
@@ -147,7 +147,7 @@ def _write_tee(tee_config: Dict[str, Any], data: str, node_cmd: str, tool_name: 
     Mode: "append" (default) or "overwrite".
 
     Returns the resolved path on success, None on any failure.
-    Errors are silently swallowed — a tee failure must never interrupt the main chain.
+    Errors are silently swallowed  a tee failure must never interrupt the main chain.
     """
     try:
         sink = tee_config.get("sink", "file")
@@ -604,9 +604,9 @@ def main():
             print(f"Platform Events:   {sheet['total_events']}")
             print(f"Avg Node Latency:  {sheet['avg_latency_ms']:.2f}ms")
             if sheet.get("fallback_events", 0) > 0:
-                print(f"âš ï¸  Hook Fallbacks: {sheet['fallback_events']} (pipe failed; raw input passed through)")
+                print(f"  Hook Fallbacks: {sheet['fallback_events']} (pipe failed; raw input passed through)")
             if sheet.get("unmapped_events", 0) > 0:
-                print(f"âš ï¸  Unmapped Heavy Calls: {sheet['unmapped_events']} (leaking raw tokens; update pipes.json)")
+                print(f"  Unmapped Heavy Calls: {sheet['unmapped_events']} (leaking raw tokens; update pipes.json)")
             print("-----------------------------------------\n")
 
     except Exception as e:

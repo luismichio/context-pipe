@@ -228,7 +228,7 @@ def log_unmapped_event(
 
 def log_fallback_event(tool_name: str, reason: str) -> None:
     """
-    Records a hook fallback event — fired when ``pipe_hook.py`` catches an
+    Records a hook fallback event  fired when ``pipe_hook.py`` catches an
     unexpected exception and returns raw input to the agent unchanged.
     """
     if PIPE_TELEMETRY_DISABLED:

@@ -140,7 +140,6 @@ pub fn find_local_config(filename: &str) -> Option<PathBuf> {
 pub fn load_config_file(path: &Path) -> Result<Config, String> {
     let content = fs::read_to_string(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
-    
     let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
     if extension == "toml" {
         toml::from_str(&content).map_err(|e| format!("TOML parse error: {}", e))
@@ -160,8 +159,8 @@ pub fn load_pipes_config_with_path(custom_path: Option<&Path>) -> Config {
             match load_config_file(path) {
                 Ok(cfg) => Some(cfg),
                 Err(e) => {
-                    log::warn!("Could not load pipes config at {:?}: {}", path, e);
-                    None
+                    eprintln!("cpipe: error: Could not load local pipes config at {:?}: {}", path, e);
+                    std::process::exit(1);
                 }
             }
         } else {
@@ -205,8 +204,8 @@ pub fn load_pipes_config_with_path(custom_path: Option<&Path>) -> Config {
             match load_config_file(&final_path) {
                 Ok(cfg) => Some(cfg),
                 Err(e) => {
-                    log::warn!("Could not load local pipes config at {:?}: {}", final_path, e);
-                    None
+                    eprintln!("cpipe: error: Could not load local pipes config at {:?}: {}", final_path, e);
+                    std::process::exit(1);
                 }
             }
         }
@@ -271,7 +270,6 @@ pub fn merge_configs(local: Option<Config>, global: Option<Config>) -> Config {
     }
     let local = local.unwrap_or_default();
     let global = global.unwrap_or_default();
-    
     let version = if !local.version.is_empty() && local.version != "1.0" {
         local.version.clone()
     } else if !global.version.is_empty() {
@@ -279,7 +277,7 @@ pub fn merge_configs(local: Option<Config>, global: Option<Config>) -> Config {
     } else {
         "1.0".to_string()
     };
-    
+
     let mut merged_pipes = local.pipes.clone();
     let local_names: HashSet<String> = local.pipes.iter().map(|p| p.name.clone()).collect();
     for pipe in global.pipes {
@@ -287,19 +285,19 @@ pub fn merge_configs(local: Option<Config>, global: Option<Config>) -> Config {
             merged_pipes.push(pipe);
         }
     }
-    
+
     let mut merged_servers = global.servers.clone();
     for (k, v) in local.servers {
         merged_servers.insert(k, v);
     }
-    
+
     let mut merged_mappings = local.mappings.clone();
     for mapping in global.mappings {
         if !merged_mappings.contains(&mapping) {
             merged_mappings.push(mapping);
         }
     }
-    
+
     Config {
         version,
         description: local.description.clone(),
@@ -375,7 +373,6 @@ mod tests {
             servers: HashMap::new(),
             mappings: vec![],
         });
-
         let global = Some(Config {
             version: "2.0".to_string(),
             description: "Global description".to_string(),

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Luis Kobayashi. All rights reserved.
 """
-A2A (Agent-to-Agent) handoff module — Phase 6.2
+A2A (Agent-to-Agent) handoff module  Phase 6.2
 
 Provides a framework-agnostic bridge for distilling Agent A's output before
 it enters Agent B's context window. Works with any A2A framework (CrewAI,
-Google ADK, LangGraph) via an explicit function call — no monkey-patching.
+Google ADK, LangGraph) via an explicit function call  no monkey-patching.
 
 Example::
 
@@ -51,7 +51,7 @@ def pipe_agent_handoff(
 
     Returns:
         Distilled text, or the original ``output`` if no pipe resolved or
-        any error occurred — the chain must never be interrupted.
+        any error occurred  the chain must never be interrupted.
     """
     if not output:
         return output
@@ -62,12 +62,12 @@ def pipe_agent_handoff(
     try:
         result = pipe(output, pipe_name=pipe_name, tool_name=tool_name, config_path=config_path)
     except Exception:
-        logger.debug("pipe_agent_handoff: pipe() raised — returning original output unchanged.")
+        logger.debug("pipe_agent_handoff: pipe() raised  returning original output unchanged.")
         return output
 
     output_size = len(result)
 
-    # Telemetry: log the handoff event (no content — sizes only)
+    # Telemetry: log the handoff event (no content  sizes only)
     try:
         import time
         log_telemetry(

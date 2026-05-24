@@ -2,10 +2,10 @@
 # Copyright (c) 2026 Luis Kobayashi. All rights reserved.
 
 """
-context_pipe/cli.py — mcp-pipe CLI
+context_pipe/cli.py  mcp-pipe CLI
 
 A lightweight terminal runner for the Context-Pipe ecosystem.
-Executes pipes, lists capabilities, and reports ROI — all without
+Executes pipes, lists capabilities, and reports ROI  all without
 requiring an IDE or MCP client.
 
 Entry point: ``mcp-pipe`` (registered in pyproject.toml)
@@ -50,7 +50,7 @@ def _read_input(input_file: Optional[str]) -> str:
     Reads input text from ``--input-file`` path or stdin.
 
     Returns empty string (and exits 0 silently) when stdin is a TTY and no
-    file is provided — consistent with the orchestrator's behaviour.
+    file is provided  consistent with the orchestrator's behaviour.
     """
     if input_file:
         try:
@@ -95,7 +95,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         available = [p.get("name", "?") for p in config.get("pipes", [])]
         _die(
             f"Pipe '{args.pipe_name}' not found.\n"
-            f"  Available: {', '.join(available) if available else '(none — check your pipes.json or ~/.mcp-pipe.json)'}"
+            f"  Available: {', '.join(available) if available else '(none  check your pipes.json or ~/.mcp-pipe.json)'}"
         )
 
     input_text = _read_input(getattr(args, "input_file", None))
@@ -201,7 +201,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
     if pipe_tools:
         print("\nConfigured Pipes (pipes.json / ~/.mcp-pipe.json):")
         for t in pipe_tools:
-            nodes_str = " | ".join(t["nodes"]) if t["nodes"] else "—"
+            nodes_str = " | ".join(t["nodes"]) if t["nodes"] else ""
             print(f"  {t['name']:<28} {t.get('description', '')}")
             print(f"  {'':28} nodes: {nodes_str}")
 
@@ -249,7 +249,7 @@ def _cmd_serve(_args: argparse.Namespace) -> int:
 def _cmd_aliases(args: argparse.Namespace) -> int:
     """Installs or removes the cpipe shell alias."""
     action = getattr(args, "alias_action", "install")
-    shells = getattr(args, "shells", None)  # None → auto-detect platform defaults
+    shells = getattr(args, "shells", None)  # None  auto-detect platform defaults
 
     if action == "install":
         results = inject_shell_aliases(shells=shells)
@@ -261,22 +261,22 @@ def _cmd_aliases(args: argparse.Namespace) -> int:
                 "to activate the cpipe alias."
             )
         else:
-            print("cpipe alias already up-to-date — no changes made.")
+            print("cpipe alias already up-to-date  no changes made.")
     elif action == "remove":
         results = remove_shell_aliases()
         if results:
             for r in results:
                 print(r)
         else:
-            print("No cpipe alias block found in any profile — nothing removed.")
+            print("No cpipe alias block found in any profile  nothing removed.")
     return 0
 
 def _parse_tool_args(raw: list[str]) -> dict:
     """
     Parses ``--arg KEY=VALUE`` entries into a dict.
 
-    ``--arg key=value`` → ``{"key": "value"}``
-    ``--arg key=a=b``   → ``{"key": "a=b"}`` (splits on first ``=`` only)
+    ``--arg key=value``  ``{"key": "value"}``
+    ``--arg key=a=b``    ``{"key": "a=b"}`` (splits on first ``=`` only)
 
     Raises SystemExit on malformed entries (missing ``=``).
     """
@@ -329,7 +329,7 @@ def _cmd_tool(args: argparse.Namespace) -> int:
         available = list(server_registry.keys())
         _die(
             f"Server '{args.server}' not found in servers registry.\n"
-            f"  Available: {', '.join(available) if available else '(none — add a servers block to pipes.json or ~/.mcp-pipe.json)'}"
+            f"  Available: {', '.join(available) if available else '(none  add a servers block to pipes.json or ~/.mcp-pipe.json)'}"
         )
 
     server_cfg = server_registry[args.server]
@@ -355,7 +355,7 @@ def _cmd_tool(args: argparse.Namespace) -> int:
 
     # 3. Read input
     input_text = _read_input(getattr(args, "input_file", None))
-    # Note: unlike run/run-dynamic, we don't exit on empty — some tools don't need input.
+    # Note: unlike run/run-dynamic, we don't exit on empty  some tools don't need input.
 
     # 4. Parse static args
     static_args = _parse_tool_args(args.arg or [])
@@ -403,7 +403,7 @@ def _cmd_tool(args: argparse.Namespace) -> int:
     if getattr(args, "verbose", False):
         sys.stderr.write(
             f"[mcp-pipe tool] {args.server}/{args.tool_name} | "
-            f"{len(input_text or ''):,} → {len(result):,} chars | {latency_ms:.1f}ms\n"
+            f"{len(input_text or ''):,}  {len(result):,} chars | {latency_ms:.1f}ms\n"
         )
     return 0
 
@@ -412,7 +412,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mcp-pipe",
         description=(
-            "mcp-pipe — Terminal runner for the Context-Pipe ecosystem.\n"
+            "mcp-pipe  Terminal runner for the Context-Pipe ecosystem.\n"
             "Execute pipes, list capabilities, and report ROI without an IDE."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -420,7 +420,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version="mcp-pipe 0.4.0 (context-pipe)",
+        version="mcp-pipe 0.4.5 (context-pipe)",
     )
 
     sub = parser.add_subparsers(dest="command", metavar="<command>")

@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Luis Kobayashi. All rights reserved.
 
 """
-context_pipe/config_loader.py — Local + global config merge.
+context_pipe/config_loader.py  Local + global config merge.
 
 Loads pipes configuration from a project-level ``pipes.json`` and/or the
 user-global ``~/.mcp-pipe.json``, merging them with local entries taking
@@ -33,7 +33,7 @@ def load_pipes_config(local_path: str = "pipes.json") -> dict:
     - ``"servers"`` dicts are merged; local keys win on conflict.
     - ``"mappings"`` arrays are combined; local entries appear first.
 
-    Never raises — all errors are logged to stderr and the safest possible
+    Never raises  all errors are logged to stderr and the safest possible
     fallback (``{"pipes": [], "servers": {}, "mappings": []}``) is returned.
 
     Args:
@@ -138,7 +138,7 @@ def _try_load(path: str, label: str) -> dict | None:
         logger.debug("%s config not found at '%s'.", label.capitalize(), path)
         return None
     except json.JSONDecodeError as exc:
-        logger.warning("Malformed JSON in %s config '%s': %s — skipping.", label, path, exc)
+        logger.warning("Malformed JSON in %s config '%s': %s  skipping.", label, path, exc)
         return None
     except Exception as exc:  # noqa: BLE001
         logger.warning("Could not read %s config '%s': %s.", label, path, exc)

@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Luis Kobayashi. All rights reserved.
 
 """
-context_pipe/shadow.py — Shadow tool discovery.
+context_pipe/shadow.py  Shadow tool discovery.
 
 Lists all available context-processing capabilities: configured pipes from
 pipes.json and well-known CLI tools found on PATH.
@@ -34,7 +34,7 @@ def list_shadow_tools(config_path: str = "pipes.json") -> list[dict[str, Any]]:
     Entries from ``pipes.json`` come first (source ``"pipes.json"``), followed
     by discovered CLI tools on PATH (source ``"PATH"``).
 
-    Never raises — all errors are logged to stderr and an empty/partial list
+    Never raises  all errors are logged to stderr and an empty/partial list
     is returned.
 
     Args:

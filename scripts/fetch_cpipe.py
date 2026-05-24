@@ -58,7 +58,7 @@ def _asset_name() -> tuple[str, bool]:
             return "cpipe-x86_64-apple-darwin.tar.gz", False
         raise RuntimeError(f"No pre-built macOS binary for arch: {machine}")
 
-    # Linux (and anything else — treat as Linux/glibc)
+    # Linux (and anything else  treat as Linux/glibc)
     if machine in ("x86_64", "amd64"):
         return "cpipe-x86_64-unknown-linux-gnu.tar.gz", False
     if machine in ("aarch64", "arm64"):
@@ -74,7 +74,7 @@ def _scripts_dir() -> Path:
 
 
 def _download(url: str, dest: Path) -> None:
-    print(f"  Downloading {url} …")
+    print(f"  Downloading {url} ")
     with urllib.request.urlopen(url) as resp, open(dest, "wb") as fh:  # noqa: S310
         shutil.copyfileobj(resp, fh)
 
