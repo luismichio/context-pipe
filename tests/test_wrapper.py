@@ -14,10 +14,17 @@ Covers:
 """
 
 import json
+import pytest
 from unittest.mock import patch, AsyncMock
 
 
 from context_pipe.wrapper import wrap_payload
+
+
+@pytest.fixture(autouse=True)
+def mock_detect_client_id():
+    with patch("context_pipe.wrapper.detect_client_id", return_value="Generic CLI"):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -181,3 +188,164 @@ def test_run_pipe_exception_falls_back_to_raw():
         result = wrap_payload(payload, config)
 
     assert result == payload
+
+
+def test_before_tool_gating_blocks_large_file(tmp_path):
+    """BeforeTool event with a large file must be blocked with a cancel/deny payload."""
+    large_file = tmp_path / "large.txt"
+    large_file.write_text("x" * 2048)  # 2KB > 1KB
+    
+    # Simulate a BeforeTool payload
+    payload = json.dumps({
+        "tool": "read_file",
+        "arguments": {"path": str(large_file)}
+    })
+    
+    # 1. Test for non-Gemini (Generic CLI / VSCode)
+    config = {}
+    with patch("context_pipe.wrapper.detect_client_id", return_value="Generic CLI"):
+        result = wrap_payload(payload, config)
+    
+    data = json.loads(result)
+    assert data.get("cancel") is True
+    assert "BLOCKED by Context-Pipe" in data.get("errorMessage", "")
+    
+    # 2. Test for Gemini CLI (decision: deny)
+    with patch("context_pipe.wrapper.detect_client_id", return_value="Gemini CLI"):
+        result_gemini = wrap_payload(payload, config)
+        
+    data_gemini = json.loads(result_gemini)
+    assert data_gemini.get("decision") == "deny"
+    assert "BLOCKED by Context-Pipe" in data_gemini.get("reason", "")
+
+
+def test_before_tool_gating_allows_small_file(tmp_path):
+    """BeforeTool event with a small file must be allowed."""
+    small_file = tmp_path / "small.txt"
+    small_file.write_text("x" * 500)  # 500 bytes <= 1KB
+    
+    payload = json.dumps({
+        "tool": "read_file",
+        "arguments": {"path": str(small_file)}
+    })
+    
+    config = {}
+    with patch("context_pipe.wrapper.detect_client_id", return_value="Generic CLI"):
+        result = wrap_payload(payload, config)
+    
+    assert json.loads(result).get("cancel") is False
+    
+    with patch("context_pipe.wrapper.detect_client_id", return_value="Gemini CLI"):
+        result_gemini = wrap_payload(payload, config)
+        
+    assert json.loads(result_gemini).get("decision") == "allow"
+
+
+def test_before_tool_gating_allows_other_tools():
+    """BeforeTool event for other non-file-reading tools must be allowed."""
+    payload = json.dumps({
+        "tool": "run_shell_command",
+        "arguments": {"command": "git status"}
+    })
+    
+    config = {}
+    with patch("context_pipe.wrapper.detect_client_id", return_value="Generic CLI"):
+        result = wrap_payload(payload, config)
+    
+    assert json.loads(result).get("cancel") is False
+    
+    with patch("context_pipe.wrapper.detect_client_id", return_value="Gemini CLI"):
+        result_gemini = wrap_payload(payload, config)
+        
+    assert json.loads(result_gemini).get("decision") == "allow"
+
+
+def test_generic_agent_label_extraction():
+    """Generic agent labels must be parsed correctly from metadata or agent_label fields."""
+    from context_pipe.platforms import extract_content
+    
+    # 1. Thread Label inside hookSpecificOutput (Gemini)
+    data1 = {"hookSpecificOutput": {"threadLabel": "HelperAgent"}}
+    _, _, label1 = extract_content(data1, "Gemini CLI")
+    assert label1 == "HelperAgent"
+    
+    # 2. agent_label in root
+    data2 = {"agent_label": "Researcher"}
+    _, _, label2 = extract_content(data2, "Generic CLI")
+    assert label2 == "Researcher"
+    
+    # 3. agent key in root
+    data3 = {"agent": "Coder"}
+    _, _, label3 = extract_content(data3, "Generic CLI")
+    assert label3 == "Coder"
+    
+    # 4. agent in metadata dictionary
+    data4 = {"metadata": {"agent": "Archivist"}}
+    _, _, label4 = extract_content(data4, "Generic CLI")
+    assert label4 == "Archivist"
+
+
+def test_before_tool_gating_allows_small_line_range(tmp_path):
+    """BeforeTool event with a small requested line range must be allowed even if the file is large."""
+    large_file = tmp_path / "large.txt"
+    large_file.write_text("x" * 5000)  # 5KB > 1KB
+    
+    payload = json.dumps({
+        "tool": "view_file",
+        "arguments": {
+            "path": str(large_file),
+            "StartLine": 1,
+            "EndLine": 10  # 10 lines <= 50 limit
+        }
+    })
+    config = {}
+    with patch("context_pipe.wrapper.detect_client_id", return_value="Generic CLI"):
+        result = wrap_payload(payload, config)
+    assert json.loads(result).get("cancel") is False
+
+
+def test_before_tool_gating_blocks_large_line_range(tmp_path):
+    """BeforeTool event with a line range > 50 must be blocked."""
+    large_file = tmp_path / "large.txt"
+    large_file.write_text("x" * 5000)
+    
+    payload = json.dumps({
+        "tool": "view_file",
+        "arguments": {
+            "path": str(large_file),
+            "StartLine": 1,
+            "EndLine": 100  # 100 lines > 50 limit
+        }
+    })
+    config = {}
+    with patch("context_pipe.wrapper.detect_client_id", return_value="Generic CLI"):
+        result = wrap_payload(payload, config)
+    data = json.loads(result)
+    assert data.get("cancel") is True
+    assert "File read range (100 lines) > 50 lines limit" in data.get("errorMessage", "")
+
+
+def test_after_tool_bypasses_small_line_range():
+    """AfterTool event for a read with range <= 50 lines must bypass sifting."""
+    payload = json.dumps({
+        "hook_event_name": "AfterTool",
+        "tool_name": "view_file",
+        "arguments": {
+            "path": "somefile.txt",
+            "StartLine": 1,
+            "EndLine": 10
+        },
+        "tool_response": {"llmContent": "some raw text content which is > 500 characters and would normally trigger distill" * 10}
+    })
+    config = _make_config("standard-distill", trigger="default")
+    
+    with patch("context_pipe.wrapper.run_pipe", new_callable=AsyncMock) as mock_run:
+        with patch("context_pipe.wrapper.log_bypass_event") as mock_log_bypass:
+            result = wrap_payload(payload, config)
+            # Should bypass
+            assert result == payload
+            mock_run.assert_not_called()
+            mock_log_bypass.assert_called_once()
+            _, kwargs = mock_log_bypass.call_args
+            assert "Line range <= 50 lines (10)" in kwargs.get("reason", "")
+

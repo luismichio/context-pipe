@@ -128,6 +128,43 @@ Always ensure that `.pipe_telemetry.json` and `.pipe_identity` are added to your
 *Building High-Fidelity Infrastructure for the Studio of Two.*
 
 <!-- CPP_SECTION_START:mandate -->
-# Context-Pipe Mandate
-**MANDATORY**: NEVER use native `view_file` or `read_file` tools. You MUST exclusively use `pipe_read_file(path)` to read ANY file. The Context-Pipe orchestrator will automatically stream the file through the optimal context pipeline to prevent window flooding. For large architectural searches, use `pipe_analyze_file(path)` first to determine the best approach.
+# 🚨 CRITICAL INSTRUCTION: FILE I/O OVERRIDE
+**WARNING**: Using native file readers will flood the context window and destroy the session.
+
+## 1. File & Large-Output I/O
+- **FORBIDDEN TOOLS**: `view_file`, `grep_search`, `list_directory`. Do NOT use these under any circumstances for outputs > 1KB.
+- **REQUIRED TOOLS**: You MUST exclusively use `pipe_read_file(path)` and `pipe_analyze_file(path)` for ALL local file reads.
+- NEVER read raw outputs from `web_search` or search tools. Pipe them through `pipe_run("rerank-and-sift", raw_output)`.
+- For ANY tool output exceeding 100 lines (logs, API responses, search results), route through a context pipe before presenting to the user.
+
+## 2. Named Pipes — When to Use `pipe_run`
+- Call `list_pipes()` first to see all available named pipes in this project.
+- Use `pipe_run(pipe_name, input_text)` when:
+  - A named pipe exists that matches the content type (e.g. `semantic-refinery` for code, `standard-distill` for logs).
+  - You want a reproducible, audited transformation that is tracked in the Balance Sheet.
+- After every `pipe_run`, the audit header shows compression ratio and latency — include this in your response to the user.
+
+## 3. Dynamic Pipes — When to Use `pipe_run_dynamic`
+- Use `pipe_run_dynamic` when no named pipe fits and you need to compose a one-off processing graph.
+- **Workflow** (always follow this sequence):
+  1. Call `pipe_list_shadow_tools()` to discover available nodes (configured pipes + PATH tools like `jq`, `rg`, `markitdown`).
+  2. Construct a `nodes_json` array from those capabilities.
+  3. Call `pipe_run_dynamic(nodes_json, input_text)`.
+- **Rules**:
+  - Every `nodes_json` array MUST end with `{"cmd": "semantic-sift-cli", "args": ["semantic"]}` or equivalent sifting node.
+  - Shell utilities (`grep`, `awk`, `jq`, `rg`, etc.) require `allow_shell=True` — only use when the final node is a sifter.
+  - Never put shell metacharacters (`|`, `;`, `&`, `$`) in a `cmd` value — use `args` instead.
+- **Example** — extract ERROR lines then distil:
+  ```json
+  [{"cmd": "grep", "args": ["ERROR"]}, {"cmd": "semantic-sift-cli", "args": ["logs"]}]
+  ```
+
+## 4. A2A Agent Handoff — When to Use `pipe_agent_handoff`
+- ALWAYS call `pipe_agent_handoff(output, from_agent="X", to_agent="Y")` when passing one agent's output to another agent's context window.
+- This prevents context flooding at multi-agent boundaries regardless of framework (CrewAI, ADK, LangGraph, custom).
+- If you know the content type, pass `pipe_name` explicitly (e.g. `pipe_name="semantic-refinery"`). Otherwise omit it and routing is automatic.
+
+## 5. Observability — Balance Sheet
+- Call `get_pipe_stats()` at any time to see cumulative ROI: chars saved, chars added, avg latency, total events.
+- After significant processing sessions, proactively report the Balance Sheet to the user so they can see the value delivered.
 <!-- CPP_SECTION_END:mandate -->

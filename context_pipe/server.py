@@ -121,21 +121,36 @@ async def _resolve_safe_path(path: str, ctx: Optional[Context] = None) -> str:
 
 
 @mcp.tool()
-async def pipe_read_file(path: str, pipe_name: str = "standard-distill", ctx: Optional[Context] = None) -> str:
+async def pipe_read_file(
+    path: str,
+    pipe_name: str = "standard-distill",
+    start_line: Optional[int] = None,
+    end_line: Optional[int] = None,
+    ctx: Optional[Context] = None,
+) -> str:
     """
     Reads a local file safely and streams it directly through a context pipe.
     Use this instead of native file readers to prevent context window flooding.
     Args:
         path: Absolute or relative path to the file.
         pipe_name: The name of the pipe to run (e.g., 'standard-distill', 'full-refinery').
+        start_line: 1-indexed start line (inclusive).
+        end_line: 1-indexed end line (inclusive).
     """
     try:
         resolved_path = await _resolve_safe_path(path, ctx)
         with open(resolved_path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
+            if start_line is not None or end_line is not None:
+                lines = f.readlines()
+                start_idx = (start_line - 1) if start_line is not None else 0
+                end_idx = end_line if end_line is not None else len(lines)
+                start_idx = max(0, min(start_idx, len(lines)))
+                end_idx = max(0, min(end_idx, len(lines)))
+                content = "".join(lines[start_idx:end_idx])
+            else:
+                content = f.read()
     except Exception as e:
         return f"Error reading file: {str(e)}\n"
-
     return await pipe_run(pipe_name, content)
 
 

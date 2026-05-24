@@ -154,18 +154,38 @@ async def test_pipe_analyze_file_error_handling(tmp_path, mock_context):
 async def test_pipe_read_file_success(tmp_path, mock_config, mock_context):
     f = tmp_path / "read.txt"
     f.write_text("file content")
-    
     with patch("context_pipe.server.CONFIG_PATH", mock_config):
         with patch("context_pipe.server.run_pipe", return_value=("distilled", [])):
-            result = await server.pipe_read_file(str(f), "standard-distill", mock_context)
-            
-    assert "distilled" in result
-
+            result = await server.pipe_read_file(str(f), "standard-distill", ctx=mock_context)
+            assert "distilled" in result
 
 @pytest.mark.anyio
 async def test_pipe_read_file_error_handling(tmp_path, mock_context):
-    result = await server.pipe_read_file(str(tmp_path / "nonexistent"), "standard-distill", mock_context)
+    result = await server.pipe_read_file(str(tmp_path / "nonexistent"), "standard-distill", ctx=mock_context)
     assert "Error reading file" in result
+
+@pytest.mark.anyio
+async def test_pipe_read_file_lines_slicing(tmp_path, mock_config, mock_context):
+    f = tmp_path / "read.txt"
+    f.write_text("line1\nline2\nline3\nline4\n")
+    with patch("context_pipe.server.CONFIG_PATH", mock_config):
+        with patch("context_pipe.server.run_pipe", side_effect=lambda pipe, content: (content, [])):
+            # Slicing lines 2 to 3 (inclusive, 1-indexed)
+            result = await server.pipe_read_file(str(f), "standard-distill", start_line=2, end_line=3, ctx=mock_context)
+            assert result == "line2\nline3\n"
+
+@pytest.mark.anyio
+async def test_pipe_read_file_lines_clamping(tmp_path, mock_config, mock_context):
+    f = tmp_path / "read.txt"
+    f.write_text("line1\nline2\n")
+    with patch("context_pipe.server.CONFIG_PATH", mock_config):
+        with patch("context_pipe.server.run_pipe", side_effect=lambda pipe, content: (content, [])):
+            # Slicing lines beyond bounds
+            result = await server.pipe_read_file(str(f), "standard-distill", start_line=1, end_line=10, ctx=mock_context)
+            assert result == "line1\nline2\n"
+            # Out of bounds start_line
+            result_empty = await server.pipe_read_file(str(f), "standard-distill", start_line=5, end_line=10, ctx=mock_context)
+            assert result_empty == ""
     
 
 

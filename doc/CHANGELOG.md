@@ -5,6 +5,22 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.4.3] — 2026-05-24
+### ✨ Features & Parity
+- **Line Range Support in File Reading**: Added optional `start_line` and `end_line` parameters (1-indexed, inclusive) to `pipe_read_file` in both Python (`context_pipe/server.py`) and Rust (`crates/cpipe/src/server.rs`) implementations. This allows surgical reading of specific file segments while bypassing the rest of the file to save tokens.
+- **Adaptive Gating Threshold for Range Reads**: Modified the proactive `BeforeTool` hook in `wrapper.py` to allow native file reads (`view_file`/`read_file`) with range arguments when the range is <= 50 lines. Updated `AfterTool` to bypass sifting for these allowed range reads and log bypass events to telemetry (which pushes a bypass pulse to Supabase).
+
+### 🛡️ Hook Reliability & Environment Agnosticism
+- **Agnostic Python Runtime Invocation (`[REAL-1]`)**: Replaced shell-specific env variable setting (like `$env:` or `set`) in hook commands with a shell-agnostic Python inline command (`python -c "..."`) that sets `sys.path` and environment variables natively.
+- **Universal Proactive Gating (`[REAL-2]`)**: Moved file-size gating from Windsurf-specific shell variables directly into the Python `wrapper.py` layer. It now heuristically detects `BeforeTool` events and gates large native file reads (>1KB) across all platforms.
+- **Decision Schema Support for Antigravity (`[REAL-3]`)**: Updated `inject_content()` in `platforms.py` to return the `{"decision": "deny", "reason": content}` schema for both Gemini CLI and Google Antigravity.
+- **Extended Agent Label Extraction (`[REAL-4]`)**: Enhanced `extract_content()` in `platforms.py` to fetch subagent labels from generic payload keys (e.g. root `agent_label`/`agent` or metadata dictionary).
+- **Broadened Hook Matchers (`[REAL-5]`)**: Broadened the hook matchers for Claude Code, Qwen CLI, and Codex CLI from `"mcp__.*__.*"` to `".*"` to ensure native tool calls are intercepted.
+- **Silent Orchestrator Alignment**: Deleted the legacy `generate_audit_header` from `telemetry.py` and updated `cli.py` to direct verbose telemetry to `stderr` rather than `stdout`, completing the silent orchestrator design.
+- **Gemini/Antigravity Hook Structure Fix**: Fixed the parser regression in `.gemini/settings.json` and `.agents/settings.json` by wrapping injected command hooks inside a `matcher` block (`{"matcher": ".*", "hooks": [...]}`).
+
 ## [0.4.2] — 2026-05-22
 
 ### 🛡️ CI/CD & Reliability

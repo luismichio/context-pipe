@@ -37,7 +37,7 @@ from .dynamic import run_dynamic_pipe
 from .onboarding import inject_shell_aliases, remove_shell_aliases
 from .orchestrator import run_pipe, _run_mcp_node, get_env_with_venv_path
 from .shadow import list_shadow_tools
-from .telemetry import get_balance_sheet, generate_audit_header, log_telemetry
+from .telemetry import get_balance_sheet, log_telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -73,10 +73,9 @@ def _die(message: str, code: int = 1) -> None:
 
 
 def _print_audit(result: str, trace: list, pipe_name: str, latency_ms: float, verbose: bool) -> None:
-    """Writes result to stdout; optionally prepends the audit header."""
+    """Writes result to stdout; optionally logs telemetry to stderr if verbose."""
     if verbose:
-        header = generate_audit_header(pipe_name, trace, latency_ms)
-        sys.stdout.write(header)
+        sys.stderr.write(f"\n[Context-Pipe Verbose: {pipe_name} executed in {latency_ms:.1f}ms]\n")
     sys.stdout.write(result)
     if result and not result.endswith("\n"):
         sys.stdout.write("\n")

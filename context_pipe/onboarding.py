@@ -99,11 +99,19 @@ DEFAULT_PIPES_CONFIG = {
 }
 
 
-def build_runtime_hook_command() -> str:
+def build_runtime_hook_command(env_vars: dict[str, str] | None = None) -> str:
     """Builds the absolute command string to invoke the context-pipe wrapper."""
     python_exe = os.path.abspath(sys.executable)
-    # We use 'python -m context_pipe.orchestrator wrap' for reliability
-    return f'"{python_exe}" -W ignore -m context_pipe.orchestrator wrap'
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root_dir_esc = root_dir.replace("\\", "/")
+    
+    env_setup = ""
+    if env_vars:
+        env_setup = "".join(f"os.environ['{k}']='{v}'; " for k, v in env_vars.items())
+        env_setup = "import os; " + env_setup
+
+    # We use a python inline script to set sys.path and invoke main, ensuring it's shell-agnostic
+    return f'"{python_exe}" -W ignore -c "{env_setup}import sys; sys.path.insert(0, \'{root_dir_esc}\'); from context_pipe.orchestrator import main; main()" wrap'
 
 
 def discover_sift_executable() -> Optional[str]:
@@ -862,17 +870,18 @@ def _inject_gemini(target_dir: str, cmd_str: str) -> list[str]:
     actions.append("Added /pipe-stats, /pipe-run, /pipe-dynamic, /pipe-handoff commands to Gemini CLI.")
 
     gemini_settings_path = os.path.join(target_dir, ".gemini", "settings.json")
-    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if os.name == "nt":
-        gemini_cmd = f"$env:GEMINI_SESSION_ID='true'; $env:PYTHONPATH='{root_dir}'; {cmd_str}"
-    else:
-        gemini_cmd = f"GEMINI_SESSION_ID=true PYTHONPATH='{root_dir}' {cmd_str}"
+    gemini_cmd = build_runtime_hook_command({"GEMINI_SESSION_ID": "true"})
 
-    for hook_key in ["AfterTool", "PreCompress"]:
+    for hook_key in ["BeforeTool", "AfterTool", "PreCompress"]:
         if merge_hook_json(
             gemini_settings_path,
             hook_key,
-            {"name": "context-pipe", "type": "command", "command": gemini_cmd, "timeout": 10000},
+            {
+                "matcher": ".*",
+                "hooks": [
+                    {"name": "context-pipe", "type": "command", "command": gemini_cmd, "timeout": 10000}
+                ]
+            },
         ):
             actions.append(f"Injected Context-Pipe into Gemini CLI {hook_key} hooks.")
     return actions
@@ -1019,7 +1028,7 @@ def _inject_claude(target_dir: str, cmd_str: str) -> list[str]:
     ]
     for c_path in claude_paths:
         if merge_hook_json(
-            c_path, "PostToolUse", {"matcher": "mcp__.*__.*", "hooks": [{"type": "command", "command": cmd_str}]}
+            c_path, "PostToolUse", {"matcher": ".*", "hooks": [{"type": "command", "command": cmd_str}]}
         ):
             actions.append(f"Merged into Claude Code hooks at {c_path}.")
     return actions
@@ -1032,7 +1041,7 @@ def _inject_qwen(target_dir: str, cmd_str: str) -> list[str]:
     ]
     for q_path in qwen_paths:
         if merge_hook_json(
-            q_path, "PostToolUse", {"matcher": "mcp__.*__.*", "hooks": [{"type": "command", "command": cmd_str}]}
+            q_path, "PostToolUse", {"matcher": ".*", "hooks": [{"type": "command", "command": cmd_str}]}
         ):
             actions.append(f"Merged into Qwen CLI hooks at {q_path}.")
     return actions
@@ -1045,7 +1054,7 @@ def _inject_codex(target_dir: str, cmd_str: str) -> list[str]:
     ]
     for co_path in codex_paths:
         if merge_hook_json(
-            co_path, "PostToolUse", {"matcher": "mcp__.*__.*", "hooks": [{"type": "command", "command": cmd_str}]}
+            co_path, "PostToolUse", {"matcher": ".*", "hooks": [{"type": "command", "command": cmd_str}]}
         ):
             actions.append(f"Merged into Codex CLI hooks at {co_path}.")
     return actions
@@ -1175,18 +1184,18 @@ alwaysApply: false
 
     # 3. Hooks
     antigravity_settings_path = os.path.join(target_dir, ".agents", "settings.json")
-    
-    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if os.name == "nt":
-        hook_cmd = f"$env:GEMINI_SESSION_ID='true'; $env:PYTHONPATH='{root_dir}'; {cmd_str}"
-    else:
-        hook_cmd = f"GEMINI_SESSION_ID=true PYTHONPATH='{root_dir}' {cmd_str}"
+    hook_cmd = build_runtime_hook_command({"GEMINI_SESSION_ID": "true"})
 
-    for hook_key in ["AfterTool", "PreCompress"]:
+    for hook_key in ["BeforeTool", "AfterTool", "PreCompress"]:
         if merge_hook_json(
             antigravity_settings_path,
             hook_key,
-            {"name": "context-pipe", "type": "command", "command": hook_cmd, "timeout": 10000},
+            {
+                "matcher": ".*",
+                "hooks": [
+                    {"name": "context-pipe", "type": "command", "command": hook_cmd, "timeout": 10000}
+                ]
+            },
         ):
             actions.append(f"Injected Context-Pipe into Antigravity {hook_key} hooks.")
 

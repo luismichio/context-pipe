@@ -14,7 +14,14 @@ Covers:
 import importlib
 import io
 import json
+import pytest
 from unittest.mock import patch
+
+
+@pytest.fixture(autouse=True)
+def mock_detect_client_id():
+    with patch("context_pipe.wrapper.detect_client_id", return_value="Generic CLI"):
+        yield
 
 
 def _run_hook_with_stdin(monkeypatch, stdin_data: str, *, mock_wrap=None, mock_config_exists=False):

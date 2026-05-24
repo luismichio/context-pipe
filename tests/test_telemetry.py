@@ -18,7 +18,7 @@ import os
 import uuid
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from context_pipe import telemetry as tel
 
 
@@ -160,18 +160,6 @@ def test_get_balance_sheet_noise_removed(isolated_telemetry):
     assert sheet["total_events"] == 1
 
 
-def test_generate_audit_header_format():
-    """generate_audit_header must produce the correct markdown header shape."""
-    trace = [
-        {"node": "semantic-sift-cli", "input_size": 1000, "output_size": 600},
-    ]
-    header = tel.generate_audit_header("standard-distill", trace, latency_ms=45.2)
-    assert "--- [Context-Pipe: standard-distill] ---" in header
-    assert "40.0% Reduction" in header
-    assert "45.2ms" in header
-    assert "semantic-sift-cli" in header
-
-
 def test_log_bypass_event_writes_jsonl(isolated_telemetry):
     """log_bypass_event must write a bypass entry to the local log."""
     tel.log_bypass_event(tool_name="test_tool", reason="test_reason", platform="test_plat")
@@ -213,3 +201,14 @@ def test_estimate_tokens_basic():
     assert tel.estimate_tokens("hello world") > 0
     assert tel.estimate_tokens("") == 0
     assert tel.estimate_tokens("a" * 400) == 100  # 400 chars / 4
+
+def test_log_bypass_event_skips_cloud_pulse_for_range(isolated_telemetry):
+    """log_bypass_event must NOT trigger send_telemetry_pulse if the reason is a line-range bypass."""
+    mock_sift_tel = MagicMock()
+    with patch.dict("sys.modules", {"semantic_sift.telemetry": mock_sift_tel}):
+        tel.log_bypass_event(
+            tool_name="view_file",
+            reason="Line range <= 50 lines (10)",
+            platform="Generic CLI"
+        )
+        mock_sift_tel.send_telemetry_pulse.assert_not_called()

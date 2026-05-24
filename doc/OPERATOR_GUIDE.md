@@ -462,7 +462,7 @@ Incoming content or task
         │
         ├── Reading a file?
         │     ├── Unsure of size/type → pipe_analyze_file(path)
-        │     └── Know the pipe → pipe_read_file(path, pipe_name)
+        │     └── Know the pipe → pipe_read_file(path, pipe_name, start_line, end_line)
         │
         ├── Large tool output (logs, API response, search results > 100 lines)?
         │     └── pipe_run("standard-distill", raw_output)
@@ -487,7 +487,7 @@ Incoming content or task
 | Tool | When to call | Key rule |
 |---|---|---|
 | `pipe_analyze_file(path)` | Before `pipe_read_file` when unsure of pipe | Returns recommended `pipe_name` |
-| `pipe_read_file(path, pipe_name)` | Instead of any native file read > 1KB | Default pipe: `standard-distill` |
+| `pipe_read_file(path, pipe_name, start_line, end_line)` | Instead of any native file read > 1KB | Default pipe: `standard-distill`; optional 1-indexed range boundaries |
 | `list_pipes()` | Before `pipe_run` to see available named pipes | — |
 | `pipe_run(pipe_name, input_text)` | When a named pipe matches the content type | Produces audit header |
 | `pipe_list_shadow_tools()` | Always before `pipe_run_dynamic` | Discover available nodes |

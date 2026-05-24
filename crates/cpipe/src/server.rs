@@ -370,23 +370,31 @@ fn get_tools_definition() -> serde_json::Value {
             }
         },
         {
-            "name": "pipe_read_file",
-            "description": "Reads a local file safely and streams it directly through a context pipe. Use this instead of native file readers to prevent context window flooding.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Absolute or relative path to the file."
-                    },
-                    "pipe_name": {
-                        "type": "string",
-                        "description": "The name of the pipe to run (e.g., 'standard-distill', 'full-refinery').",
-                        "default": "standard-distill"
-                    }
-                },
-                "required": ["path"]
-            }
+          "name": "pipe_read_file",
+          "description": "Reads a local file safely and streams it directly through a context pipe. Use this instead of native file readers to prevent context window flooding.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Absolute or relative path to the file."
+              },
+              "pipe_name": {
+                "type": "string",
+                "description": "The name of the pipe to run (e.g., 'standard-distill', 'full-refinery').",
+                "default": "standard-distill"
+              },
+              "start_line": {
+                "type": "integer",
+                "description": "1-indexed start line (inclusive)."
+              },
+              "end_line": {
+                "type": "integer",
+                "description": "1-indexed end line (inclusive)."
+              }
+            },
+            "required": ["path"]
+          }
         },
         {
             "name": "pipe_analyze_file",
@@ -585,20 +593,37 @@ async fn handle_tool_call(name: &str, args: serde_json::Value) -> String {
             run_pipe_internal(pipe_name, input_text, "mcp:pipe_run").await
         }
         "pipe_read_file" => {
-            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
-            let pipe_name = args.get("pipe_name").and_then(|v| v.as_str()).unwrap_or("standard-distill");
-            
-            let resolved_path = match resolve_safe_path(path) {
-                Ok(p) => p,
-                Err(e) => return format!("Error reading file: {}\n", e),
-            };
-            
-            let content = match std::fs::read_to_string(&resolved_path) {
-                Ok(c) => c,
-                Err(e) => return format!("Error reading file: {}\n", e),
-            };
-            
-            run_pipe_internal(pipe_name, &content, "mcp:pipe_read_file").await
+          let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+          let pipe_name = args.get("pipe_name").and_then(|v| v.as_str()).unwrap_or("standard-distill");
+          let start_line = args.get("start_line").and_then(|v| v.as_u64()).map(|n| n as usize);
+          let end_line = args.get("end_line").and_then(|v| v.as_u64()).map(|n| n as usize);
+          let resolved_path = match resolve_safe_path(path) {
+              Ok(p) => p,
+              Err(e) => return format!("Error reading file: {}\n", e),
+          };
+          let content = match std::fs::read_to_string(&resolved_path) {
+              Ok(c) => c,
+              Err(e) => return format!("Error reading file: {}\n", e),
+          };
+          let content_to_pipe = if start_line.is_some() || end_line.is_some() {
+              let lines: Vec<&str> = content.lines().collect();
+              let start_idx = start_line.map(|n| n.saturating_sub(1)).unwrap_or(0);
+              let end_idx = end_line.unwrap_or(lines.len());
+              let start_idx = start_idx.min(lines.len());
+              let end_idx = end_idx.min(lines.len());
+              if start_idx < end_idx {
+                  let mut sliced = lines[start_idx..end_idx].join("\n");
+                  if !sliced.is_empty() && content.ends_with('\n') {
+                      sliced.push('\n');
+                  }
+                  sliced
+              } else {
+                  String::new()
+              }
+          } else {
+              content
+          };
+          run_pipe_internal(pipe_name, &content_to_pipe, "mcp:pipe_read_file").await
         }
         "pipe_analyze_file" => {
             let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");

@@ -8,7 +8,7 @@ import time
 import uuid
 import asyncio
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from .platforms import detect_client_id, extract_content, inject_content
 from .orchestrator import run_pipe, resolve_pipe_from_context, check_echo, SIFT_SIGNATURE
 from .telemetry import log_telemetry, log_bypass_event, log_unmapped_event
@@ -21,9 +21,25 @@ WRAPPER_SESSION_ID = f"hook-{uuid.uuid4().hex[:8]}"
 WRAPPER_START_TIME = time.ctime()
 
 
+def _get_line_count(args: Any) -> Optional[int]:
+    """Helper to extract requested line range count if present in tool arguments."""
+    if not isinstance(args, dict):
+        return None
+    start_val = args.get("start_line") or args.get("StartLine")
+    end_val = args.get("end_line") or args.get("EndLine")
+    if start_val is not None and end_val is not None:
+        try:
+            start = int(start_val)
+            end = int(end_val)
+            return max(0, end - start + 1)
+        except (ValueError, TypeError):
+            pass
+    return None
+
+
 def _generate_bypass_payload(raw_json: str, platform: str) -> str:
     """Returns the platform-correct payload to silently bypass sifting."""
-    if platform == "Gemini CLI":
+    if platform in ["Gemini CLI", "Google Antigravity"]:
         return json.dumps({"decision": "allow"})
     return raw_json
 
@@ -48,6 +64,60 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
 
     # 1. Platform Detection
     platform = detect_client_id()
+
+    # 1.0 BeforeTool Event Inference & Proactive Gating (REAL-2)
+    is_before_tool = False
+    if isinstance(data, dict):
+        if ("tool" in data or "tool_name" in data or "command" in data) and not any(
+            k in data for k in ["tool_response", "result", "output", "llmContent"]
+        ):
+            is_before_tool = True
+
+    if is_before_tool:
+        tool_name = data.get("tool_name") or data.get("tool") or "unknown"
+        if tool_name in ["read_file", "view_file"]:
+            args = data.get("arguments") or data.get("tool_input") or data.get("args")
+            file_path = None
+            if isinstance(args, dict):
+                file_path = args.get("path") or args.get("file") or args.get("target") or args.get("abspath")
+            elif isinstance(args, str):
+                file_path = args
+            
+            # Check for line range first (Adaptive Gating)
+            line_count = _get_line_count(args)
+            if line_count is not None:
+                if line_count > 50:
+                    block_msg = f"[BLOCKED by Context-Pipe] File read range ({line_count} lines) > 50 lines limit. Use pipe_read_file instead."
+                    if platform in ["Gemini CLI", "Google Antigravity"]:
+                        return json.dumps({"decision": "deny", "reason": block_msg})
+                    else:
+                        return json.dumps({"cancel": True, "errorMessage": block_msg})
+                else:
+                    # Allow small ranges
+                    if platform in ["Gemini CLI", "Google Antigravity"]:
+                        return json.dumps({"decision": "allow"})
+                    else:
+                        return json.dumps({"cancel": False})
+
+            # Fallback to file size check if no range is specified
+            if file_path and os.path.exists(file_path) and os.path.isfile(file_path):
+                try:
+                    size = os.path.getsize(file_path)
+                    if size > 1024:
+                        block_msg = "[BLOCKED by Context-Pipe] File > 1KB. Use pipe_read_file instead."
+                        if platform in ["Gemini CLI", "Google Antigravity"]:
+                            return json.dumps({"decision": "deny", "reason": block_msg})
+                        else:
+                            return json.dumps({"cancel": True, "errorMessage": block_msg})
+                except OSError:
+                    pass
+        
+        # Bypass BeforeTool for other tools / smaller files
+        if platform in ["Gemini CLI", "Google Antigravity"]:
+            return json.dumps({"decision": "allow"})
+        else:
+            return json.dumps({"cancel": False})
+
     raw_content, tool_name, agent_label = extract_content(data, platform)
 
     if debug:
@@ -89,6 +159,21 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     except (json.JSONDecodeError, TypeError):
         pass
     
+    # 2.1 Bypass check for small line ranges in AfterTool (Parity with BeforeTool adaptive threshold)
+    if tool_name in ["read_file", "view_file"]:
+        args = data.get("arguments") or data.get("tool_input") or data.get("args")
+        line_count = _get_line_count(args)
+        if line_count is not None and line_count <= 50:
+            if debug:
+                logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': Line range <= 50 lines ({line_count}).")
+            log_bypass_event(
+                tool_name=str(tool_name),
+                reason=f"Line range <= 50 lines ({line_count})",
+                platform=platform,
+                agent_label=agent_label
+            )
+            return _generate_bypass_payload(raw_json, platform)
+
     # 3. Dynamic Routing
     pipe_name = resolve_pipe_from_context(config, str(tool_name), len(str(raw_content)))
     if not pipe_name:

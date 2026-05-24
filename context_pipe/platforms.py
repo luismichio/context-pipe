@@ -78,8 +78,15 @@ def extract_content(data: Dict, platform: str) -> tuple[str, Optional[str], Opti
                 agent_label = "Explore"
             elif res.startswith("[Bash]"):
                 agent_label = "Bash"
-    elif platform == "Gemini CLI":
+    elif platform in ["Gemini CLI", "Google Antigravity"]:
         agent_label = data.get("hookSpecificOutput", {}).get("threadLabel")
+
+    # Generic fallback (REAL-4)
+    if not agent_label and isinstance(data, dict):
+        agent_label = data.get("agent_label") or data.get("agent")
+        if not agent_label and isinstance(data.get("metadata"), dict):
+            metadata = data.get("metadata", {})
+            agent_label = metadata.get("agent_label") or metadata.get("agent")
 
     # Shape-Aware Extraction
     resp = data.get("tool_response")
@@ -116,7 +123,7 @@ def inject_content(data: Dict, content: str, platform: str) -> Dict:
     Injects processed content back into the platform-specific JSON payload.
     """
     # 0. Gemini CLI specific hook response schema
-    if platform == "Gemini CLI":
+    if platform in ["Gemini CLI", "Google Antigravity"]:
         return {"decision": "deny", "reason": content}
 
     # 1. Standard MCP / VSCode / Gemini / OpenCode Shape
