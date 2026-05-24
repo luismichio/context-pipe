@@ -32,6 +32,22 @@ def test_build_runtime_hook_command_contains_executable():
     assert "wrap" in cmd
 
 
+def test_build_runtime_hook_command_windows_prepends_ampersand():
+    """On Windows (os.name == 'nt') the command must start with '& ' so
+    PowerShell treats the quoted executable as a command, not a string literal
+    (Bug REPORT_027: Unexpected token '-W' parser error)."""
+    with patch("context_pipe.onboarding.os.name", "nt"):
+        cmd = build_runtime_hook_command()
+    assert cmd.startswith("& "), f"Expected '& ' prefix on Windows, got: {cmd[:20]!r}"
+
+
+def test_build_runtime_hook_command_posix_no_ampersand():
+    """On POSIX systems the command must NOT start with '& '."""
+    with patch("context_pipe.onboarding.os.name", "posix"):
+        cmd = build_runtime_hook_command()
+    assert not cmd.startswith("& "), f"Unexpected '& ' prefix on POSIX: {cmd[:20]!r}"
+
+
 # ---------------------------------------------------------------------------
 # discover_sift_executable
 # ---------------------------------------------------------------------------
