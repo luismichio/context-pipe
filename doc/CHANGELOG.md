@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] — 2026-05-24
+### ✨ Features & Parity
+- **Rust Core Full Parity (Bug REPORT_026)**: Upgraded the Rust `cpipe` orchestrator to achieve full functional parity with the Python implementation.
+    - Added `tool` subcommand: Directly invoke MCP tools from the native Rust CLI.
+    - Added `aliases` subcommand: Bridge to Python onboarding logic for managing shell aliases (`cpipe aliases install/remove`).
+    - Added `snake_case` aliases: All CLI arguments (e.g., `--start-line`, `--input_file`) now support both kebab-case and snake_case for backward compatibility with existing automation scripts.
+- **PowerShell `&` Call Operator in Hook Commands (Bug REPORT_027)**: `build_runtime_hook_command()` now prepends `& ` on Windows (`os.name == "nt"`). This ensures PowerShell treats double-quoted executable paths as commands rather than string literals, resolving `Unexpected token '-W'` errors.
+
+### 🛡️ Hook Stability & System Integrity
+- **Hook Idempotency & Aggressive Cleanup (Bug REPORT_024)**: Refactored `merge_hook_json` in `onboarding.py` to aggressively filter out all existing context-pipe hooks (including legacy/broken versions) before injecting the modern hook. This breaks the duplication loop and ensures stable configurations across sessions.
+- **Vocal Config Resolution in Rust**: Modified `load_pipes_config_with_path` in `crates/cpipe/src/config.rs` to explicitly report errors and exit if a specified `--config` path fails to load, preventing silent and confusing fallbacks to the global configuration.
+- **Unicode/Emoji Mitigation for Windows Interceptors**: Stripped all non-ASCII emojis from the source code print statements and batch scripts. This prevents `semantic-sift-cli` (and other stdout interceptors) from crashing with `UnicodeEncodeError: surrogates not allowed` when processing tool output on Windows.
+- **Standardized Hook Naming**: Unified all platform-specific hook injections (Cursor, VS Code, GitHub) to include the `{"name": "context-pipe"}` field for more reliable discovery and deduplication.
+
 ## [0.4.4] — 2026-05-24
 ### 🐛 Fixed & Hardened
 - **Rust Core Relaxed JSON Parsing (PowerShell)**: Implemented a robust relaxed JSON preprocessor (`normalize_relaxed_json`) for `run-dynamic` in `main.rs`. This handles PowerShell quote-stripping and key/value unquoting by dynamically translating relaxed structures into compliant JSON before deserialization.
