@@ -1,6 +1,10 @@
 {
   "version": "1.0",
   "description": "Standard high-fidelity context pipe templates for the Studio of Two.",
+  "authorized_roots": [
+    "C:/Users/luism/Workbench/GitHub/context-pipe",
+    "C:/Users/luism/.gemini/antigravity-cli"
+  ],
   "pipes": [
     {
       "name": "standard-distill",

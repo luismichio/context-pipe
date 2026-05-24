@@ -404,44 +404,59 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
         data["hooks"] = {}
     hooks_list = data["hooks"].get(hook_key, [])
 
-    # Recursive helper to extract all commands for duplicate detection
-    def get_commands(obj: Any) -> List[str]:
-        cmds = []
+    def is_context_pipe_hook(obj: Any) -> bool:
         if isinstance(obj, dict):
-            if "command" in obj and isinstance(obj["command"], str):
-                cmds.append(obj["command"])
+            if obj.get("name") == "context-pipe":
+                return True
+            cmd = obj.get("command")
+            if isinstance(cmd, str) and ("context_pipe.orchestrator" in cmd or "from context_pipe.orchestrator" in cmd):
+                return True
             if "hooks" in obj and isinstance(obj["hooks"], list):
-                for h in obj["hooks"]:
-                    cmds.extend(get_commands(h))
+                return any(is_context_pipe_hook(h) for h in obj["hooks"])
         elif isinstance(obj, list):
-            for item in obj:
-                cmds.extend(get_commands(item))
-        return cmds
+            return any(is_context_pipe_hook(item) for item in obj)
+        return False
 
-    new_cmds = get_commands(new_hook)
+    is_new_cp = is_context_pipe_hook(new_hook)
 
-    # Prevent duplicates
-    # If we find a specific command match, we update the existing hook.
-    # Otherwise, fallback to exact dict equality.
-    if new_cmds:
-        def get_core_target(cmd: str) -> str:
-            if "context_pipe.orchestrator wrap" in cmd:
-                return "context_pipe.orchestrator wrap"
-            return cmd
+    if new_hook in hooks_list:
+        return False  # Exactly present, nothing to do
 
-        normalized_new = [get_core_target(c) for c in new_cmds]
-
-        def hook_has_target(hook_obj: Any, target: str) -> bool:
-            return any(get_core_target(c) == target for c in get_commands(hook_obj))
-
-        if new_hook in hooks_list:
-            return False  # Exactly present, nothing to do
-
-        # Filter out old versions of the same hook
-        hooks_list = [h for h in hooks_list if not any(hook_has_target(h, t) for t in normalized_new)]
+    if is_new_cp:
+        # Filter out any existing context-pipe hook to replace it with the new version (idempotency)
+        hooks_list = [h for h in hooks_list if not is_context_pipe_hook(h)]
         exists = False
     else:
-        exists = new_hook in hooks_list
+        # Prevent duplicates for non-context-pipe hooks using command/dict matching
+        def get_commands(obj: Any) -> List[str]:
+            cmds = []
+            if isinstance(obj, dict):
+                if "command" in obj and isinstance(obj["command"], str):
+                    cmds.append(obj["command"])
+                if "hooks" in obj and isinstance(obj["hooks"], list):
+                    for h in obj["hooks"]:
+                        cmds.extend(get_commands(h))
+            elif isinstance(obj, list):
+                for item in obj:
+                    cmds.extend(get_commands(item))
+            return cmds
+
+        new_cmds = get_commands(new_hook)
+        if new_cmds:
+            def get_core_target(cmd: str) -> str:
+                if "context_pipe.orchestrator wrap" in cmd:
+                    return "context_pipe.orchestrator wrap"
+                return cmd
+
+            normalized_new = [get_core_target(c) for c in new_cmds]
+
+            def hook_has_target(hook_obj: Any, target: str) -> bool:
+                return any(get_core_target(c) == target for c in get_commands(hook_obj))
+
+            hooks_list = [h for h in hooks_list if not any(hook_has_target(h, t) for t in normalized_new)]
+            exists = False
+        else:
+            exists = new_hook in hooks_list
 
     if not exists:
         data["hooks"][hook_key] = [new_hook] + hooks_list
@@ -479,27 +494,69 @@ def get_env_tool_names(environment: str) -> Dict[str, str]:
     # Shielded Environments (Cursor, Gemini CLI, Claude Code, VS Code, Qwen, Codex, OpenClaw)
     # Their hooks work silently. Injecting mandates here contradicts the architecture.
     return {}
-
-
-def inject_mandates(target_dir: str, subagents: List[str], environment: str = "unknown") -> List[str]:
+def inject_mandates(target_dir: str, subagents: List[str], environment: Any = "unknown") -> List[str]:
     """Injects the Path-Native mandate into global and subagent instruction files."""
     actions = []
-    env_tools = get_env_tool_names(environment)
+    
+    if isinstance(environment, str):
+        detected_envs = {environment.lower()}
+    else:
+        detected_envs = {e.lower() for e in environment}
 
-    if not env_tools:
-        # Environment is shielded. No text mandates needed.
-        return []
+    unshielded_envs = {"cline", "windsurf", "opencode", "zed", "continue", "jetbrains", "junie", "kilocode"}
+    has_unshielded = any(env in unshielded_envs for env in detected_envs)
 
     block_id = "<!-- CPP_SECTION_START:mandate -->"
     block_end = "<!-- CPP_SECTION_END:mandate -->"
 
-    mandate_text = f"""# 🚨 CRITICAL INSTRUCTION: FILE I/O OVERRIDE
+    def get_tool_mappings(env_name: str) -> dict[str, str]:
+        env_lower = env_name.lower()
+        if "opencode" in env_lower:
+            return {"read": "read", "search": "grep", "list": "glob", "web": "websearch/webfetch"}
+        elif "windsurf" in env_lower:
+            return {"read": "read_file", "search": "grep_search/codebase_search", "list": "list_dir", "web": "web_search"}
+        elif "cline" in env_lower:
+            return {"read": "read_file", "search": "search_files", "list": "list_files", "web": "browser_action"}
+        elif "zed" in env_lower:
+            return {"read": "read_file", "search": "search/grep", "list": "list_files", "web": "fetch"}
+        elif "continue" in env_lower:
+            return {"read": "read_file", "search": "grep_search", "list": "ls", "web": "search_web/fetch_url_content"}
+        elif "jetbrains" in env_lower or "junie" in env_lower:
+            return {"read": "read_file", "search": "search_files", "list": "list_files", "web": "/web"}
+        elif "kilocode" in env_lower:
+            return {"read": "read_file", "search": "search_files", "list": "list_files", "web": "web_search"}
+        return {"read": "view_file", "search": "grep_search", "list": "list_directory", "web": "web_search"}
+
+    target_mappings = [
+        (os.path.join(target_dir, "AGENTS.md"), "antigravity"),
+        (os.path.join(target_dir, "GEMINI.md"), "gemini"),
+        (os.path.join(target_dir, ".clinerules"), "cline"),
+        (os.path.join(target_dir, ".cursorrules"), "cursor"),
+        (os.path.join(target_dir, ".windsurfrules"), "windsurf"),
+        (os.path.join(target_dir, ".github", "copilot-instructions.md"), "vscode"),
+    ]
+    for sub in subagents:
+        target_mappings.append((sub, "antigravity"))
+
+    for target, platform in target_mappings:
+        if not os.path.exists(target):
+            continue
+
+        tier1_text = """# 🚨 CRITICAL INSTRUCTION: FILE I/O OVERRIDE
 **WARNING**: Using native file readers will flood the context window and destroy the session.
 
+- **REQUIRED**: Standard practice in this Studio is to use `pipe_read_file(path)` and `pipe_analyze_file(path)` for all large local file reads (>1KB)."""
+
+        is_unshielded_target = platform in unshielded_envs or platform in ["antigravity", "gemini"]
+        
+        if has_unshielded and is_unshielded_target:
+            tools = get_tool_mappings(platform)
+            tier2_text = f"""
+
 ## 1. File & Large-Output I/O
-- **FORBIDDEN TOOLS**: `{env_tools["read"]}`, `{env_tools["search"]}`, `{env_tools["list"]}`. Do NOT use these under any circumstances for outputs > 1KB.
+- **FORBIDDEN TOOLS**: `{tools["read"]}`, `{tools["search"]}`, `{tools["list"]}`. Do NOT use these under any circumstances for outputs > 1KB.
 - **REQUIRED TOOLS**: You MUST exclusively use `pipe_read_file(path)` and `pipe_analyze_file(path)` for ALL local file reads.
-- NEVER read raw outputs from `{env_tools["web"]}` or search tools. Pipe them through `pipe_run("rerank-and-sift", raw_output)`.
+- NEVER read raw outputs from `{tools["web"]}` or search tools. Pipe them through `pipe_run("rerank-and-sift", raw_output)`.
 - For ANY tool output exceeding 100 lines (logs, API responses, search results), route through a context pipe before presenting to the user.
 
 ## 2. Named Pipes — When to Use `pipe_run`
@@ -516,12 +573,12 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: str = "u
   2. Construct a `nodes_json` array from those capabilities.
   3. Call `pipe_run_dynamic(nodes_json, input_text)`.
 - **Rules**:
-  - Every `nodes_json` array MUST end with `{{"cmd": "semantic-sift-cli", "args": ["semantic"]}}` or equivalent sifting node.
+  - Every `nodes_json` array MUST end with `{{\"cmd\": \"semantic-sift-cli\", \"args\": [\"semantic\"]}}` or equivalent sifting node.
   - Shell utilities (`grep`, `awk`, `jq`, `rg`, etc.) require `allow_shell=True` — only use when the final node is a sifter.
   - Never put shell metacharacters (`|`, `;`, `&`, `$`) in a `cmd` value — use `args` instead.
 - **Example** — extract ERROR lines then distil:
   ```json
-  [{{"cmd": "grep", "args": ["ERROR"]}}, {{"cmd": "semantic-sift-cli", "args": ["logs"]}}]
+  [{{\"cmd\": \"grep\", \"args\": [\"ERROR\"]}}, {{\"cmd\": \"semantic-sift-cli\", \"args\": [\"logs\"]}}]
   ```
 
 ## 4. A2A Agent Handoff — When to Use `pipe_agent_handoff`
@@ -532,23 +589,9 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: str = "u
 ## 5. Observability — Balance Sheet
 - Call `get_pipe_stats()` at any time to see cumulative ROI: chars saved, chars added, avg latency, total events.
 - After significant processing sessions, proactively report the Balance Sheet to the user so they can see the value delivered."""
-
-    full_payload = f"\n{block_id}\n{mandate_text}\n{block_end}\n"
-
-    # Global targets
-    targets = [
-        os.path.join(target_dir, "AGENTS.md"),
-        os.path.join(target_dir, "GEMINI.md"),
-        os.path.join(target_dir, ".clinerules"),
-        os.path.join(target_dir, ".cursorrules"),
-        os.path.join(target_dir, ".windsurfrules"),
-        os.path.join(target_dir, ".github", "copilot-instructions.md"),
-    ]
-    targets.extend(subagents)
-
-    for target in set(targets):
-        if not os.path.exists(target):
-            continue
+            full_payload = f"\n{block_id}\n{tier1_text}{tier2_text}\n{block_end}\n"
+        else:
+            full_payload = f"\n{block_id}\n{tier1_text}\n{block_end}\n"
 
         try:
             with open(target, "r", encoding="utf-8", errors="replace") as f:
@@ -557,9 +600,10 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: str = "u
             pattern = re.compile(rf"{re.escape(block_id)}.*?{re.escape(block_end)}", re.DOTALL)
             if pattern.search(content):
                 new_content = pattern.sub(full_payload.strip(), content)
-                with open(target, "w", encoding="utf-8") as f:
-                    f.write(new_content)
-                actions.append(f"Updated mandate in `{os.path.basename(target)}`.")
+                if new_content != content:
+                    with open(target, "w", encoding="utf-8") as f:
+                        f.write(new_content)
+                    actions.append(f"Updated mandate in `{os.path.basename(target)}`.")
             else:
                 new_content = full_payload.strip() + "\n\n" + content
                 with open(target, "w", encoding="utf-8") as f:
@@ -872,7 +916,7 @@ def _inject_gemini(target_dir: str, cmd_str: str) -> list[str]:
     gemini_settings_path = os.path.join(target_dir, ".gemini", "settings.json")
     gemini_cmd = build_runtime_hook_command({"GEMINI_SESSION_ID": "true"})
 
-    for hook_key in ["BeforeTool", "AfterTool", "PreCompress"]:
+    for hook_key in ["SessionStart", "BeforeTool", "AfterTool", "PreCompress"]:
         if merge_hook_json(
             gemini_settings_path,
             hook_key,
@@ -1186,7 +1230,7 @@ alwaysApply: false
     antigravity_settings_path = os.path.join(target_dir, ".agents", "settings.json")
     hook_cmd = build_runtime_hook_command({"GEMINI_SESSION_ID": "true"})
 
-    for hook_key in ["BeforeTool", "AfterTool", "PreCompress"]:
+    for hook_key in ["SessionStart", "BeforeTool", "AfterTool", "PreCompress"]:
         if merge_hook_json(
             antigravity_settings_path,
             hook_key,
@@ -1212,13 +1256,32 @@ def inject_hooks(target_dir: str, environment: str) -> list[str]:
         actions.append(f"Git Protection: {gitignore_status}")
 
     cmd_str = build_runtime_hook_command()
-    env_lower = environment.lower()
 
     # 0. Discovery & Mandates
     subagents = discover_agent_configs(target_dir)
     if subagents:
         actions.append(f"Discovered {len(subagents)} specialized subagents.")
-    mandate_actions = inject_mandates(target_dir, subagents, environment=environment)
+
+    # Project Horizon Scanning: Detect all active IDE signatures in target_dir
+    detected_envs = {environment.lower()}
+    
+    if os.path.exists(os.path.join(target_dir, ".cursor")) or os.path.exists(os.path.join(target_dir, ".cursorrules")):
+        detected_envs.add("cursor")
+    if os.path.exists(os.path.join(target_dir, ".clinerules")):
+        detected_envs.add("cline")
+    if os.path.exists(os.path.join(target_dir, ".windsurfrules")):
+        detected_envs.add("windsurf")
+    if os.path.exists(os.path.join(target_dir, ".agents")):
+        detected_envs.add("antigravity")
+    if os.path.exists(os.path.join(target_dir, ".gemini")):
+        detected_envs.add("gemini")
+    if os.path.exists(os.path.join(target_dir, "opencode.json")):
+        detected_envs.add("opencode")
+    if os.path.exists(os.path.join(target_dir, ".vscode")):
+        detected_envs.add("vscode")
+
+    # Inject mandates with project-wide environment scanning
+    mandate_actions = inject_mandates(target_dir, subagents, environment=detected_envs)
     actions.extend(mandate_actions)
 
     # 0b. Ensure pipes.json exists and auto-resolve semantic-sift-cli
@@ -1250,31 +1313,32 @@ def inject_hooks(target_dir: str, environment: str) -> list[str]:
     if perf_warning:
         actions.append(perf_warning)
 
-    # Dispatch to specialized helpers based on environment
-    if "cursor" in env_lower:
-        actions.extend(_inject_cursor(target_dir, cmd_str))
-    if "vscode" in env_lower or "github" in env_lower:
-        actions.extend(_inject_vscode_github(target_dir, cmd_str))
-    if "gemini" in env_lower:
-        actions.extend(_inject_gemini(target_dir, cmd_str))
-    if "opencode" in env_lower:
-        actions.extend(_inject_opencode(target_dir, cmd_str))
-    if "windsurf" in env_lower:
-        actions.extend(_inject_windsurf(target_dir, cmd_str))
-    if "cline" in env_lower:
-        actions.extend(_inject_cline(target_dir, cmd_str))
-    if "claude" in env_lower:
-        actions.extend(_inject_claude(target_dir, cmd_str))
-    if "qwen" in env_lower:
-        actions.extend(_inject_qwen(target_dir, cmd_str))
-    if "codex" in env_lower:
-        actions.extend(_inject_codex(target_dir, cmd_str))
-    if "openclaw" in env_lower:
-        actions.extend(_inject_openclaw(target_dir, cmd_str))
-    if "kilocode" in env_lower:
-        actions.extend(_inject_kilocode(target_dir, cmd_str))
-    if "antigravity" in env_lower:
-        actions.extend(_inject_antigravity(target_dir, cmd_str))
+    # Dispatch to all detected and explicitly requested environments
+    for env in detected_envs:
+        if "cursor" in env:
+            actions.extend(_inject_cursor(target_dir, cmd_str))
+        if "vscode" in env or "github" in env:
+            actions.extend(_inject_vscode_github(target_dir, cmd_str))
+        if "gemini" in env:
+            actions.extend(_inject_gemini(target_dir, cmd_str))
+        if "opencode" in env:
+            actions.extend(_inject_opencode(target_dir, cmd_str))
+        if "windsurf" in env:
+            actions.extend(_inject_windsurf(target_dir, cmd_str))
+        if "cline" in env:
+            actions.extend(_inject_cline(target_dir, cmd_str))
+        if "claude" in env:
+            actions.extend(_inject_claude(target_dir, cmd_str))
+        if "qwen" in env:
+            actions.extend(_inject_qwen(target_dir, cmd_str))
+        if "codex" in env:
+            actions.extend(_inject_codex(target_dir, cmd_str))
+        if "openclaw" in env:
+            actions.extend(_inject_openclaw(target_dir, cmd_str))
+        if "kilocode" in env:
+            actions.extend(_inject_kilocode(target_dir, cmd_str))
+        if "antigravity" in env:
+            actions.extend(_inject_antigravity(target_dir, cmd_str))
 
     return actions
 

@@ -156,11 +156,58 @@ pub fn load_pipes_config() -> Config {
 pub fn load_pipes_config_with_path(custom_path: Option<&Path>) -> Config {
     // Look for local configs
     let local_config = if let Some(path) = custom_path {
-        match load_config_file(path) {
-            Ok(cfg) => Some(cfg),
-            Err(e) => {
-                log::warn!("Could not load pipes config at {:?}: {}", path, e);
-                None
+        if path.is_absolute() {
+            match load_config_file(path) {
+                Ok(cfg) => Some(cfg),
+                Err(e) => {
+                    log::warn!("Could not load pipes config at {:?}: {}", path, e);
+                    None
+                }
+            }
+        } else {
+            let mut resolved_path = None;
+            if path.exists() {
+                resolved_path = Some(path.to_path_buf());
+            } else if let Ok(mut curr) = std::env::current_dir() {
+                loop {
+                    let candidate = curr.join(path);
+                    if candidate.exists() {
+                        resolved_path = Some(candidate);
+                        break;
+                    }
+                    if curr.join(".git").exists() {
+                        break;
+                    }
+                    if !curr.pop() {
+                        break;
+                    }
+                }
+            }
+            
+            // Fallback to executable parent directory
+            if resolved_path.is_none() {
+                if let Ok(exe_path) = std::env::current_exe() {
+                    if let Some(exe_dir) = exe_path.parent() {
+                        let candidate = exe_dir.join(path);
+                        if candidate.exists() {
+                            resolved_path = Some(candidate);
+                        } else if let Some(parent) = exe_dir.parent() {
+                            let candidate = parent.join(path);
+                            if candidate.exists() {
+                                resolved_path = Some(candidate);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            let final_path = resolved_path.unwrap_or_else(|| path.to_path_buf());
+            match load_config_file(&final_path) {
+                Ok(cfg) => Some(cfg),
+                Err(e) => {
+                    log::warn!("Could not load local pipes config at {:?}: {}", final_path, e);
+                    None
+                }
             }
         }
     } else {

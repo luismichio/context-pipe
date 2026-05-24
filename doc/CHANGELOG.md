@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-05-24
+### 🐛 Fixed & Hardened
+- **Rust Core Relaxed JSON Parsing (PowerShell)**: Implemented a robust relaxed JSON preprocessor (`normalize_relaxed_json`) for `run-dynamic` in `main.rs`. This handles PowerShell quote-stripping and key/value unquoting by dynamically translating relaxed structures into compliant JSON before deserialization.
+- **Onboarding Import & Syntax Fixes**: Resolved a critical syntax error in `onboarding.py` where `def inject_mandates` was commented out due to a missing newline. Fixed `get_env_tool_names` return signature to guarantee `{}` instead of `None` for shielded platforms, restoring full green status (265/265 tests passing) to the unit test gauntlet.
+- **Config-File Authorized Roots (`authorized_roots` in `pipes.json`)**: Added a top-level `authorized_roots` array to `pipes.json`. `_resolve_safe_path` in `server.py` now merges these roots with any `PIPE_AUTHORIZED_ROOT` env-var entries on every call. This allows cross-directory file access to survive client-side env-var overrides (e.g. `agy.exe` injecting a narrow workspace root), without requiring shell tricks or profile hacks. Security boundary is unchanged — paths outside all merged roots are still denied.
+
 ## [0.4.3] — 2026-05-24
 ### ✨ Features & Parity
 - **Line Range Support in File Reading**: Added optional `start_line` and `end_line` parameters (1-indexed, inclusive) to `pipe_read_file` in both Python (`context_pipe/server.py`) and Rust (`crates/cpipe/src/server.rs`) implementations. This allows surgical reading of specific file segments while bypassing the rest of the file to save tokens.

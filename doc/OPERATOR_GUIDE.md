@@ -312,21 +312,35 @@ Mappings allow the Switchboard to decide the best distillation strategy automati
 
 ## 5. Terminal Mastery
 
-Context-Pipe is designed to be used as a standalone CLI tool.
+Context-Pipe is designed to be used as a standalone CLI tool, available both as a Python script (`mcp-pipe`) and a high-performance, zero-dependency compiled Rust binary (`cpipe`).
 
 ### Basic Execution
 ```bash
-# Sift data from a file
-cat app.log | context-pipe run standard-distill
+# Sift data from a file using the Rust binary
+cat app.log | cpipe run standard-distill
 
-# Use with standard pipes
-grep "Critical" system.log | context-pipe run semantic-refinery
+# Use with standard pipes (Python entry point)
+grep "Critical" system.log | mcp-pipe run semantic-refinery
 ```
 
+### Subcommand & Argument Parity
+Both the Python CLI (`mcp-pipe`) and the Rust binary (`cpipe`) support identical interfaces:
+- **`run <pipe_name>`**: Executes a named pipe from `pipes.json`. Supports:
+  - `--config <path>` (automatically traverses parent directories up to a `.git` boundary to resolve relative paths).
+  - `--input-file` / `--input_file <path>` to read from a file instead of stdin.
+  - `--start-line` / `--start_line <N>` and `--end-line` / `--end_line <N>` for line-range slicing.
+- **`run-dynamic <nodes_json>`**: Executes an ad-hoc JSON node array. Supports:
+  - `--allow-shell` / `--allow_shell` to run shell utilities as dynamic pipe nodes.
+  - **PowerShell JSON Normalization**: The Rust `cpipe` engine automatically detects and normalizes relaxed JSON structures (such as unquoted keys/values or single quotes, e.g. `[{cmd: grep}]`) passed via PowerShell into compliant RFC-JSON before parsing.
+- **`verify`**: Evaluates system installation health (identical to the `pipe_verify` MCP tool).
+- **`handoff`**: Distills and processes agent-to-agent output.
+- **`list`**: Discovers and lists all configured pipes and shadow tools.
+- **`stats`**: Prints the Context Balance Sheet (ROI).
+
 ### Direct Module Use
-If the CLI isn't in your path, use Python:
+If the CLI executable isn't in your path, you can run the Python module directly:
 ```bash
-cat data.txt | python -m context_pipe.orchestrator run my-pipe
+cat data.txt | python -m context_pipe.cli run my-pipe
 ```
 
 ---

@@ -100,8 +100,10 @@ pub fn resolve_safe_path(p: &str) -> Result<String, String> {
     let mut workspace_roots = Vec::new();
     if let Ok(auth_root) = std::env::var("PIPE_AUTHORIZED_ROOT") {
         if !auth_root.is_empty() {
-            if let Ok(c) = canonicalize_path(&auth_root) {
-                workspace_roots.push(c);
+            for path_part in std::env::split_paths(&auth_root) {
+                if let Ok(c) = canonicalize_path(&path_part.to_string_lossy()) {
+                    workspace_roots.push(c);
+                }
             }
         }
     }
@@ -1004,7 +1006,7 @@ async fn handle_tool_call(name: &str, args: serde_json::Value) -> String {
     }
 }
 
-fn format_verify_report(report: serde_json::Value) -> String {
+pub fn format_verify_report(report: serde_json::Value) -> String {
     let mut lines = vec!["## Context-Pipe Installation Report".to_string(), String::new()];
     
     if let Some(cp) = report.get("context_pipe") {
@@ -1139,4 +1141,38 @@ async fn handle_pipe_dashboard() -> String {
          To protect your context window, always consider streaming large tool outputs through the optimal pipe.\n",
         pipes, stats
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_safe_path_multi() {
+        let temp_dir_1 = std::env::temp_dir().join("cpipe_test_dir1");
+        let temp_dir_2 = std::env::temp_dir().join("cpipe_test_dir2");
+        std::fs::create_dir_all(&temp_dir_1).unwrap();
+        std::fs::create_dir_all(&temp_dir_2).unwrap();
+
+        let file_1 = temp_dir_1.join("file1.txt");
+        let file_2 = temp_dir_2.join("file2.txt");
+        std::fs::write(&file_1, "hello").unwrap();
+        std::fs::write(&file_2, "world").unwrap();
+
+        let paths = vec![temp_dir_1.clone(), temp_dir_2.clone()];
+        let path_os_string = std::env::join_paths(paths).unwrap();
+        
+        std::env::set_var("PIPE_AUTHORIZED_ROOT", path_os_string);
+
+        let res1 = resolve_safe_path(&file_1.to_string_lossy());
+        let res2 = resolve_safe_path(&file_2.to_string_lossy());
+
+        assert!(res1.is_ok());
+        assert!(res2.is_ok());
+
+        let _ = std::fs::remove_file(file_1);
+        let _ = std::fs::remove_file(file_2);
+        let _ = std::fs::remove_dir(temp_dir_1);
+        let _ = std::fs::remove_dir(temp_dir_2);
+    }
 }

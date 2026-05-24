@@ -305,7 +305,7 @@ Dynamic pipes that include shell nodes **must** end with a `semantic-sift` termi
 ---
 
 ## 10. Secure Global Configuration
-To support secure global MCP registration (e.g., in Antigravity), the orchestrator utilizes PIPE_AUTHORIZED_ROOT. When a server is launched from a global config file, this variable explicitly sets the authorized workspace boundary, preventing the need for insecure global read permissions.
+To support secure global MCP registration (e.g., in Antigravity), the orchestrator utilizes `PIPE_AUTHORIZED_ROOT`. This variable can contain a single directory path or a list of directory paths separated by the platform's path separator (`;` on Windows, `:` on macOS/Linux), allowing context-pipe to safely read files across multiple authorized workspace boundaries.
 
 ## 10b. Global Configuration (`context_pipe/config_loader.py`)
 
@@ -429,11 +429,12 @@ The Python-based FastMCP server carries a mandatory cold-start tax (~1000ms) due
 
 `cpipe` faithfully implements the full **Context-Pipe Protocol (CPP)**:
 
-1. **Config Merging**: Loads and merges `pipes.json` (or `pipes.toml`) with global `~/.mcp-pipe.json`. Local config takes precedence.
+1. **Config Merging & Relative Traversal**: Loads and merges `pipes.json` (or `pipes.toml`) with global `~/.mcp-pipe.json`. Local config takes precedence. It supports relative path upward traversal to `.git` boundaries when resolving relative config files.
 2. **Placeholder Resolution**: Recursively resolves `${VAR}` tokens against process environment variables.
-3. **Stream Routing**: Chains `stdin`/`stdout` between nodes via `tokio::process::Command`. Timeout guard is active per-node (`PIPE_NODE_TIMEOUT_MS`).
-4. **Self-Aware Bypass**: Detects the sifting signature (`--- [Semantic-Sift Audit] ---`) and skips redundant re-processing, preventing infinite sifting loops.
-5. **Path Security**: `resolve_safe_path()` validates file paths against `PIPE_AUTHORIZED_ROOT` and the client-reported workspace roots (`CLIENT_ROOTS`) before any I/O, mirroring the Python server's safety contract.
+3. **Stream Routing & CLI Parity**: Chains `stdin`/`stdout` between nodes via `tokio::process::Command` with `PIPE_NODE_TIMEOUT_MS` timeout guards. Implements 100% subcommand parity (`verify` and `handoff`) and full parameter aliases support (snake_case/kebab-case parity).
+4. **PowerShell JSON Normalization**: Dynamically pre-processes unquoted or single-quoted JSON strings (e.g. `[{cmd: grep}]`) passed via PowerShell arguments using a robust character-by-character scanner, normalising them to valid RFC-JSON before parsing.
+5. **Self-Aware Bypass**: Detects the sifting signature (`--- [Semantic-Sift Audit] ---`) and skips redundant re-processing, preventing infinite sifting loops.
+6. **Path Security**: `resolve_safe_path()` validates file paths against `PIPE_AUTHORIZED_ROOT` (split by the platform-specific path separator to support multiple directories) and the client-reported workspace roots (`CLIENT_ROOTS`) before any I/O, mirroring the Python server's safety contract.
 
 ### TOML Configuration Support
 

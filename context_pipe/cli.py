@@ -102,6 +102,17 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if not input_text:
         return 0
 
+    # Line Range Slicing
+    start_line = getattr(args, "start_line", None)
+    end_line = getattr(args, "end_line", None)
+    if start_line is not None or end_line is not None:
+        lines = input_text.splitlines(keepends=True)
+        start_idx = (start_line - 1) if start_line is not None else 0
+        end_idx = end_line if end_line is not None else len(lines)
+        start_idx = max(0, min(start_idx, len(lines)))
+        end_idx = max(0, min(end_idx, len(lines)))
+        input_text = "".join(lines[start_idx:end_idx])
+
     t0 = time.monotonic()
     assert pipe is not None  # _die() exits above if pipe is None
     result, trace = asyncio.run(run_pipe(pipe, input_text, tool_name="cli:run", server_registry=config.get("servers", {})))
@@ -126,12 +137,50 @@ def _cmd_run_dynamic(args: argparse.Namespace) -> int:
 
     t0 = time.monotonic()
     try:
-        result, trace = asyncio.run(run_dynamic_pipe(nodes, input_text, tool_name="cli:run-dynamic"))
+        result, trace = asyncio.run(run_dynamic_pipe(
+            nodes,
+            input_text,
+            tool_name="cli:run-dynamic",
+            allow_shell=getattr(args, "allow_shell", False)
+        ))
     except ValueError as exc:
         _die(str(exc))
     latency_ms = (time.monotonic() - t0) * 1000
 
     _print_audit(result, trace, "dynamic", latency_ms, verbose=getattr(args, "verbose", False))
+    return 0
+
+
+def _cmd_handoff(args: argparse.Namespace) -> int:
+    """Executes agent handoff distillation."""
+    from .a2a import pipe_agent_handoff
+
+    input_text = args.output
+    if not input_text:
+        input_text = _read_input(None)
+    if not input_text:
+        return 0
+
+    result = pipe_agent_handoff(
+        output=input_text,
+        pipe_name=args.pipe_name,
+        from_agent=args.from_agent,
+        to_agent=args.to_agent,
+        config_path=args.config,
+    )
+    sys.stdout.write(result)
+    if result and not result.endswith("\n"):
+        sys.stdout.write("\n")
+    return 0
+
+
+def _cmd_verify(args: argparse.Namespace) -> int:
+    """Verifies the health of the context-pipe + semantic-sift installation."""
+    import context_pipe.server as cp_server
+    
+    cp_server.CONFIG_PATH = args.config
+    result = cp_server.pipe_verify()
+    print(result)
     return 0
 
 
@@ -382,8 +431,12 @@ def _build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("pipe_name", help="Name of the pipe (from pipes.json or ~/.mcp-pipe.json).")
     run_p.add_argument("--config", default="pipes.json", metavar="PATH",
                        help="Path to local pipes.json (default: pipes.json).")
-    run_p.add_argument("--input-file", metavar="PATH",
+    run_p.add_argument("--input-file", "--input_file", dest="input_file", metavar="PATH",
                        help="Read input from this file instead of stdin.")
+    run_p.add_argument("--start-line", "--start_line", dest="start_line", type=int, metavar="N",
+                       help="1-indexed start line (inclusive) to slice from input.")
+    run_p.add_argument("--end-line", "--end_line", dest="end_line", type=int, metavar="N",
+                       help="1-indexed end line (inclusive) to slice from input.")
     run_p.add_argument("-v", "--verbose", action="store_true",
                        help="Prepend audit header (node trace + latency) to output.")
 
@@ -391,10 +444,12 @@ def _build_parser() -> argparse.ArgumentParser:
     dyn_p = sub.add_parser("run-dynamic", help="Run an ad-hoc node array on stdin or a file.")
     dyn_p.add_argument("nodes_json",
                        help='JSON array of node objects, e.g. \'[{"cmd":"jq","args":["."]}]\'')
-    dyn_p.add_argument("--input-file", metavar="PATH",
+    dyn_p.add_argument("--input-file", "--input_file", dest="input_file", metavar="PATH",
                        help="Read input from this file instead of stdin.")
     dyn_p.add_argument("-v", "--verbose", action="store_true",
                        help="Prepend audit header to output.")
+    dyn_p.add_argument("--allow-shell", "--allow_shell", dest="allow_shell", action="store_true",
+                       help="Allow shell utilities as dynamic pipe nodes.")
 
     # --- list ---
     list_p = sub.add_parser("list", help="List configured pipes and PATH tools.")
@@ -441,6 +496,23 @@ def _build_parser() -> argparse.ArgumentParser:
 
     alias_sub.add_parser("remove", help="Remove the managed cpipe alias block.")
 
+    # --- verify ---
+    verify_p = sub.add_parser("verify", help="Verify the health of the context-pipe + semantic-sift installation.")
+    verify_p.add_argument("--config", default="pipes.json", metavar="PATH",
+                          help="Path to local pipes.json (default: pipes.json).")
+
+    # --- handoff ---
+    handoff_p = sub.add_parser("handoff", help="Distil agent output before passing it to another agent.")
+    handoff_p.add_argument("--from", "--from-agent", "--from_agent", dest="from_agent", default="a2a",
+                           help="Label for the producing agent.")
+    handoff_p.add_argument("--to", "--to-agent", "--to_agent", dest="to_agent", default="a2a",
+                           help="Label for the consuming agent.")
+    handoff_p.add_argument("--output", help="The raw output to distil.")
+    handoff_p.add_argument("--pipe-name", "--pipe_name", dest="pipe_name", default=None,
+                           help="Explicit pipe name to use.")
+    handoff_p.add_argument("--config", default="pipes.json", metavar="PATH",
+                           help="Path to local pipes.json (default: pipes.json).")
+
     return parser
 
 
@@ -471,6 +543,8 @@ def main() -> None:
         "serve": _cmd_serve,
         "aliases": _cmd_aliases,
         "tool": _cmd_tool,
+        "handoff": _cmd_handoff,
+        "verify": _cmd_verify,
     }
 
     handler = dispatch.get(args.command)

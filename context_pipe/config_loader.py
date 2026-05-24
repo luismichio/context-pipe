@@ -69,11 +69,22 @@ def load_pipes_config(local_path: str = "pipes.json") -> dict:
         m for m in global_mappings if m not in local_mappings
     ]
 
+    # 4. Merge Authorized Roots (local first, deduped)
+    local_roots: list = (local_config or {}).get("authorized_roots", [])
+    global_roots: list = (global_config or {}).get("authorized_roots", [])
+    seen_roots: set[str] = set()
+    merged_roots: list[str] = []
+    for r in list(local_roots) + list(global_roots):
+        key = os.path.normcase(r.strip())
+        if key and key not in seen_roots:
+            seen_roots.add(key)
+            merged_roots.append(r.strip())
     return {
         "version": (local_config or global_config or {}).get("version", "1.0"),
         "pipes": merged_pipes,
         "servers": merged_servers,
         "mappings": merged_mappings,
+        "authorized_roots": merged_roots,
     }
 
 

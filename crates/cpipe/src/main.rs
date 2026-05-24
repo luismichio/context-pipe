@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "cpipe")]
-#[command(version = "0.4.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "cpipe - High-performance Context-Pipe orchestrator", long_about = None)]
 struct Cli {
     #[command(subcommand)]
@@ -29,8 +29,14 @@ enum Commands {
         #[arg(long, default_value = "pipes.json")]
         config: String,
         /// Read input from this file instead of stdin
-        #[arg(long)]
+        #[arg(long, aliases = ["input_file"])]
         input_file: Option<String>,
+        /// 1-indexed start line (inclusive) to slice from input
+        #[arg(long, aliases = ["start_line"])]
+        start_line: Option<usize>,
+        /// 1-indexed end line (inclusive) to slice from input
+        #[arg(long, aliases = ["end_line"])]
+        end_line: Option<usize>,
         /// Prepend audit header (node trace + latency) to output
         #[arg(short, long)]
         verbose: bool,
@@ -40,8 +46,11 @@ enum Commands {
         /// JSON array of node objects
         nodes_json: String,
         /// Read input from this file instead of stdin
-        #[arg(long)]
+        #[arg(long, aliases = ["input_file"])]
         input_file: Option<String>,
+        /// Allow shell utilities as dynamic pipe nodes
+        #[arg(long, aliases = ["allow_shell"])]
+        allow_shell: bool,
         /// Prepend audit header to output
         #[arg(short, long)]
         verbose: bool,
@@ -56,6 +65,30 @@ enum Commands {
     Stats,
     /// Start the MCP server (stdio transport)
     Serve,
+    /// Verify the health of the context-pipe + semantic-sift installation
+    Verify {
+        /// Path to pipes configuration
+        #[arg(long, default_value = "pipes.json")]
+        config: String,
+    },
+    /// Distil agent output before passing it to another agent
+    Handoff {
+        /// Label for the producing agent
+        #[arg(long, aliases = ["from", "from-agent", "from_agent"], default_value = "a2a")]
+        from: String,
+        /// Label for the consuming agent
+        #[arg(long, aliases = ["to", "to-agent", "to_agent"], default_value = "a2a")]
+        to: String,
+        /// The raw output to distil (if empty, reads from stdin)
+        #[arg(long)]
+        output: Option<String>,
+        /// Explicit pipe name to use
+        #[arg(long, aliases = ["pipe-name", "pipe_name"])]
+        pipe_name: Option<String>,
+        /// Path to pipes configuration
+        #[arg(long, default_value = "pipes.json")]
+        config: String,
+    },
 }
 
 fn read_input(input_file: Option<&str>) -> io::Result<String> {
@@ -72,7 +105,51 @@ fn read_input(input_file: Option<&str>) -> io::Result<String> {
     }
 }
 
-async fn cmd_run(pipe_name: &str, config_path: &str, input_file: Option<&str>, verbose: bool) {
+fn slice_lines(text: &str, start_line: Option<usize>, end_line: Option<usize>) -> String {
+    if start_line.is_none() && end_line.is_none() {
+        return text.to_string();
+    }
+    
+    let mut lines = Vec::new();
+    let mut start = 0;
+    for (i, c) in text.char_indices() {
+        if c == '\n' {
+            lines.push(&text[start..=i]);
+            start = i + 1;
+        }
+    }
+    if start < text.len() {
+        lines.push(&text[start..]);
+    }
+    
+    let start_idx = match start_line {
+        Some(s) => if s > 0 { s - 1 } else { 0 },
+        None => 0,
+    };
+    
+    let end_idx = match end_line {
+        Some(e) => e,
+        None => lines.len(),
+    };
+    
+    let start_idx = std::cmp::min(start_idx, lines.len());
+    let end_idx = std::cmp::min(end_idx, lines.len());
+    
+    if start_idx >= end_idx {
+        return String::new();
+    }
+    
+    lines[start_idx..end_idx].concat()
+}
+
+async fn cmd_run(
+    pipe_name: &str,
+    config_path: &str,
+    input_file: Option<&str>,
+    start_line: Option<usize>,
+    end_line: Option<usize>,
+    verbose: bool,
+) {
     let path = std::path::PathBuf::from(config_path);
     let config = load_pipes_config_with_path(Some(&path));
     let pipe = config.pipes.iter().find(|p| p.name == pipe_name);
@@ -88,13 +165,18 @@ async fn cmd_run(pipe_name: &str, config_path: &str, input_file: Option<&str>, v
         }
     };
     
-    let input = match read_input(input_file) {
+    let mut input = match read_input(input_file) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("cpipe: error: Cannot read input: {}", e);
             std::process::exit(1);
         }
     };
+    if input.is_empty() {
+        return;
+    }
+    
+    input = slice_lines(&input, start_line, end_line);
     if input.is_empty() {
         return;
     }
@@ -135,8 +217,82 @@ async fn cmd_run(pipe_name: &str, config_path: &str, input_file: Option<&str>, v
     }
 }
 
-async fn cmd_run_dynamic(nodes_json: &str, input_file: Option<&str>, verbose: bool) {
-    let nodes: Vec<Node> = match serde_json::from_str(nodes_json) {
+fn normalize_relaxed_json(raw: &str) -> String {
+    let mut result = String::new();
+    let mut chars = raw.chars().peekable();
+    
+    while let Some(&c) = chars.peek() {
+        match c {
+            '"' => {
+                chars.next();
+                result.push('"');
+                while let Some(nc) = chars.next() {
+                    result.push(nc);
+                    if nc == '\\' {
+                        if let Some(next_c) = chars.next() {
+                            result.push(next_c);
+                        }
+                    } else if nc == '"' {
+                        break;
+                    }
+                }
+            }
+            '\'' => {
+                chars.next();
+                result.push('"');
+                while let Some(nc) = chars.next() {
+                    if nc == '\\' {
+                        result.push('\\');
+                        if let Some(next_c) = chars.next() {
+                            result.push(next_c);
+                        }
+                    } else if nc == '\'' {
+                        result.push('"');
+                        break;
+                    } else {
+                        result.push(nc);
+                    }
+                }
+            }
+            c if c.is_whitespace() => {
+                chars.next();
+                result.push(c);
+            }
+            '{' | '}' | '[' | ']' | ':' | ',' => {
+                chars.next();
+                result.push(c);
+            }
+            _ => {
+                let mut word = String::new();
+                while let Some(&nc) = chars.peek() {
+                    match nc {
+                        '{' | '}' | '[' | ']' | ':' | ',' | '"' | '\'' => break,
+                        nc if nc.is_whitespace() => break,
+                        _ => {
+                            word.push(nc);
+                            chars.next();
+                        }
+                    }
+                }
+                if word == "true" || word == "false" || word == "null" {
+                    result.push_str(&word);
+                } else if let Ok(_) = word.parse::<f64>() {
+                    result.push_str(&word);
+                } else {
+                    result.push('"');
+                    let escaped = word.replace('\\', "\\\\").replace('"', "\\\"");
+                    result.push_str(&escaped);
+                    result.push('"');
+                }
+            }
+        }
+    }
+    result
+}
+
+async fn cmd_run_dynamic(nodes_json: &str, input_file: Option<&str>, allow_shell: bool, verbose: bool) {
+    let parsed_json = normalize_relaxed_json(nodes_json);
+    let nodes: Vec<Node> = match serde_json::from_str(&parsed_json) {
         Ok(n) => n,
         Err(e) => {
             eprintln!("cpipe: error: nodes_json is not valid JSON: {}", e);
@@ -144,7 +300,7 @@ async fn cmd_run_dynamic(nodes_json: &str, input_file: Option<&str>, verbose: bo
         }
     };
     
-    if let Err(e) = validate_nodes(&nodes, false) {
+    if let Err(e) = validate_nodes(&nodes, allow_shell) {
         eprintln!("cpipe: error: {}", e);
         std::process::exit(1);
     }
@@ -247,16 +403,148 @@ fn cmd_stats() {
     println!("- **Avg Node Latency:** {:.2}ms\n", sheet.avg_latency_ms);
 }
 
+async fn cmd_verify(config_path: &str) {
+    let py_interpreter = cpipe::orchestrator::find_python_interpreter();
+    
+    let py_code = format!(
+        "import json; \
+         from context_pipe.onboarding import verify_installation, resolve_pipes_config; \
+         resolve_pipes_config(r'{}'); \
+         print(json.dumps(verify_installation(r'{}')))",
+        config_path,
+        config_path
+    );
+    
+    let output = match std::process::Command::new(&py_interpreter)
+        .args(&["-c", &py_code])
+        .output()
+    {
+        Ok(out) => out,
+        Err(e) => {
+            eprintln!("cpipe: verify error: Failed to run python verification script: {}", e);
+            std::process::exit(1);
+        }
+    };
+    
+    if !output.status.success() {
+        eprintln!(
+            "cpipe: verify error: Python script failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        std::process::exit(1);
+    }
+    
+    let stdout_str = String::from_utf8_lossy(&output.stdout);
+    let report_val: serde_json::Value = match serde_json::from_str(&stdout_str) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("cpipe: verify error: Failed to parse JSON: {}. Output: {}", e, stdout_str);
+            std::process::exit(1);
+        }
+    };
+    
+    let report = cpipe::server::format_verify_report(report_val);
+    println!("{}", report);
+}
+
+async fn cmd_handoff(
+    from_agent: &str,
+    to_agent: &str,
+    output: Option<&str>,
+    pipe_name: Option<&str>,
+    config_path: &str,
+) {
+    let input = match output {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => match read_input(None) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("cpipe: handoff error: Cannot read input: {}", e);
+                std::process::exit(1);
+            }
+        }
+    };
+    
+    if input.is_empty() {
+        return;
+    }
+    
+    let path = std::path::PathBuf::from(config_path);
+    let config = load_pipes_config_with_path(Some(&path));
+    
+    let tool_name = if from_agent.is_empty() { "a2a" } else { from_agent };
+    
+    let resolved_name = match pipe_name {
+        Some(name) if !name.is_empty() => Some(name.to_string()),
+        _ => cpipe::orchestrator::resolve_pipe_from_context(&config, tool_name, input.len()),
+    };
+    
+    let resolved_name = match resolved_name {
+        Some(name) => name,
+        None => {
+            print!("{}", input);
+            if !input.ends_with('\n') {
+                println!();
+            }
+            return;
+        }
+    };
+    
+    let pipe = match config.pipes.iter().find(|p| p.name == resolved_name) {
+        Some(p) => p,
+        None => {
+            print!("{}", input);
+            if !input.ends_with('\n') {
+                println!();
+            }
+            return;
+        }
+    };
+    
+    let start_time_str = chrono::Utc::now().to_rfc3339();
+    let start_t = std::time::Instant::now();
+    
+    let (result, _trace) = cpipe::orchestrator::run_pipe(
+        pipe,
+        &input,
+        Some(tool_name),
+        None,
+        &config.servers,
+    ).await;
+    
+    let latency_ms = start_t.elapsed().as_secs_f64() * 1000.0;
+    let session_id = format!("a2a-{}-{}", from_agent, to_agent);
+    
+    cpipe::telemetry::log_telemetry(
+        &session_id,
+        &start_time_str,
+        tool_name,
+        input.len(),
+        result.len(),
+        latency_ms,
+        false,
+        "a2a",
+        None,
+        &resolved_name,
+        "tier",
+    );
+    
+    print!("{}", result);
+    if !result.is_empty() && !result.ends_with('\n') {
+        println!();
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
     
     match cli.command {
-        Commands::Run { pipe_name, config, input_file, verbose } => {
-            cmd_run(&pipe_name, &config, input_file.as_deref(), verbose).await;
+        Commands::Run { pipe_name, config, input_file, start_line, end_line, verbose } => {
+            cmd_run(&pipe_name, &config, input_file.as_deref(), start_line, end_line, verbose).await;
         }
-        Commands::RunDynamic { nodes_json, input_file, verbose } => {
-            cmd_run_dynamic(&nodes_json, input_file.as_deref(), verbose).await;
+        Commands::RunDynamic { nodes_json, input_file, allow_shell, verbose } => {
+            cmd_run_dynamic(&nodes_json, input_file.as_deref(), allow_shell, verbose).await;
         }
         Commands::List { config } => {
             cmd_list(&config);
@@ -269,6 +557,12 @@ async fn main() {
                 eprintln!("cpipe: serve error: {}", e);
                 std::process::exit(1);
             }
+        }
+        Commands::Verify { config } => {
+            cmd_verify(&config).await;
+        }
+        Commands::Handoff { from, to, output, pipe_name, config } => {
+            cmd_handoff(&from, &to, output.as_deref(), pipe_name.as_deref(), &config).await;
         }
     }
 }

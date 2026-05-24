@@ -23,6 +23,22 @@ The original `context-pipe` engine was built in Python. While powerful and easy 
 
 ---
 
+## ⛓️ Unix Piping Lineage & Philosophy
+
+`cpipe` is directly and deliberately inspired by Unix terminal piping. The same primitive that made `cmd1 | cmd2 | cmd3` the most durable composition pattern in computing underlies every architectural decision here.
+
+The mapping is exact:
+- **OS process** ➔ Pipe node (binary, script, MCP tool)
+- **`stdout` ➔ `stdin` byte stream** ➔ Context stream between nodes
+- **Shell pipe operator (`|`)** ➔ `pipes.json`/`pipes.toml` node sequence
+- **`/dev/stderr` for diagnostics** ➔ Per-node `stderr` trace map
+- **Process timeout / `SIGKILL`** ➔ Timeout Guard (`PIPE_NODE_TIMEOUT_MS`)
+- **`tee` for stream splitting** ➔ T-Pipe (save raw copy mid-chain)
+
+This lineage means `cpipe` is **`stdin`/`stdout` first** (any tool that honors this can be a node, no SDK required), uses **single-responsibility nodes**, and is **language-agnostic** (Rust, Python, Node, and bash utilities are interchangeable at the pipe level).
+
+---
+
 ## 🛠️ Installation
 
 ### Pre-built Binaries
@@ -361,9 +377,14 @@ The `--verbose` flag prepends an audit header to stdout showing each node's inpu
 # Chain any tools on the fly (no pipes.json entry needed)
 cat error.log | cpipe run-dynamic '[{"cmd": "rg", "args": ["ERROR"]}, {"cmd": "jq", "args": [".message"]}]'
 
+# With relaxed JSON normalization for PowerShell (automatically handles unquoted/single-quoted keys):
+cpipe run-dynamic '[{cmd: rg, args: [ERROR]}]' < error.log
+
 # With verbose audit output
 cpipe run-dynamic '[{"cmd": "semantic-sift-cli", "args": ["logs"]}]' --verbose < build.log
 ```
+
+> 💡 **PowerShell Support**: When running in PowerShell, command-line quote stripping can corrupt raw JSON structures. `cpipe` automatically scans and normalizes relaxed JSON formats into RFC-compliant JSON prior to parsing.
 
 > ⚠️ **Security note**: Shell metacharacters in `cmd` are rejected. To enable curated shell utilities (`grep`, `awk`, `sed`, etc.), set `allow_shell: true` in the node — but the final node **must** end with a sifting tool (e.g. `semantic-sift-cli`) to guarantee context safety.
 
@@ -400,6 +421,22 @@ Curated CLI Tools on PATH:
   jq                       Command-line JSON processor
   rg                       Fast line-oriented search (ripgrep)
 ```
+
+#### `cpipe verify` — Installation Health Check
+```bash
+cpipe verify
+cpipe verify --config /path/to/pipes.toml
+```
+
+Performs a structured health check of the Context-Pipe installation. It resolves paths, verifies the presence of configured executables on `PATH`, and automatically links `semantic-sift` to ensure seamless execution.
+
+#### `cpipe handoff` — A2A Agent Handoff
+```bash
+# Pipe producer output to consumer through a named pipe
+cat agent_output.txt | cpipe handoff --from ProducerAgent --to ConsumerAgent --pipe-name semantic-refinery
+```
+
+Distills output from a producing agent before passing it to a consuming agent's context window. This prevents context window flooding at multi-agent boundaries. If `--pipe-name` is omitted, the appropriate pipe is resolved automatically based on input length or context.
 
 #### `cpipe stats` — Context Balance Sheet
 ```bash
@@ -507,7 +544,7 @@ To embed `cpipe` as a sidecar inside a Tauri application:
 | :--- | :--- | :--- |
 | `PIPE_CONFIG_PATH` | `pipes.json` | Explicit path to a `pipes.json` or `pipes.toml` file. Overrides auto-discovery. |
 | `PIPE_NODE_TIMEOUT_MS` | `10000` | Per-node subprocess timeout in milliseconds. Nodes that exceed this are killed and the pipe returns the input unchanged. |
-| `PIPE_AUTHORIZED_ROOT` | *(cwd)* | Path security boundary for `pipe_read_file`. Files outside this directory are rejected. Set to a parent directory (e.g. `/home/user/projects`) to authorise multiple repos without prompting. |
+| `PIPE_AUTHORIZED_ROOT` | *(cwd)* | Path security boundary for `pipe_read_file`. Files outside these directories are rejected. Supports a list of directories separated by the platform-specific path separator (`;` on Windows, `:` on macOS/Linux). |
 | `RUST_LOG` | *(off)* | Log level for the `cpipe` process (`error`, `warn`, `info`, `debug`, `trace`). Logs are written to `stderr` to preserve clean `stdout` data streams. |
 
 ---

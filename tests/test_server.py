@@ -127,6 +127,71 @@ async def test_resolve_safe_path_fallback_cwd(tmp_path):
     finally:
         os.chdir(old_cwd)
 
+@pytest.mark.anyio
+async def test_resolve_safe_path_multi_path_env(tmp_path, mock_context):
+    dir1 = tmp_path / "dir1"
+    dir1.mkdir()
+    dir2 = tmp_path / "dir2"
+    dir2.mkdir()
+    
+    file1 = dir1 / "file1.txt"
+    file1.touch()
+    file2 = dir2 / "file2.txt"
+    file2.touch()
+    
+    auth_root_val = f"{dir1}{os.pathsep}{dir2}"
+    with patch.dict(os.environ, {"PIPE_AUTHORIZED_ROOT": auth_root_val}):
+        resolved_1 = await server._resolve_safe_path(str(file1), None)
+        resolved_2 = await server._resolve_safe_path(str(file2), None)
+        assert os.path.exists(resolved_1)
+        assert os.path.exists(resolved_2)
+        
+        outside = tmp_path / "outside.txt"
+        outside.touch()
+        with pytest.raises(PermissionError):
+            await server._resolve_safe_path(str(outside), None)
+
+
+@pytest.mark.anyio
+async def test_resolve_safe_path_config_file_roots_override_env(tmp_path):
+    """Config-file authorized_roots are merged even when PIPE_AUTHORIZED_ROOT
+    is set to a narrow/client-injected value that excludes the target path.
+    This is the key test for the env-var override bypass."""
+    # dir_env: what the client injects — narrow, would normally block access
+    dir_env = tmp_path / "env_root"
+    dir_env.mkdir()
+    # dir_cfg: what we declare in pipes.json — should always be accessible
+    dir_cfg = tmp_path / "cfg_root"
+    dir_cfg.mkdir()
+
+    file_in_cfg = dir_cfg / "secret.txt"
+    file_in_cfg.touch()
+    file_in_env = dir_env / "normal.txt"
+    file_in_env.touch()
+
+    cfg_with_roots = {
+        "pipes": [{"name": "standard-distill", "nodes": [{"cmd": "sift"}]}],
+        "authorized_roots": [str(dir_cfg)],
+    }
+    cfg_file = tmp_path / "pipes_with_roots.json"
+    cfg_file.write_text(json.dumps(cfg_with_roots))
+
+    # Simulate client injecting a narrow PIPE_AUTHORIZED_ROOT that excludes dir_cfg
+    with patch.dict(os.environ, {"PIPE_AUTHORIZED_ROOT": str(dir_env)}):
+        with patch("context_pipe.server.CONFIG_PATH", str(cfg_file)):
+            # File in env root — must still work
+            resolved_env = await server._resolve_safe_path(str(file_in_env), None)
+            assert os.path.exists(resolved_env)
+
+            # File in config root — must work even though client didn't include it
+            resolved_cfg = await server._resolve_safe_path(str(file_in_cfg), None)
+            assert os.path.exists(resolved_cfg)
+
+            # File completely outside both — must still be denied
+            outside = tmp_path / "outside.txt"
+            outside.touch()
+            with pytest.raises(PermissionError):
+                await server._resolve_safe_path(str(outside), None)
 
 @pytest.mark.anyio
 async def test_pipe_analyze_file_returns_recommendation(tmp_path, mock_context):

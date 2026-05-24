@@ -426,7 +426,10 @@ Server definitions live in a `servers` block in `pipes.json` or `~/.mcp-pipe.jso
 Context-Pipe is a foundational member of the **Studio of Two** infrastructure. It is designed to work in high-fidelity harmony with:
 
 *   **[Semantic-Sift](https://github.com/luismichio/semantic-sift)**: The intelligent refinery for agentic context. Sift is the flagship distillation engine for Context-Pipe, providing the mathematical and neural sifting nodes used in our standard templates.
-*   **[std-context-lab](https://github.com/luismichio/std-context-lab)**: The official integration laboratory. This repository is strictly used for end-to-end integration testing, bug discovery, and verifying cross-repo compatibility between `context-pipe` and `semantic-sift`.
+*   **[std-context-lab](https://github.com/luismichio/std-context-lab)**: The official integration laboratory and test gauntlet. This repository serves as our isolated battle-testing ground where cross-repository capabilities, MCP server combinations, and terminal hook interactions are simulated and verified.
+    *   **Isolated Scenarios**: Runs isolated test cases mimicking real-world AI behaviors to reproduce and verify fixes without polluting core runtimes.
+    *   **Empirical Evidence**: Every resolved bug or feature is accompanied by a tracked execution log (`EVIDENCE.md`), serving as empirical proof of success.
+    *   **Platform Parity Gate**: Audits Python/Rust CLI parity and shell behaviors across Windows (PowerShell/CMD) and UNIX terminals before release.
 
 ---
 

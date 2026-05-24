@@ -85,17 +85,39 @@ async def pipe_run(pipe_name: str, input_text: str) -> str:
 
 
 async def _resolve_safe_path(path: str, ctx: Optional[Context] = None) -> str:
-    """Validates the path is within the authorized workspace roots."""
+    """Validates the path is within the authorized workspace roots.
+
+    Roots are sourced from (in merge order):
+    1. ``PIPE_AUTHORIZED_ROOT`` env var (client-injected, semicolon-separated).
+    2. ``authorized_roots`` key in the pipes config file (pipes.json).
+    3. MCP session roots reported by the client.
+    4. CWD fallback when no roots are provided.
+    """
     import os
     from urllib.parse import urlparse
     from urllib.request import url2pathname
 
     resolved_path = os.path.realpath(path)
-    workspace_roots = []
-    
+    workspace_roots: list[str] = []
+
+    # 1. Env-var roots (may be overridden/narrowed by the client at spawn time).
     if os.environ.get("PIPE_AUTHORIZED_ROOT"):
-        workspace_roots.append(os.path.realpath(os.environ["PIPE_AUTHORIZED_ROOT"]))
-        
+        for part in os.environ["PIPE_AUTHORIZED_ROOT"].split(os.pathsep):
+            part = part.strip()
+            if part:
+                workspace_roots.append(os.path.realpath(part))
+
+    # 2. Config-file roots — survives client env-var override because the
+    #    client can only inject env vars, not rewrite file contents.
+    try:
+        cfg = load_config()
+        for root in cfg.get("authorized_roots", []):
+            root = root.strip()
+            if root:
+                workspace_roots.append(os.path.realpath(root))
+    except Exception as e:
+        logger.warning(f"Could not load authorized_roots from config: {e}")
+
     if ctx and hasattr(ctx, "session"):
         try:
             roots_result = await ctx.session.list_roots()
