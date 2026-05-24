@@ -342,7 +342,7 @@ def get_security_gateway_command() -> str:
             "if (Test-Path $p) { "
             "if ((Get-Item $p).Length -gt 1024) { "
             '[Console]::Error.WriteLine("[BLOCKED by Context-Pipe] File > 1KB. Use pipe_read_file instead."); '
-            'exit 2 } }"'
+            'exit 2 } }" '
         )
     return (
         'SIZE=$(stat -c %s "$WINDSURF_TOOL_ARGS" 2>/dev/null || stat -f %z "$WINDSURF_TOOL_ARGS" 2>/dev/null || wc -c < "$WINDSURF_TOOL_ARGS" 2>/dev/null); '
@@ -436,24 +436,30 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
 
     # Filter out existing context-pipe hooks if we are adding a new one (idempotency/cleanup)
     if is_new_cp:
-        new_hooks_list = [h for h in hooks_list if not is_context_pipe_hook(h)]
-        changed = len(new_hooks_list) != len(hooks_list)
-        if new_hook in new_hooks_list:
-            # Already exactly present and others cleaned up
-            if changed:
-                data["hooks"][hook_key] = new_hooks_list
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(data, f, indent=2)
-                return True
-            return False
+        others = [h for h in hooks_list if is_context_pipe_hook(h) and h != new_hook]
+        already_present = new_hook in hooks_list
+
+        if others:
+            # Clean up legacy/duplicate hooks
+            cleaned_list = [h for h in hooks_list if not is_context_pipe_hook(h)]
+            data["hooks"][hook_key] = [new_hook] + cleaned_list
+            dir_path = os.path.dirname(path)
+            if dir_path:
+                os.makedirs(dir_path, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            return True
         
-        data["hooks"][hook_key] = [new_hook] + new_hooks_list
-        dir_path = os.path.dirname(path)
-        if dir_path:
-            os.makedirs(dir_path, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        return True
+        if not already_present:
+            data["hooks"][hook_key] = [new_hook] + hooks_list
+            dir_path = os.path.dirname(path)
+            if dir_path:
+                os.makedirs(dir_path, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            return True
+        
+        return False
 
     # For non-context-pipe hooks, use the old deduplication logic
     if new_hook in hooks_list:
@@ -608,10 +614,10 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: Any = "u
 - **Rules**:
   - Every `nodes_json` array MUST end with `{{\"cmd\": \"semantic-sift-cli\", \"args\": [\"semantic\"]}}` or equivalent sifting node.
   - Shell utilities (`grep`, `awk`, `jq`, `rg`, etc.) require `allow_shell=True`  only use when the final node is a sifter.
-  - Never put shell metacharacters (`|`, `;`, `&`, `$`) in a `cmd` value  use `args` instead.
+  - Never put shell metacharacters (`|`, `;`, `&`, `$`) in a `cmd` value - use `args` instead.
 - **Example**  extract ERROR lines then distil:
   ```json
-  [{{\"cmd\": \"grep\", \"args\": [\"ERROR\"]}}, {{\"cmd\": \"semantic-sift-cli\", \"args\": [\"logs\"]}}]
+  [{{\"cmd\": \"grep\", \"args\": [\"ERROR\"]}}, {{\\"cmd\\": \"semantic-sift-cli\", \"args\": [\"logs\"]}}]
   ```
 
 ## 4. A2A Agent Handoff  When to Use `pipe_agent_handoff`
@@ -993,7 +999,7 @@ def _inject_opencode(target_dir: str, cmd_str: str) -> list[str]:
             }
             oc_data["command"]["pipe-dynamic"] = {
                 "description": "Build and run an ad-hoc Context-Pipe from available tools",
-                "template": "Call pipe_list_shadow_tools() to discover available nodes (configured pipes + PATH tools). Construct a nodes_json array ending with semantic-sift-cli. Show the proposed node graph to the user, confirm, then call pipe_run_dynamic(nodes_json, input_text). Use allow_shell=True if the graph includes shell utilities (grep, awk, jq, rg).",
+                "template": "Call pipe_list_shadow_tools() to discover available nodes (configured pipes + PATH tools). Construct a nodes_json array ending with semantic-sift-cli. Show the proposed node graph to the user, confirm, then call pipe_run_dynamic(nodes_json, input_text). Use allow_shell=True if the <A>graph includes shell utilities (grep, awk, jq, rg).",
             }
             oc_data["command"]["pipe-handoff"] = {
                 "description": "Distil agent output before passing it to another agent",
@@ -1175,7 +1181,7 @@ def _inject_kilocode(target_dir: str, cmd_str: str) -> list[str]:
     kilo_rule_path = os.path.join(kilo_rule_dir, "context.md")
     with open(kilo_rule_path, "w", encoding="utf-8") as f:
         f.write(
-            "# Context-Pipe Kilo Code Constraints\n\nEnsure that all raw file reads use the `pipe_read_file` tool to prevent context flooding."
+            "# Context-Pipe Kilo Code Constraints\\n\\nEnsure that all raw file reads use the `pipe_read_file` tool to prevent context flooding."
         )
     actions.append("Injected Kilo Code workspace rules.")
     return actions
@@ -1204,15 +1210,15 @@ alwaysApply: false
         ),
         "pipe-run.md": (
             "Run a named Context-Pipe on the current context",
-            "1. Call `list_pipes()` from the `context-pipe` MCP server to show available pipes.\n2. If the user has not specified a pipe name, ask them to choose from the list.\n3. Ask the user to confirm or paste the input text to process, or use the current conversation context.\n4. Call `pipe_run(pipe_name, input_text)`.\n5. Display the audit header (compression ratio, latency) and the distilled result.",
+            "1. Call `list_pipes()` from the `context-pipe` MCP server to show available pipes.\\n2. If the user has not specified a pipe name, ask them to choose from the list.\\n3. Ask the user to confirm or paste the input text to process, or use the current conversation context.\\n4. Call `pipe_run(pipe_name, input_text)`.\\n5. Display the audit header (compression ratio, latency) and the distilled result.",
         ),
         "pipe-dynamic.md": (
             "Build and run an ad-hoc Context-Pipe from available tools",
-            "1. Call `pipe_list_shadow_tools()` from the `context-pipe` MCP server to discover available nodes (configured pipes + PATH tools like jq, rg, markitdown, pandoc).\n2. Based on the user's goal, construct a `nodes_json` array. Rules:\n   - Every array MUST end with a sifting node: `{\"cmd\": \"semantic-sift-cli\", \"args\": [\"semantic\"]}`.\n   - Shell utilities (grep, awk, jq, rg) require `allow_shell=True` - only use when the final node is a sifter.\n   - Never put shell metacharacters (|, ;, &, $) in a `cmd` value - use `args` instead.\n3. Show the user the proposed node graph and confirm before executing.\n4. Call `pipe_run_dynamic(nodes_json, input_text, allow_shell=<bool>)`.\n5. Display the audit header and distilled result.",
+            "1. Call `pipe_list_shadow_tools()` from the `context-pipe` MCP server to discover available nodes (configured pipes + PATH tools like jq, rg, markitdown, pandoc).\\n2. Based on the user's goal, construct a `nodes_json` array. Rules:\\n   - Every array MUST end with a sifting node: `{\"cmd\": \"semantic-sift-cli\", \"args\": [\"semantic\"]}`.\\n   - Shell utilities (grep, awk, jq, rg) require `allow_shell=True` - only use when the final node is a sifter.\\n   - Never put shell metacharacters (|, ;, &, $) in a `cmd` value - use `args` instead.\\n3. Show the user the proposed node graph and confirm before executing.\\n4. Call `pipe_run_dynamic(nodes_json, input_text, allow_shell=<bool>)`.\\n5. Display the audit header and distilled result.",
         ),
         "pipe-handoff.md": (
             "Distil agent output before passing it to another agent",
-            "Use this at any agent-to-agent handoff boundary to prevent context flooding.\n1. Identify the output text from Agent A and the name of Agent B that will consume it.\n2. Call `pipe_agent_handoff(output, from_agent=\"<A>\", to_agent=\"<B>\")` from the `context-pipe` MCP server.\n   - If you know the content type, pass `pipe_name` explicitly (e.g. `pipe_name=\"semantic-refinery\"`). \n   - Otherwise omit `pipe_name` and routing is determined automatically by pipes.json mappings.\n3. Pass the returned distilled text as the input to Agent B.",
+            "Use this at any agent-to-agent handoff boundary to prevent context flooding.\\n1. Identify the output text from Agent A and the name of Agent B that will consume it.\\n2. Call `pipe_agent_handoff(output, from_agent=\"<A>\", to_agent=\"<B>\")` from the `context-pipe` MCP server.\\n   - If you know the content type, pass `pipe_name` explicitly (e.g. `pipe_name=\"semantic-refinery\"`). \\n   - Otherwise omit `pipe_name` and routing is determined automatically by pipes.json mappings.\\n3. Pass the returned distilled text as the input to Agent B.",
         ),
     }
 
@@ -1374,4 +1380,3 @@ def inject_hooks(target_dir: str, environment: str) -> list[str]:
             actions.extend(_inject_antigravity(target_dir, cmd_str))
 
     return actions
-

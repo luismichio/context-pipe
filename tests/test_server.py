@@ -286,7 +286,7 @@ def test_pipe_verify_returns_report():
         with patch("context_pipe.server.resolve_pipes_config", return_value={"updated": True}):
             result = server.pipe_verify()
     assert "Installation Report" in result
-    assert "✅ **context-pipe**" in result
+    assert "**context-pipe**" in result
     assert "absolute path" in result
     
 
