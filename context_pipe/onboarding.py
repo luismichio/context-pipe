@@ -809,7 +809,7 @@ def remove_shell_aliases() -> List[str]:
     )
 
     for profile in _POSIX_PROFILES + _PWSH_PROFILES:
-        expanded = os.expanduser(profile)
+        expanded = os.path.expanduser(profile)
         if not os.path.exists(expanded):
             continue
         try:
