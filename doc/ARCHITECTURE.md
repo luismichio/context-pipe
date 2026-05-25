@@ -68,7 +68,6 @@ Each node is a dictionary following this schema:
 | `type` | string | `"binary"` | `"binary"`, `"script"`, or `"mcp"`. |
 | `optional` | boolean | `false` | If `true`, orchestration continues even if the node fails. |
 | `help_msg` | string | `""` | User-friendly instruction shown on node failure. |
-| `shell` | boolean | `false` | (DEPRECATED) Enables shell interpolation. |
 | `tee` | object | `null` | Optional T-Pipe configuration for stream splitting. |
 
 ### The Timeout Guard
@@ -139,7 +138,7 @@ The platform includes a "Subconscious Interceptor" that acts as a universal poly
 
 ### Platform detection
 Using `platforms.py`, the hook identifies the host environment via:
-- **Environment Variables**: Fingerprints for 12+ platforms (Antigravity, Cursor, Windsurf, etc.).
+- **Environment Variables**: Fingerprints for 13+ platforms (Antigravity, Cursor, Windsurf, pi.dev, etc.).
 - **Parent Process Inspection**: High-fidelity detection via `psutil`.
 
 ### The Polyfill Wrapper (`wrapper.py`)
@@ -296,7 +295,7 @@ bash, sh, awk, sed, grep, cut, sort, uniq, tr, head, tail,
 wc, cat, echo, printf, xargs, python, python3, jq, yq
 ```
 
-Any node whose command is not in the allowlist AND has `shell: true` raises a `ValueError` and the pipe is rejected before any subprocess is spawned.
+Any node whose command is not in the allowlist in a dynamic pipe where shell utilities are enabled (via `allow_shell=True`) raises a `ValueError` and the pipe is rejected before any subprocess is spawned.
 
 ### Sift-Terminal Guard (`_SIFT_TERMINAL_CMDS`)
 

@@ -5,7 +5,15 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.7] — 2026-05-25
+### ✨ Features & Parity
+- **Onboarding CLI & Auto-Detect**: Added `onboard` subcommand to `mcp-pipe` CLI and enabled auto-detection in `pipe_onboard` MCP tool.
+- **Global Entry Point**: Added `context-pipe-onboard` global console script for direct workspace initialization.
+- **Documentation Alignment**: Purged stale `shell: true` references and synchronized use cases with the native execution model.
+
+## [0.4.6] — 2026-05-25
+### 🔧 Maintenance
+- Internal version bump for documentation alignment release.
 
 ## [0.4.5] — 2026-05-24
 ### ✨ Features & Parity

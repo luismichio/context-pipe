@@ -20,7 +20,7 @@ Without CPP, the LLM reads raw, unformatted code, wasting reasoning tokens tryin
 {
   "name": "react-pr-reviewer",
   "nodes": [
-    { "cmd": "npx", "args": ["eslint", "--stdin", "--fix-dry-run"], "shell": true },
+    { "cmd": "npx", "args": ["eslint", "--stdin", "--fix-dry-run"] },
     { "type": "script", "cmd": "senior-react-engineer" },
     { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.7"] }
   ]
@@ -44,7 +44,7 @@ Without CPP, the context window floods instantly, the LLM hallucinates, or the r
 {
   "name": "k8s-incident-responder",
   "nodes": [
-    { "cmd": "grep", "args": ["-iE", "error|exception|panic"], "shell": true },
+    { "cmd": "grep", "args": ["-iE", "error|exception|panic"] },
     { "type": "script", "cmd": "pii-masker" },
     { "cmd": "semantic-sift-cli", "args": ["logs"] }
   ]
@@ -103,7 +103,7 @@ Without CPP, the agent gets overwhelmed by the sheer volume of code and misses s
 {
   "name": "security-auditor",
   "nodes": [
-    { "cmd": "bandit", "args": ["-f", "json", "-s", "B101,B102", "-"], "shell": true },
+    { "cmd": "bandit", "args": ["-f", "json", "-s", "B101,B102", "-"] },
     { "type": "script", "cmd": "owasp-security-expert" },
     { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.6"] }
   ]
@@ -152,7 +152,7 @@ A standard `curl` fails here because the DOM hasn't rendered. You need a headles
 {
   "name": "spa-a11y-reviewer",
   "nodes": [
-    { "cmd": "node", "args": ["scripts/dump_dom.js"], "shell": true },
+    { "cmd": "node", "args": ["scripts/dump_dom.js"] },
     { "cmd": "python", "args": ["-m", "markitdown"] },
     { "type": "script", "cmd": "a11y-auditor" },
     { "cmd": "semantic-sift-cli", "args": ["semantic", "--rate", "0.5"] }

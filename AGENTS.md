@@ -55,7 +55,7 @@ Before acting on any non-trivial task, produce a plan first.
 
 ### Architecture
 - **The Spine**: `orchestrator.py` handles OS-level piping and timeout guards.
-- **The Switchboard**: `pipe_hook.py` provides universal interception for IDEs.
+- **The Switchboard**: `pipe_hook.py` and native extensions (e.g. pi.dev) provide universal interception for IDEs and CLI agents.
 - **The Protocol**: `doc/CONTEXT_PIPE_PROTOCOL.md` defines the standard for tool interoperability.
 
 ---

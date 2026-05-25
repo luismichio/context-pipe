@@ -48,6 +48,7 @@ To install the Context-Pipe server, find your software in the matrix below and c
 | **OpenCode** | `<project-root>/opencode.json` (project-level) or `%APPDATA%/opencode/opencode.json` (global) | `mcp` | **B** (Array) |
 | **Google Antigravity**| `~/.gemini/antigravity/mcp_config.json` | `mcpServers` | **A** (Standard) |
 | **Cline / Roo Code** | IDE settings menu | `mcpServers` | **C** (Extended) |
+| **pi.dev** | `~/.pi/agent/settings.json` | `extensions` | **E** (Native) |
 
 ---
 
@@ -103,6 +104,16 @@ To install the Context-Pipe server, find your software in the matrix below and c
   }
 }
 ```
+
+### E. Native Extension Schema (pi.dev)
+```json
+{
+  "extensions": [
+    "./.pi/extensions/context-pipe.ts"
+  ]
+}
+```
+*Note: pi.dev follows a "No MCP" philosophy. Context-Pipe tools are registered as native pi tools via this extension.*
 
 ---
 

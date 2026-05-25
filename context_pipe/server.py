@@ -300,19 +300,25 @@ def pipe_audit_last() -> str:
 
 
 @mcp.tool()
-def pipe_onboard(environment: str, target_dir: Optional[str] = None) -> str:
+def pipe_onboard(environment: Optional[str] = None, target_dir: Optional[str] = None) -> str:
     """
     Initializes Context-Pipe hooks and commands in the current project.
     Args:
         environment: The IDE/CLI environment (e.g., 'Cursor', 'VSCode', 'Gemini').
-        target_dir: Optional directory to onboard. Defaults to current directory.
+                     If omitted, auto-detection is performed.
+        target_dir:  Optional directory to onboard. Defaults to current directory.
     """
     path = target_dir or os.getcwd()
-    actions = inject_hooks(path, environment)
-    if not actions:
-        return f"Context-Pipe is already active or no targets found in {path}.\n"
+    env = environment
+    if not env:
+        env = detect_client_id()
+        logger.info(f"Auto-detected environment for onboarding: {env}")
 
-    return "Onboarding Successful:\n" + "\n".join([f"- {a}" for a in actions])
+    actions = inject_hooks(path, env)
+    if not actions:
+        return f"Context-Pipe is already active or no targets found in {path} (Environment: {env}).\n"
+    return f"Onboarding Successful (Environment: {env}):\n" + "\n".join([f"- {a}" for a in actions])
+
 
 
 @mcp.tool()

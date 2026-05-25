@@ -17,6 +17,7 @@ def detect_client_id() -> str:
         ("ANTIGRAVITY_AGENT", "Google Antigravity"),
         ("OPENCODE", "OpenCode"),
         ("OPENCODE_PID", "OpenCode"),
+        ("PI_CODING_AGENT_DIR", "pi.dev"),
         ("CURSOR_TRACE_ID", "Cursor"),
         ("VSCODE_PID", "VSCode"),
         ("WINDSURF_TOOL_ARGS", "Windsurf"),
@@ -27,7 +28,6 @@ def detect_client_id() -> str:
         ("CLAUDE_TOOL_NAME", "Claude Desktop"),
         ("GEMINI_SESSION_ID", "Gemini CLI"),
     ]
-
     for var, label in _ENV_MAP:
         if os.environ.get(var):
             return label
@@ -36,6 +36,7 @@ def detect_client_id() -> str:
     _PROC_MAP = [
         ("antigravity", "Google Antigravity"),
         ("opencode", "OpenCode"),
+        ("pi", "pi.dev"),
         ("cursor", "Cursor"),
         ("windsurf", "Windsurf"),
         ("claude", "Claude Desktop"),

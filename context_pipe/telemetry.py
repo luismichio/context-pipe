@@ -34,8 +34,8 @@ def _resolve_telemetry_path() -> str:
 
 TELEMETRY_FILE = _resolve_telemetry_path()
 
-# Telemetry Consent Gate (Opt-Out by Default)
-# Telemetry runs automatically to provide the Context Balance Sheet.
+# Telemetry Consent Gate (Opt-In by Default)
+# Telemetry runs ONLY when SIFT_TELEMETRY_OPTED_IN=true is explicitly set.
 # Kill-switch CPP_TELEMETRY_DISABLED=true is respected for privacy.
 def _check_telemetry_disabled() -> bool:
     # 1. Environment variable (Highest priority kill-switch)
@@ -43,18 +43,30 @@ def _check_telemetry_disabled() -> bool:
         os.environ.get("PIPE_TELEMETRY_DISABLED", "").lower() == "true"):
         return True
     
+    if os.environ.get("SIFT_TELEMETRY_OPTED_IN", "").lower() == "true":
+        return False
+
     # 2. Local .gemini/settings.json (Consent check)
-    # Orchestrator is opt-out, but Semantic-Sift is opt-in.
-    # We follow Sift's opt-in state for the cloud pulses.
+    # Orchestrator and Engine follow the same Sift opt-in state for cloud pulses.
     try:
+        def find_in_dict(d: dict, key: str) -> Optional[str]:
+            if key in d:
+                return str(d[key])
+            for v in d.values():
+                if isinstance(v, dict):
+                    res = find_in_dict(v, key)
+                    if res:
+                        return res
+            return None
+
         curr = os.path.abspath(os.getcwd())
         while True:
             settings_path = os.path.join(curr, ".gemini", "settings.json")
             if os.path.exists(settings_path):
                 with open(settings_path, "r") as f:
                     settings = json.load(f)
-                    # If Sift is opted in, we enable pulses.
-                    if str(settings.get("SIFT_TELEMETRY_OPTED_IN", "")).lower() == "true":
+                    val = find_in_dict(settings, "SIFT_TELEMETRY_OPTED_IN")
+                    if val and val.lower() == "true":
                         return False
             parent = os.path.dirname(curr)
             if parent == curr:
@@ -64,7 +76,7 @@ def _check_telemetry_disabled() -> bool:
         pass
     
     # Default to disabled if no settings found (safe default for IDE hooks)
-    return False
+    return True
 
 PIPE_TELEMETRY_DISABLED = _check_telemetry_disabled()
 

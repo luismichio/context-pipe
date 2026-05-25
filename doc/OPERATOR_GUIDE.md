@@ -11,7 +11,7 @@ The recommended setup clones both repos side-by-side and uses a single **master 
 ```
 ~/Workbench/GitHub/
   context-pipe/       ← orchestration layer
-    venv/             ← MASTER venv (Python 3.13+, any OS)
+    venv/             ← MASTER venv (Python 3.10+, any OS)
   semantic-sift/      ← neural distillation engine
     venv312/          ← ML runtime venv (Python 3.12, torch/cuda)
 ```
@@ -41,7 +41,7 @@ python -m venv venv
 uv pip install -e .
 ```
 
-> The package name in `pyproject.toml` is `mcp-context-pipe` (PyPI) but installs as the `context_pipe` module. The editable install registers `context-pipe`, `context-pipe-server`, and `context-pipe-script` CLI entry points.
+> The package name in `pyproject.toml` is `mcp-context-pipe` (PyPI) but installs as the `context_pipe` module. The editable install registers `context-pipe`, `context-pipe-onboard`, `context-pipe-server`, `context-pipe-script`, and `mcp-pipe` CLI entry points.
 
 ### Step 4 — Cross-install semantic-sift into the master venv (editable)
 
@@ -141,8 +141,8 @@ Once both servers are connected, ask your AI assistant to configure the workspac
 1. **Creates `pipes.json`**: If the file is missing, it creates a default configuration with production-grade templates for logs (`standard-distill`) and code (`semantic-refinery`).
 2. **Auto-Links Sift**: Discovers the absolute path to `semantic-sift-cli` and rewrites every `pipes.json` node to use it (idempotent).
 3. **Git Protection**: Automatically appends internal artifacts (`.pipe_cache/`, `.pipe_identity`, `.pipe_telemetry.jsonl`) to the project's `.gitignore` file.
-4. **Injects Hooks**: Automatically configures `.cursor/hooks.json`, `.github/hooks/`, and `opencode.json` hooks. For **Gemini CLI**, it registers both `AfterTool` and `PreCompress` hooks in `.gemini/settings.json`.
-5. **Injects Rules**: Creates slash commands like `/pipe-run` and `/pipe-stats` in Cursor rules and Gemini CLI commands.
+4. **Injects Hooks**: Automatically configures `.cursor/hooks.json`, `.github/hooks/`, and `opencode.json` hooks. For **pi.dev**, creates a native extension at `.pi/extensions/context-pipe.ts`. For **Gemini CLI**, it registers both `AfterTool` and `PreCompress` hooks in `.gemini/settings.json`.
+5. **Injects Rules**: Creates slash commands like `/pipe-run` and `/pipe-stats` in Cursor rules, Gemini CLI commands, and pi.dev native tools.
 6. **Injects Mandates**: Adds the Agent SOP mandate to `AGENTS.md` and other instruction files.
 
 ---
@@ -373,11 +373,11 @@ Context-Pipe includes an automated engine to configure your project workspace wi
 Once you have connected the MCP server to your IDE, ask your AI assistant:
 > *"Run `pipe_onboard(environment='Cursor')` to configure this project."*
 
-Replace `'Cursor'` with your active environment (e.g., `'Gemini'`, `'VSCode'`, `'Windsurf'`, `'Claude'`, `'Cline'`, `'OpenCode'`). If `environment` is omitted, `pipe_onboard` **auto-detects** your IDE by inspecting environment variables and parent-process names across 12+ platforms.
+Replace `'Cursor'` with your active environment (e.g., `'Gemini'`, `'VSCode'`, `'Windsurf'`, `'Claude'`, `'Cline'`, `'OpenCode'`, `'pi'`). If `environment` is omitted, `pipe_onboard` **auto-detects** your IDE by inspecting environment variables and parent-process names across 13+ platforms.
 
 ### What Onboarding Does
 1.  **Agent SOP Injection**: Injects the Context-Pipe SOP into `AGENTS.md`, `.cursorrules`, and other instruction files. This forces the agent to use `pipe_read_file` for all file I/O.
-2.  **Hook Injection**: Automatically configures `.cursor/hooks.json` or `.github/hooks/` to use the `context-pipe wrap` polyfill for all other tool calls. For OpenCode, generates a TypeScript plugin at `.opencode/plugins/context-pipe.ts`. **Note**: the OpenCode plugin is currently a documented placeholder — `tool.execute.after` does not fire correctly for MCP tools as of v1.14.39 ([sst/opencode#21149](https://github.com/sst/opencode/issues/21149)). The `AGENTS.md` SOP mandate is the active interception strategy in OpenCode workspaces.
+2.  **Hook Injection**: Automatically configures `.cursor/hooks.json` or `.github/hooks/` to use the `context-pipe wrap` polyfill for all other tool calls. For OpenCode, generates a TypeScript plugin at `.opencode/plugins/context-pipe.ts`. For **pi.dev**, generates a native extension at `.pi/extensions/context-pipe.ts`. **Note**: the OpenCode plugin is currently a documented placeholder — `tool.execute.after` does not fire correctly for MCP tools as of v1.14.39 ([sst/opencode#21149](https://github.com/sst/opencode/issues/21149)). The `AGENTS.md` SOP mandate is the active interception strategy in OpenCode workspaces.
 3.  **Security Gateways**: Injects blocking hooks into Windsurf and Cline to proactively prevent large native file reads.
 4.  **Subagent Shielding**: Recursively discovers specialized agent configs (e.g., in `.cursor/agents/`) and applies context protection to them.
 5.  **Refinery Auto-Link**: Discovers `semantic-sift-cli` across all known locations (current venv, system PATH, pipx, sibling venv directories) and writes its **absolute path** into `pipes.json`. This means context-pipe and semantic-sift can live in completely separate virtual environments — no manual linking required.
@@ -448,7 +448,8 @@ If semantic-sift is not found, the report will include actionable install instru
 Context-Pipe proactively checks for updates during `pipe_verify` and `pipe_onboard`. If a newer version is available on GitHub, the report will include a warning:
 
 ```
-âš ï¸  Update Available: A newer version (v0.3.1) is available. Run `pip install --upgrade mcp-context-pipe` to apply.
+⚠️ Update Available: A newer version (v0.4.5) is available. Run `pip install --upgrade mcp-context-pipe` to apply.
+
 ```
 
 This ensures you are always testing against the latest stable primitives without needing to manually monitor the repository.

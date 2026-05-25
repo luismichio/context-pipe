@@ -74,7 +74,7 @@ Data-driven routing that resolves the optimal pipe automatically based on three 
 Eight MCP tools expose every capability to AI assistants directly: `pipe_run`, `pipe_run_dynamic`, `pipe_read_file`, `pipe_analyze_file`, `pipe_list_shadow_tools`, `pipe_agent_handoff`, `get_pipe_stats`, and `pipe_onboard`. The `mcp-pipe` CLI mirrors the same surface for terminal-first workflows — no IDE required. Shadow Tool Discovery (`pipe_list_shadow_tools`) gives the agent a live capability manifest combining configured pipes and curated PATH tools (`jq`, `rg`, `markitdown`, `pandoc`…).
 
 ### 5. Subconscious Interceptors (`pipe_hook.py` + `onboarding.py`)
-IDE hooks that apply pipes transparently after every tool call — without the agent needing to invoke `pipe_run` explicitly. Supported: Cursor (`postToolUse`), VS Code/GitHub (hooks), Claude Code/Qwen/Codex (`PostToolUse`), Windsurf and Cline (pre-read security gateway), OpenClaw (native plugin). For OpenCode, the `AGENTS.md` SOP mandate is the active strategy (see [Known Limitations](#️-known-limitations)). `pipe_onboard` injects all hooks, slash commands (`/pipe-run`, `/pipe-dynamic`, `/pipe-handoff`, `/pipe-stats`), and the full agent SOP in one command.
+IDE hooks that apply pipes transparently after every tool call — without the agent needing to invoke `pipe_run` explicitly. Supported: Cursor (`postToolUse`), VS Code/GitHub (hooks), Claude Code/Qwen/Codex (`PostToolUse`), Windsurf and Cline (pre-read security gateway), OpenClaw (native plugin), and **pi.dev** (native TypeScript extension). For OpenCode, the `AGENTS.md` SOP mandate is the active strategy (see [Known Limitations](#⚠️-known-limitations)). `pipe_onboard` injects all hooks, slash commands (`/pipe-run`, `/pipe-dynamic`, `/pipe-handoff`, `/pipe-stats`), and the full agent SOP in one command.
 
 ### 6. The A2A Bridge (`a2a.py`)
 `pipe_agent_handoff()` distils Agent A's output before it enters Agent B's context window. Framework-agnostic — no monkey-patching. Works in CrewAI task callbacks, Google ADK transfer hooks, LangGraph edge functions, or any custom handoff point. Available as both a Python function and an MCP tool. Returns the original output unchanged on any error, so the agent chain is never interrupted.
@@ -380,10 +380,10 @@ echo "# My Doc" | mcp-pipe run-dynamic '[{"cmd":"markitdown"},{"cmd":"semantic-s
 
 Context-Pipe supports more than just simple binaries. You can chain standard OS tools and expert mandates.
 
-### 1. Bash Nodes (`shell: true`)
-Execute arbitrary shell commands as part of your pipe.
+### 1. Bash Nodes (Sandboxed)
+Execute arbitrary shell commands as part of your pipe. By design, all commands are executed natively with `shell=False` to prevent injection vulnerabilities.
 ```json
-{ "cmd": "grep 'ERROR'", "shell": true }
+{ "cmd": "grep", "args": ["ERROR"] }
 ```
 
 ### 2. Script Nodes

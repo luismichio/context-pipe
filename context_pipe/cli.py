@@ -408,6 +408,28 @@ def _cmd_tool(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_onboard(args: argparse.Namespace) -> int:
+    """Initializes Context-Pipe hooks and commands."""
+    from .onboarding import inject_hooks
+    target_dir = getattr(args, "target_dir", None) or os.getcwd()
+    environment = getattr(args, "environment", None)
+    
+    if not environment:
+        from .platforms import detect_client_id
+        environment = detect_client_id()
+        print(f"Auto-detected environment: {environment}")
+
+    actions = inject_hooks(target_dir, environment)
+    if not actions:
+        print(f"Context-Pipe is already active or no targets found in {target_dir}.")
+        return 0
+    
+    print("Onboarding Successful:")
+    for a in actions:
+        print(f"- {a}")
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mcp-pipe",
@@ -501,6 +523,13 @@ def _build_parser() -> argparse.ArgumentParser:
     verify_p.add_argument("--config", default="pipes.json", metavar="PATH",
                           help="Path to local pipes.json (default: pipes.json).")
 
+    # --- onboard ---
+    onb_p = sub.add_parser("onboard", help="Initialize Context-Pipe hooks and commands.")
+    onb_p.add_argument("environment", nargs="?", default=None,
+                       help="The IDE/CLI environment (e.g., 'Cursor', 'VSCode', 'Gemini'). If omitted, auto-detection is performed.")
+    onb_p.add_argument("--target-dir", "--target_dir", dest="target_dir", metavar="PATH",
+                       help="Optional directory to onboard (default: current directory).")
+
     # --- handoff ---
     handoff_p = sub.add_parser("handoff", help="Distil agent output before passing it to another agent.")
     handoff_p.add_argument("--from", "--from-agent", "--from_agent", dest="from_agent", default="a2a",
@@ -545,6 +574,7 @@ def main() -> None:
         "tool": _cmd_tool,
         "handoff": _cmd_handoff,
         "verify": _cmd_verify,
+        "onboard": _cmd_onboard,
     }
 
     handler = dispatch.get(args.command)

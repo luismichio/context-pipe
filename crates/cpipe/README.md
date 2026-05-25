@@ -386,7 +386,7 @@ cpipe run-dynamic '[{"cmd": "semantic-sift-cli", "args": ["logs"]}]' --verbose <
 
 > 💡 **PowerShell Support**: When running in PowerShell, command-line quote stripping can corrupt raw JSON structures. `cpipe` automatically scans and normalizes relaxed JSON formats into RFC-compliant JSON prior to parsing.
 
-> ⚠️ **Security note**: Shell metacharacters in `cmd` are rejected. To enable curated shell utilities (`grep`, `awk`, `sed`, etc.), set `allow_shell: true` in the node — but the final node **must** end with a sifting tool (e.g. `semantic-sift-cli`) to guarantee context safety.
+> ⚠️ **Security note**: Shell metacharacters in `cmd` are rejected. To enable curated shell utilities (`grep`, `awk`, `sed`, etc.), use the `--allow-shell` flag (or `allow_shell: true` in the `pipe_run_dynamic` MCP call) — but the final node **must** end with a sifting tool (e.g. `semantic-sift-cli`) to guarantee context safety.
 
 #### `cpipe list` — Shadow Tool Discovery
 ```bash

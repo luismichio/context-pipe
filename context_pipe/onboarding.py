@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Luis Kobayashi. All rights reserved.
-
 import os
 import json
 import re
@@ -17,7 +16,6 @@ def check_for_updates() -> str:
         import urllib.request
         import json
         from . import __version__
-        
         req = urllib.request.Request("https://pypi.org/pypi/mcp-context-pipe/json", headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req, timeout=2) as response:  # nosec B310
             data = json.loads(response.read())
@@ -28,30 +26,31 @@ def check_for_updates() -> str:
         pass
     return ""
 
+
 def check_performance_tax(pipes_json_path: str) -> str:
     """Scans pipes.json for Python interpreted nodes and warns about the Subprocess Tax."""
     try:
         import json
         with open(pipes_json_path, "r", encoding="utf-8") as f:
             config = json.load(f)
-            
+
         has_python_node = False
         for pipe in config.get("pipes", []):
             for node in pipe.get("nodes", []):
                 cmd = str(node.get("cmd", "")).lower()
                 args = " ".join(str(a).lower() for a in node.get("args", []))
-                
                 if cmd == "python" or cmd == "python3" or cmd.endswith(".py") or ".py " in args:
                     has_python_node = True
                     break
             if has_python_node:
                 break
-                
+
         if has_python_node:
             return "  Performance Notice: You are piping data through interpreted Python nodes. For high-concurrency agent loops, consider migrating to pre-compiled binaries (e.g., Rust/Go) to eliminate the ~100ms Python startup tax."
     except Exception:
         pass
     return ""  # Development/editable mode or not installed via pip
+
 
 DEFAULT_PIPES_CONFIG = {
     "version": "1.0",
@@ -124,9 +123,7 @@ def build_runtime_hook_command(env_vars: dict[str, str] | None = None) -> str:
     # "Unexpected token '-W' in expression or statement." (Bug REPORT_027)
     if os.name == "nt":
         cmd = f"& {cmd}"
-
     return cmd
-
 
 
 def discover_sift_executable() -> Optional[str]:
@@ -144,7 +141,6 @@ def discover_sift_executable() -> Optional[str]:
     """
     cli_name = "semantic-sift-cli"
     exe_name = f"{cli_name}.exe" if os.name == "nt" else cli_name
-
     candidates: List[str] = []
 
     # 1. Current venv
@@ -196,18 +192,16 @@ def resolve_pipes_config(pipes_json_path: str) -> Dict[str, Any]:
     with the discovered absolute executable path.
 
     Returns a dict with keys:
-        - 'sift_path': str | None  resolved path or None
-        - 'updated': bool  whether pipes.json was modified
-        - 'pipes_path': str  path that was read/written
+    - 'sift_path': str | None  resolved path or None
+    - 'updated': bool  whether pipes.json was modified
+    - 'pipes_path': str  path that was read/written
     """
     result: Dict[str, Any] = {"sift_path": None, "updated": False, "pipes_path": pipes_json_path}
-
     if not os.path.exists(pipes_json_path):
         return result
 
     sift_exe = discover_sift_executable()
     result["sift_path"] = sift_exe
-
     if not sift_exe:
         return result
 
@@ -238,14 +232,12 @@ def resolve_pipes_config(pipes_json_path: str) -> Dict[str, Any]:
 def verify_installation(pipes_json_path: Optional[str] = None) -> Dict[str, Any]:
     """
     Verifies the health of the context-pipe + semantic-sift installation.
-
     Checks:
     - context-pipe orchestrator is importable
     - pipes.json exists and is valid JSON
     - semantic-sift-cli is discoverable
     - semantic-sift-cli responds to --version
     - Each pipe node command is resolvable
-
     Returns a structured report dict.
     """
     report: Dict[str, Any] = {
@@ -330,7 +322,6 @@ def verify_installation(pipes_json_path: Optional[str] = None) -> Dict[str, Any]
 
     # 6. Overall
     report["overall"] = report["context_pipe"]["ok"] and report["pipes_config"]["ok"] and report["semantic_sift"]["ok"]
-
     return report
 
 
@@ -359,6 +350,7 @@ def update_gitignore(target_dir: str) -> str:
     """
     path = os.path.join(target_dir, ".gitignore")
     entries = [".pipe_telemetry.json", ".pipe_telemetry.jsonl", ".pipe_cache/", ".pipe_identity"]
+
     try:
         content = ""
         if os.path.exists(path):
@@ -375,6 +367,7 @@ def update_gitignore(target_dir: str) -> str:
 
         with open(path, "a", encoding="utf-8") as f:
             f.write("\n# Project Specific (Context-Pipe)\n" + "\n".join(added) + "\n")
+
         return f"Added artifacts to `.gitignore`: {', '.join(added)}"
     except OSError as e:
         return f"Error updating `.gitignore`: {str(e)}"
@@ -384,7 +377,6 @@ def discover_agent_configs(target_dir: str) -> List[str]:
     """Recursively discovers specialized agent configurations and mandates."""
     found_paths = []
     agent_dirs = [".codex/agents", ".cursor/agents", ".junie/agents", ".agents"]
-
     for d in agent_dirs:
         full_dir = os.path.join(target_dir, d)
         if os.path.exists(full_dir):
@@ -417,6 +409,7 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
 
     if "hooks" not in data:
         data["hooks"] = {}
+
     hooks_list = data["hooks"].get(hook_key, [])
 
     def is_context_pipe_hook(obj: Any) -> bool:
@@ -449,7 +442,7 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
             return True
-        
+
         if not already_present:
             data["hooks"][hook_key] = [new_hook] + hooks_list
             dir_path = os.path.dirname(path)
@@ -458,7 +451,6 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
             return True
-        
         return False
 
     # For non-context-pipe hooks, use the old deduplication logic
@@ -480,6 +472,7 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
 
     new_cmds = get_commands(new_hook)
     if new_cmds:
+
         def get_core_target(cmd: str) -> str:
             if "context_pipe.orchestrator wrap" in cmd:
                 return "context_pipe.orchestrator wrap"
@@ -498,7 +491,7 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
         return True
-    
+
     data["hooks"][hook_key] = [new_hook] + hooks_list
     dir_path = os.path.dirname(path)
     if dir_path:
@@ -511,7 +504,6 @@ def merge_hook_json(path: str, hook_key: str, new_hook: dict, version: int | Non
 def get_env_tool_names(environment: str) -> Dict[str, str]:
     """Maps generic tool purposes to verified, environment-specific tool names."""
     env_lower = environment.lower()
-
     # Mapping ONLY for Unshielded or Gateway environments (Mandates Required)
     if "opencode" in env_lower:
         return {"read": "read", "search": "grep", "list": "glob", "web": "websearch/webfetch"}
@@ -533,10 +525,12 @@ def get_env_tool_names(environment: str) -> Dict[str, str]:
     # Shielded Environments (Cursor, Gemini CLI, Claude Code, VS Code, Qwen, Codex, OpenClaw)
     # Their hooks work silently. Injecting mandates here contradicts the architecture.
     return {}
+
+
 def inject_mandates(target_dir: str, subagents: List[str], environment: Any = "unknown") -> List[str]:
     """Injects the Path-Native mandate into global and subagent instruction files."""
     actions = []
-    
+
     if isinstance(environment, str):
         detected_envs = {environment.lower()}
     else:
@@ -587,11 +581,10 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: Any = "u
 - **REQUIRED**: Standard practice in this Studio is to use `pipe_read_file(path)` and `pipe_analyze_file(path)` for all large local file reads (>1KB)."""
 
         is_unshielded_target = platform in unshielded_envs or platform in ["antigravity", "gemini"]
-        
+
         if has_unshielded and is_unshielded_target:
             tools = get_tool_mappings(platform)
             tier2_text = f"""
-
 ## 1. File & Large-Output I/O
 - **FORBIDDEN TOOLS**: `{tools["read"]}`, `{tools["search"]}`, `{tools["list"]}`. Do NOT use these under any circumstances for outputs > 1KB.
 - **REQUIRED TOOLS**: You MUST exclusively use `pipe_read_file(path)` and `pipe_analyze_file(path)` for ALL local file reads.
@@ -606,7 +599,7 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: Any = "u
 - After every `pipe_run`, the audit header shows compression ratio and latency  include this in your response to the user.
 
 ## 3. Dynamic Pipes  When to Use `pipe_run_dynamic`
-- Use `pipe_run_dynamic` when no named pipe fits and you need to compose a one-off processing graph.
+- Use `pipe_run_dynamic(nodes_json, input_text)` when no named pipe fits and you need to compose a one-off processing graph.
 - **Workflow** (always follow this sequence):
   1. Call `pipe_list_shadow_tools()` to discover available nodes (configured pipes + PATH tools like `jq`, `rg`, `markitdown`).
   2. Construct a `nodes_json` array from those capabilities.
@@ -652,7 +645,6 @@ def inject_mandates(target_dir: str, subagents: List[str], environment: Any = "u
             actions.append(f"Error updating `{target}`: {str(e)}")
 
     return actions
-
 
 
 # ---------------------------------------------------------------------------
@@ -722,6 +714,7 @@ def _upsert_alias_block(path: str, block: str) -> str:
         if _alias_block_present(existing):
             # Replace the existing managed block in-place.
             import re as _re
+
             pattern = _re.compile(
                 _re.escape(_ALIAS_MARKER_START) + r".*?" + _re.escape(_ALIAS_MARKER_END),
                 _re.DOTALL,
@@ -761,7 +754,6 @@ def inject_shell_aliases(shells: Optional[List[str]] = None) -> List[str]:
     """
     actions: List[str] = []
     platform = sys.platform
-
     want_posix = shells is None or any(s in (shells or []) for s in ("bash", "zsh", "sh"))
     want_pwsh = shells is None or "pwsh" in (shells or [])
 
@@ -803,7 +795,6 @@ def inject_shell_aliases(shells: Optional[List[str]] = None) -> List[str]:
 def remove_shell_aliases() -> List[str]:
     """
     Removes the managed ``cpipe`` alias block from all known profile files.
-
     Safe to call when the Phase 8 Rust ``cpipe`` binary is installed.
 
     Returns:
@@ -818,7 +809,7 @@ def remove_shell_aliases() -> List[str]:
     )
 
     for profile in _POSIX_PROFILES + _PWSH_PROFILES:
-        expanded = os.path.expanduser(profile)
+        expanded = os.expanduser(profile)
         if not os.path.exists(expanded):
             continue
         try:
@@ -836,7 +827,6 @@ def remove_shell_aliases() -> List[str]:
     return actions
 
 
-
 def _inject_cursor(target_dir: str, cmd_str: str) -> list[str]:
     actions = []
     cursor_path = os.path.join(target_dir, ".cursor", "hooks.json")
@@ -852,7 +842,6 @@ description: View Context-Pipe ROI Balance Sheet
 globs: []
 alwaysApply: false
 ---
-
 Call `get_pipe_stats` from the `context-pipe` MCP server.
 Display the full Balance Sheet: chars saved, chars added, avg latency per node, total events, and net ROI.
 If net savings > 0, summarise the top contributing pipe by name.
@@ -863,7 +852,6 @@ description: Run a named Context-Pipe on the current context
 globs: []
 alwaysApply: false
 ---
-
 1. Call `list_pipes()` from the `context-pipe` MCP server to show available pipes.
 2. If the user has not specified a pipe name, ask them to choose from the list.
 3. Ask the user to confirm or paste the input text to process, or use the current conversation context.
@@ -876,7 +864,6 @@ description: Build and run an ad-hoc Context-Pipe from available tools
 globs: []
 alwaysApply: false
 ---
-
 1. Call `pipe_list_shadow_tools()` from the `context-pipe` MCP server to discover available nodes
    (configured pipes + PATH tools like jq, rg, markitdown, pandoc).
 2. Based on the user's goal, construct a `nodes_json` array. Rules:
@@ -893,19 +880,19 @@ description: Distil agent output before passing it to another agent
 globs: []
 alwaysApply: false
 ---
-
 Use this at any agent-to-agent handoff boundary to prevent context flooding.
-
 1. Identify the output text from Agent A and the name of Agent B that will consume it.
 2. Call `pipe_agent_handoff(output, from_agent="<A>", to_agent="<B>")` from the `context-pipe` MCP server.
    - If you know the content type, pass `pipe_name` explicitly (e.g. `pipe_name="semantic-refinery"`).
    - Otherwise omit `pipe_name` and routing is determined automatically by pipes.json mappings.
 3. Pass the returned distilled text as the input to Agent B.
 """
+
     stats_path = os.path.join(cursor_rules_dir, "pipe-stats.mdc")
     run_path = os.path.join(cursor_rules_dir, "pipe-run.mdc")
     dynamic_path = os.path.join(cursor_rules_dir, "pipe-dynamic.mdc")
     handoff_path = os.path.join(cursor_rules_dir, "pipe-handoff.mdc")
+
     for path, text in [
         (stats_path, pipe_stats_mdc),
         (run_path, pipe_run_mdc),
@@ -914,8 +901,10 @@ Use this at any agent-to-agent handoff boundary to prevent context flooding.
     ]:
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
+
     actions.append("Added /pipe-stats, /pipe-run, /pipe-dynamic, /pipe-handoff rules to Cursor (.cursor/rules/).")
     return actions
+
 
 def _inject_vscode_github(target_dir: str, cmd_str: str) -> list[str]:
     actions = []
@@ -924,10 +913,12 @@ def _inject_vscode_github(target_dir: str, cmd_str: str) -> list[str]:
         actions.append("Injected Context-Pipe into VS Code/GitHub hooks.")
     return actions
 
+
 def _inject_gemini(target_dir: str, cmd_str: str) -> list[str]:
     actions = []
     gemini_dir = os.path.join(target_dir, ".gemini", "commands")
     os.makedirs(gemini_dir, exist_ok=True)
+
     gemini_commands = {
         "pipe-stats.toml": (
             "View Context-Pipe ROI Balance Sheet",
@@ -946,6 +937,7 @@ def _inject_gemini(target_dir: str, cmd_str: str) -> list[str]:
             "Call pipe_agent_handoff(output, from_agent='A', to_agent='B') from the context-pipe MCP server to prevent context flooding at A2A handoff boundaries.",
         ),
     }
+
     for filename, (description, prompt) in gemini_commands.items():
         text = f'description = "{description}"\nprompt = """\n{prompt}\n"""\n'
         with open(os.path.join(gemini_dir, filename), "w", encoding="utf-8") as f:
@@ -954,7 +946,6 @@ def _inject_gemini(target_dir: str, cmd_str: str) -> list[str]:
 
     gemini_settings_path = os.path.join(target_dir, ".gemini", "settings.json")
     gemini_cmd = build_runtime_hook_command({"GEMINI_SESSION_ID": "true"})
-
     for hook_key in ["SessionStart", "BeforeTool", "AfterTool", "PreCompress"]:
         if merge_hook_json(
             gemini_settings_path,
@@ -968,6 +959,7 @@ def _inject_gemini(target_dir: str, cmd_str: str) -> list[str]:
         ):
             actions.append(f"Injected Context-Pipe into Gemini CLI {hook_key} hooks.")
     return actions
+
 
 def _inject_opencode(target_dir: str, cmd_str: str) -> list[str]:
     actions = []
@@ -1013,7 +1005,6 @@ def _inject_opencode(target_dir: str, cmd_str: str) -> list[str]:
             oc_plugin_dir = os.path.join(target_dir, ".opencode", "plugins")
             os.makedirs(oc_plugin_dir, exist_ok=True)
             oc_plugin_path = os.path.join(oc_plugin_dir, "context-pipe.ts")
-
             oc_plugin_content = """/**
  * Context-Pipe Native OpenCode Plugin
  *
@@ -1031,17 +1022,17 @@ def _inject_opencode(target_dir: str, cmd_str: str) -> list[str]:
 export const ContextPipePlugin = async (_: any) => {
   return {
     // Hook placeholder - will be activated once OpenCode triggers tool.execute.after
-    // "tool.execute.after": async (input: any, output: any) => { ... }
   };
 };
 """
             with open(oc_plugin_path, "w", encoding="utf-8") as f:
                 f.write(oc_plugin_content)
             actions.append("Configured OpenCode native plugin.")
-
         except Exception as e:
             actions.append(f"Failed to update opencode.json: {str(e)}")
+
     return actions
+
 
 def _inject_windsurf(target_dir: str, cmd_str: str) -> list[str]:
     actions = []
@@ -1055,10 +1046,12 @@ def _inject_windsurf(target_dir: str, cmd_str: str) -> list[str]:
         actions.append("Injected Security Gateway into Windsurf hooks.")
     return actions
 
+
 def _inject_cline(target_dir: str, cmd_str: str) -> list[str]:
     actions = []
     cline_dir = os.path.join(target_dir, ".clinerules", "hooks")
     os.makedirs(cline_dir, exist_ok=True)
+
     ps1_blocker = """$inputJson = $input | ConvertFrom-Json
 if ($inputJson.preToolUse.toolName -eq 'read_file' -or $inputJson.preToolUse.toolName -eq 'view_file') {
     $filePath = $inputJson.preToolUse.parameters.path
@@ -1103,6 +1096,7 @@ echo '{"cancel": false}'
     actions.append("Injected Security Gateway into Cline hooks (Bash).")
     return actions
 
+
 def _inject_claude(target_dir: str, cmd_str: str) -> list[str]:
     actions = []
     claude_paths = [
@@ -1115,6 +1109,7 @@ def _inject_claude(target_dir: str, cmd_str: str) -> list[str]:
         ):
             actions.append(f"Merged into Claude Code hooks at {c_path}.")
     return actions
+
 
 def _inject_qwen(target_dir: str, cmd_str: str) -> list[str]:
     actions = []
@@ -1129,6 +1124,7 @@ def _inject_qwen(target_dir: str, cmd_str: str) -> list[str]:
             actions.append(f"Merged into Qwen CLI hooks at {q_path}.")
     return actions
 
+
 def _inject_codex(target_dir: str, cmd_str: str) -> list[str]:
     actions = []
     codex_paths = [
@@ -1142,12 +1138,15 @@ def _inject_codex(target_dir: str, cmd_str: str) -> list[str]:
             actions.append(f"Merged into Codex CLI hooks at {co_path}.")
     return actions
 
+
 def _inject_openclaw(target_dir: str, cmd_str: str) -> list[str]:
     actions = []
     import sys
+
     openclaw_plugin_path = os.path.join(target_dir, ".openclaw", "plugins", "context-pipe.ts")
     os.makedirs(os.path.dirname(openclaw_plugin_path), exist_ok=True)
     py_exe = os.path.abspath(sys.executable).replace('\\', '/')
+
     openclaw_plugin_content = f"""/**
  * Context-Pipe Native OpenClaw Plugin
  */
@@ -1156,6 +1155,7 @@ export default function (api) {{
     const rawContent = ctx.result;
     if (typeof rawContent !== 'string' || rawContent.length < 500) return;
     if (rawContent.includes("--- [Context-Pipe: Native Execution] ---")) return;
+
     try {{
       const pythonExe = "{py_exe}";
       const payload = {{ hook_event_name: "AfterTool", tool_name: ctx.toolName, tool_response: {{ llmContent: rawContent }} }};
@@ -1163,7 +1163,7 @@ export default function (api) {{
       const response = execSync(`"${{pythonExe}}" -m context_pipe.orchestrator wrap`, {{ input: JSON.stringify(payload), encoding: 'utf-8' }});
       const siftedData = JSON.parse(response);
       if (siftedData?.tool_response?.llmContent) {{
-         ctx.result = siftedData.tool_response.llmContent;
+        ctx.result = siftedData.tool_response.llmContent;
       }}
     }} catch (error) {{ console.error("[Context-Pipe Plugin] failed:", error); }}
   }});
@@ -1173,6 +1173,7 @@ export default function (api) {{
         f.write(openclaw_plugin_content)
     actions.append("Configured OpenClaw native plugin.")
     return actions
+
 
 def _inject_kilocode(target_dir: str, cmd_str: str) -> list[str]:
     actions = []
@@ -1185,6 +1186,193 @@ def _inject_kilocode(target_dir: str, cmd_str: str) -> list[str]:
         )
     actions.append("Injected Kilo Code workspace rules.")
     return actions
+
+
+def _inject_pi(target_dir: str, cmd_str: str) -> list[str]:
+    actions = []
+    import sys
+    import os
+
+    pi_extension_dir = os.path.join(target_dir, ".pi", "extensions")
+    pi_skill_dir = os.path.join(target_dir, ".pi", "skills")
+    os.makedirs(pi_extension_dir, exist_ok=True)
+    os.makedirs(pi_skill_dir, exist_ok=True)
+
+    pi_extension_path = os.path.join(pi_extension_dir, "context-pipe.ts")
+    pi_skill_path = os.path.join(pi_skill_dir, "context-pipe.md")
+    py_exe = os.path.abspath(sys.executable).replace(chr(92), "/")
+
+    pi_extension_template = r"""/**
+ * Context-Pipe Native pi.dev Extension
+ * "No MCP" - Tools are registered natively.
+ */
+import { ExtensionAPI, isToolCallEventType } from "@earendil-works/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
+import { execSync } from "child_process";
+
+export default function (pi: ExtensionAPI) {
+  const pythonExe = "{PY_EXE_PLACEHOLDER}";
+
+  const callCli = (args: string[], input?: string) => {
+    try {
+      // Try cpipe binary first (fast path)
+      const cmd = `cpipe ${args.join(" ")}`;
+      return execSync(cmd, { input, encoding: "utf-8" });
+    } catch (e) {
+      // Fallback to python module
+      try {
+        const cmd = `"${pythonExe}" -m context_pipe.cli ${args.join(" ")}`;
+        return execSync(cmd, { input, encoding: "utf-8" });
+      } catch (e2: any) {
+        console.error("[Context-Pipe] CLI call failed:", e2.message);
+        throw e2;
+      }
+    }
+  };
+
+  // 1. Register Native Tools
+  pi.registerTool({
+    name: "pipe_read_file",
+    label: "Pipe Read File",
+    description: "Read a file through the optimal context pipe (Standard Practice).",
+    parameters: Type.Object({
+      path: Type.String({ description: "Absolute or relative path to the file." }),
+      pipe_name: Type.Optional(Type.String({ description: "Explicit pipe name." })),
+    }),
+    async execute(input) {
+      const args = ["run", input.pipe_name || "auto", "--file", input.path];
+      return callCli(args);
+    }
+  });
+
+  pi.registerTool({
+    name: "pipe_run",
+    label: "Pipe Run",
+    description: "Process text through a named context pipe.",
+    parameters: Type.Object({
+      pipe_name: Type.String({ description: "Name of the pipe to run." }),
+      input_text: Type.String({ description: "Raw text to process." }),
+    }),
+    async execute(input) {
+      return callCli(["run", input.pipe_name], input.input_text);
+    }
+  });
+
+  pi.registerTool({
+    name: "get_pipe_stats",
+    label: "Get Pipe Stats",
+    description: "View the Context-Pipe Balance Sheet (ROI).",
+    parameters: Type.Object({}),
+    async execute() {
+      return callCli(["stats"]);
+    }
+  });
+
+  // 2. Intercept Native 'read' Tool
+  pi.on("tool_call", async (event, ctx) => {
+    if (isToolCallEventType("read", event)) {
+      const filePath = event.input.path;
+      try {
+        const { statSync } = require("fs");
+        const stats = statSync(filePath);
+        if (stats.size > 1024) {
+          ctx.ui.notify("Large file detected. Redirecting to pipe_read_file.", "info");
+        }
+      } catch (e) {}
+    }
+  });
+
+  // 3. Auto-Pipe Large Tool Results
+  pi.on("tool_result", async (event, ctx) => {
+    if (typeof event.result === "string" && event.result.length > 5000) {
+      if (event.result.includes("--- [Context-Pipe Audit] ---")) return;
+      try {
+        const sifted = callCli(["run", "auto"], event.result);
+        event.result = sifted;
+      } catch (e) {
+        console.error("[Context-Pipe] Auto-sift failed");
+      } finally {
+        ctx.ui.setStatus("context-pipe", "");
+      }
+    }
+  });
+
+  // 4. Register Commands
+  pi.registerCommand("pipe-stats", {
+    description: "View Context-Pipe Balance Sheet",
+    async execute() {
+      const stats = callCli(["stats"]);
+      console.log(stats);
+    }
+  });
+}
+"""
+    pi_extension_content = pi_extension_template.replace("{PY_EXE_PLACEHOLDER}", py_exe)
+
+    pi_skill_content = """---
+name: context-pipe
+description: Universal standard for context engineering. Use for reading large files, logs, and distilling context.
+---
+
+# Context-Pipe SOP
+Guidelines for high-fidelity context.
+
+## CRITICAL INSTRUCTION: FILE I/O OVERRIDE
+**WARNING**: Using native file readers will flood the context window and destroy the session.
+
+- **REQUIRED**: Standard practice in this Studio is to use `pipe_read_file(path)` and `pipe_analyze_file(path)` for all large local file reads (>1KB).
+
+### 1. File & Large-Output I/O
+- **FORBIDDEN TOOLS**: Native `read` tool. Do NOT use it for files > 1KB.
+- **REQUIRED TOOLS**: You MUST exclusively use `pipe_read_file(path)` or `pipe_analyze_file(path)` for ALL local file reads.
+- NEVER read raw outputs from `web_search` or search tools. Pipe them through `pipe_run("rerank-and-sift", raw_output)`.
+- For ANY tool output exceeding 100 lines (logs, API responses, search results), route through a context pipe before presenting to the user.
+
+### 2. Named Pipes — When to Use `pipe_run`
+- Call `list_pipes()` first to see all available named pipes in this project.
+- Use `pipe_run(pipe_name, input_text)` when:
+  - A named pipe exists that matches the content type (e.g. `semantic-refinery` for code, `standard-distill` for logs).
+  - You want a reproducible, audited transformation that is tracked in the Balance Sheet.
+
+### 3. Dynamic Pipes — When to Use `pipe_run_dynamic`
+- Use `pipe_run_dynamic(nodes_json, input_text)` when no named pipe fits and you need to compose a one-off processing graph.
+- **Workflow**:
+  1. Call `pipe_list_shadow_tools()` to discover available nodes.
+  2. Construct a `nodes_json` array from those capabilities.
+  3. Call `pipe_run_dynamic(nodes_json, input_text)`.
+
+### 4. A2A Agent Handoff — When to Use `pipe_agent_handoff`
+- ALWAYS call `pipe_agent_handoff(output, from_agent="X", to_agent="Y")` when passing one agent's output to another agent's context window.
+
+### 5. Observability — Balance Sheet
+- Call `get_pipe_stats()` at any time to see cumulative ROI.
+"""
+    with open(pi_extension_path, "w", encoding="utf-8") as f:
+        f.write(pi_extension_content)
+    actions.append("Created pi.dev native extension (.pi/extensions/context-pipe.ts).")
+
+    with open(pi_skill_path, "w", encoding="utf-8") as f:
+        f.write(pi_skill_content)
+    actions.append("Created pi.dev skill (.pi/skills/context-pipe.md).")
+
+    # Also create a minimal package.json if it doesn't exist to help with dependencies
+    pi_package_path = os.path.join(target_dir, ".pi", "package.json")
+    if not os.path.exists(pi_package_path):
+        import json
+        pkg_data = {
+            "name": "pi-context-pipe-workspace",
+            "version": "0.1.0",
+            "dependencies": {
+                "@earendil-works/pi-coding-agent": "latest",
+                "@sinclair/typebox": "latest"
+            }
+        }
+        with open(pi_package_path, "w", encoding="utf-8") as f:
+            json.dump(pkg_data, f, indent=2)
+        actions.append("Created .pi/package.json for extension dependencies.")
+
+    return actions
+
 
 def _inject_antigravity(target_dir: str, cmd_str: str) -> list[str]:
     actions = []
@@ -1202,7 +1390,6 @@ alwaysApply: false
 ---
 {prompt}
 """
-
     antigravity_commands = {
         "pipe-stats.md": (
             "View Context-Pipe ROI Balance Sheet",
@@ -1218,7 +1405,7 @@ alwaysApply: false
         ),
         "pipe-handoff.md": (
             "Distil agent output before passing it to another agent",
-            "Use this at any agent-to-agent handoff boundary to prevent context flooding.\\n1. Identify the output text from Agent A and the name of Agent B that will consume it.\\n2. Call `pipe_agent_handoff(output, from_agent=\"<A>\", to_agent=\"<B>\")` from the `context-pipe` MCP server.\\n   - If you know the content type, pass `pipe_name` explicitly (e.g. `pipe_name=\"semantic-refinery\"`). \\n   - Otherwise omit `pipe_name` and routing is determined automatically by pipes.json mappings.\\n3. Pass the returned distilled text as the input to Agent B.",
+            "Use this at any agent-to-agent handoff boundary to prevent context flooding.\\n1. Identify the output text from Agent A and the name of Agent B that will consume it.\\n2. Call `pipe_agent_handoff(output, from_agent=\"<A>\", to_agent=\"<B>\")` from the `context-pipe` MCP server.\\n   - If you know the content type, pass `pipe_name\" explicitly (e.g. `pipe_name=\"semantic-refinery\"`). \\n   - Otherwise omit `pipe_name` and routing is determined automatically by pipes.json mappings.\\n3. Pass the returned distilled text as the input to Agent B.",
         ),
     }
 
@@ -1230,7 +1417,7 @@ alwaysApply: false
 
     # 2. Global MCP Config
     global_mcp_path = os.path.expanduser("~/.gemini/antigravity/mcp_config.json")
-    
+
     def update_mcp_config(path: str) -> bool:
         data: dict = {"mcpServers": {}}
         if os.path.exists(path):
@@ -1239,24 +1426,24 @@ alwaysApply: false
                     data = json.load(f)
             except (OSError, json.JSONDecodeError):
                 pass
-        
+
         if "mcpServers" not in data:
             data["mcpServers"] = {}
-        
+
         py_exe = os.path.abspath(sys.executable)
         entry_point = "context_pipe.server"
-        
         existing = data["mcpServers"].get("context-pipe", {})
         if existing.get("command") == py_exe and entry_point in (existing.get("args") or []):
             return False
-            
+
         data["mcpServers"]["context-pipe"] = {
             "command": py_exe,
             "args": ["-m", entry_point],
-            "env": {"PIPE_CONFIG_PATH": os.path.abspath(os.path.join(target_dir, "pipes.json")),
-                    "PIPE_AUTHORIZED_ROOT": os.path.abspath(target_dir)}
+            "env": {
+                "PIPE_CONFIG_PATH": os.path.abspath(os.path.join(target_dir, "pipes.json")),
+                "PIPE_AUTHORIZED_ROOT": os.path.abspath(target_dir),
+            },
         }
-        
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
@@ -1268,25 +1455,23 @@ alwaysApply: false
     # 3. Hooks
     antigravity_settings_path = os.path.join(target_dir, ".agents", "settings.json")
     hook_cmd = build_runtime_hook_command({"GEMINI_SESSION_ID": "true"})
-
     for hook_key in ["SessionStart", "BeforeTool", "AfterTool", "PreCompress"]:
         if merge_hook_json(
             antigravity_settings_path,
             hook_key,
             {
                 "matcher": ".*",
-                "hooks": [
-                    {"name": "context-pipe", "type": "command", "command": hook_cmd, "timeout": 10000}
-                ]
+                "hooks": [{"name": "context-pipe", "type": "command", "command": hook_cmd, "timeout": 10000}],
             },
         ):
             actions.append(f"Injected Context-Pipe into Antigravity {hook_key} hooks.")
-
     return actions
+
 
 def inject_hooks(target_dir: str, environment: str) -> list[str]:
     """Automates the injection of Context-Pipe hooks into various IDEs/CLIs."""
     import json
+
     actions = []
 
     # 0. Git Protection (matches Semantic-Sift flow)
@@ -1303,7 +1488,6 @@ def inject_hooks(target_dir: str, environment: str) -> list[str]:
 
     # Project Horizon Scanning: Detect all active IDE signatures in target_dir
     detected_envs = {environment.lower()}
-    
     if os.path.exists(os.path.join(target_dir, ".cursor")) or os.path.exists(os.path.join(target_dir, ".cursorrules")):
         detected_envs.add("cursor")
     if os.path.exists(os.path.join(target_dir, ".clinerules")):
@@ -1318,6 +1502,8 @@ def inject_hooks(target_dir: str, environment: str) -> list[str]:
         detected_envs.add("opencode")
     if os.path.exists(os.path.join(target_dir, ".vscode")):
         detected_envs.add("vscode")
+    if os.path.exists(os.path.join(target_dir, ".pi")):
+        detected_envs.add("pi")
 
     # Inject mandates with project-wide environment scanning
     mandate_actions = inject_mandates(target_dir, subagents, environment=detected_envs)
@@ -1378,5 +1564,43 @@ def inject_hooks(target_dir: str, environment: str) -> list[str]:
             actions.extend(_inject_kilocode(target_dir, cmd_str))
         if "antigravity" in env:
             actions.extend(_inject_antigravity(target_dir, cmd_str))
+        if "pi" in env:
+            actions.extend(_inject_pi(target_dir, cmd_str))
 
     return actions
+
+
+def main() -> None:
+    """Entry point for the context-pipe-onboard CLI."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Context-Pipe Workspace Onboarding")
+    parser.add_argument(
+        "environment", nargs="?", default=None, help="The IDE/CLI environment (e.g., 'Cursor', 'VSCode', 'Gemini')."
+    )
+    parser.add_argument(
+        "--target-dir", "--target_dir", dest="target_dir", help="Optional directory to onboard (default: current directory)."
+    )
+
+    args = parser.parse_args()
+    target_dir = args.target_dir or os.getcwd()
+    environment = args.environment
+
+    if not environment:
+        from .platforms import detect_client_id
+
+        environment = detect_client_id()
+        print(f"Auto-detected environment: {environment}")
+
+    actions = inject_hooks(target_dir, environment)
+    if not actions:
+        print(f"Context-Pipe is already active or no targets found in {target_dir}.")
+        return
+
+    print("Onboarding Successful:")
+    for a in actions:
+        print(f"- {a}")
+
+
+if __name__ == "__main__":
+    main()
