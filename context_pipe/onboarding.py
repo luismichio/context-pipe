@@ -1201,6 +1201,8 @@ def _inject_pi(target_dir: str, cmd_str: str) -> list[str]:
     pi_extension_path = os.path.join(pi_extension_dir, "context-pipe.ts")
     pi_skill_path = os.path.join(pi_skill_dir, "context-pipe.md")
     py_exe = os.path.abspath(sys.executable).replace(chr(92), "/")
+    mcp_pipe_exe = shutil.which("mcp-pipe") or ""
+    mcp_pipe_path = os.path.abspath(mcp_pipe_exe).replace(chr(92), "/") if mcp_pipe_exe else ""
 
     pi_extension_template = r"""/**
  * Context-Pipe Native pi.dev Extension
@@ -1209,14 +1211,16 @@ def _inject_pi(target_dir: str, cmd_str: str) -> list[str]:
 import { ExtensionAPI, isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { execSync } from "child_process";
+import { readFileSync } from "fs";
 
 export default function (pi: ExtensionAPI) {
   const pythonExe = "{PY_EXE_PLACEHOLDER}";
+  const mcpPipePath = "{MCP_PIPE_PLACEHOLDER}";
 
   const callCli = (args: string[], input?: string) => {
     try {
-      // Try cpipe binary first (fast path)
-      const cmd = `cpipe ${args.join(" ")}`;
+      // Try mcp-pipe binary first (fast path)
+      const cmd = `"${mcpPipePath}" ${args.join(" ")}`;
       return execSync(cmd, { input, encoding: "utf-8" });
     } catch (e) {
       // Fallback to python module
@@ -1239,9 +1243,9 @@ export default function (pi: ExtensionAPI) {
       path: Type.String({ description: "Absolute or relative path to the file." }),
       pipe_name: Type.Optional(Type.String({ description: "Explicit pipe name." })),
     }),
-    async execute(input) {
-      const args = ["run", input.pipe_name || "auto", "--file", input.path];
-      return callCli(args);
+    async execute(_toolCallId, params) {
+      const text = readFileSync(params.path, "utf-8");
+      return callCli(["run", params.pipe_name || "auto"], text);
     }
   });
 
@@ -1253,8 +1257,8 @@ export default function (pi: ExtensionAPI) {
       pipe_name: Type.String({ description: "Name of the pipe to run." }),
       input_text: Type.String({ description: "Raw text to process." }),
     }),
-    async execute(input) {
-      return callCli(["run", input.pipe_name], input.input_text);
+    async execute(_toolCallId, params) {
+      return callCli(["run", params.pipe_name], params.input_text);
     }
   });
 
@@ -1263,8 +1267,45 @@ export default function (pi: ExtensionAPI) {
     label: "Get Pipe Stats",
     description: "View the Context-Pipe Balance Sheet (ROI).",
     parameters: Type.Object({}),
-    async execute() {
+    async execute(_toolCallId, _params) {
       return callCli(["stats"]);
+    }
+  });
+
+  pi.registerTool({
+    name: "list_pipes",
+    label: "List Pipes",
+    description: "Lists all available context pipes and their descriptions.",
+    parameters: Type.Object({}),
+    async execute(_toolCallId, _params) {
+      return callCli(["list"]);
+    }
+  });
+
+  pi.registerTool({
+    name: "pipe_analyze_file",
+    label: "Pipe Analyze File",
+    description: "Analyze a file through the context pipe with semantic analysis.",
+    parameters: Type.Object({
+      path: Type.String({ description: "Absolute or relative path to the file." }),
+      pipe_name: Type.Optional(Type.String({ description: "Explicit pipe name (default: semantic-refinery)." })),
+    }),
+    async execute(_toolCallId, params) {
+      const text = readFileSync(params.path, "utf-8");
+      return callCli(["run", params.pipe_name || "semantic-refinery"], text);
+    }
+  });
+
+  pi.registerTool({
+    name: "pipe_run_dynamic",
+    label: "Pipe Run Dynamic",
+    description: "Run an ad-hoc processing graph composed from shadow tools.",
+    parameters: Type.Object({
+      nodes_json: Type.String({ description: "JSON array of node definitions." }),
+      input_text: Type.String({ description: "Raw input text to process." }),
+    }),
+    async execute(_toolCallId, params) {
+      return callCli(["run-dynamic", params.nodes_json], params.input_text);
     }
   });
 
@@ -1284,11 +1325,12 @@ export default function (pi: ExtensionAPI) {
 
   // 3. Auto-Pipe Large Tool Results
   pi.on("tool_result", async (event, ctx) => {
-    if (typeof event.result === "string" && event.result.length > 5000) {
-      if (event.result.includes("--- [Context-Pipe Audit] ---")) return;
+    const text = event.content?.[0]?.text;
+    if (typeof text === "string" && text.length > 5000) {
+      if (text.includes("--- [Context-Pipe Audit] ---")) return;
       try {
-        const sifted = callCli(["run", "auto"], event.result);
-        event.result = sifted;
+        const sifted = callCli(["run", "auto"], text);
+        return { content: [{ type: "text", text: sifted }] };
       } catch (e) {
         console.error("[Context-Pipe] Auto-sift failed");
       } finally {
@@ -1300,14 +1342,14 @@ export default function (pi: ExtensionAPI) {
   // 4. Register Commands
   pi.registerCommand("pipe-stats", {
     description: "View Context-Pipe Balance Sheet",
-    async execute() {
+    handler: async (_args, _ctx) => {
       const stats = callCli(["stats"]);
       console.log(stats);
     }
   });
 }
 """
-    pi_extension_content = pi_extension_template.replace("{PY_EXE_PLACEHOLDER}", py_exe)
+    pi_extension_content = pi_extension_template.replace("{PY_EXE_PLACEHOLDER}", py_exe).replace("{MCP_PIPE_PLACEHOLDER}", mcp_pipe_path)
 
     pi_skill_content = """---
 name: context-pipe

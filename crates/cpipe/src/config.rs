@@ -35,11 +35,29 @@ pub struct Config {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct PipeLogging {
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default)]
+    pub prefix: Option<String>,
+    #[serde(default)]
+    pub level: Option<String>,
+    #[serde(default)]
+    pub fields: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Pipe {
     pub name: String,
     #[serde(default)]
     pub description: String,
+    #[serde(default)]
+    pub logging: Option<PipeLogging>,
+    #[serde(default)]
+    pub vars: Option<std::collections::HashMap<String, String>>,
     pub nodes: Vec<Node>,
+    #[serde(default)]
+    pub branch_sequences: Option<std::collections::HashMap<String, Vec<Node>>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -62,6 +80,15 @@ pub struct Node {
     pub tool: Option<String>,
     #[serde(default)]
     pub input_key: Option<String>,
+    // Validator / Phase 11 fields:
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub next: Option<String>,
+    #[serde(default)]
+    pub condition: Option<String>,
+    #[serde(default)]
+    pub branches: Option<std::collections::HashMap<String, String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -366,10 +393,13 @@ mod tests {
             version: "1.0".to_string(),
             description: "Local description".to_string(),
             pipes: vec![Pipe {
-                name: "pipe-1".to_string(),
-                description: "Local pipe-1".to_string(),
-                nodes: vec![],
-            }],
+                    name: "pipe-1".to_string(),
+                    vars: None,
+                    logging: None,
+                    branch_sequences: None,
+                    description: "Local pipe-1".to_string(),
+                    nodes: vec![],
+                }],
             servers: HashMap::new(),
             mappings: vec![],
         });
@@ -379,11 +409,17 @@ mod tests {
             pipes: vec![
                 Pipe {
                     name: "pipe-1".to_string(),
+                    vars: None,
+                    logging: None,
+                    branch_sequences: None,
                     description: "Global pipe-1".to_string(),
                     nodes: vec![],
                 },
                 Pipe {
                     name: "pipe-2".to_string(),
+                    vars: None,
+                    logging: None,
+                    branch_sequences: None,
                     description: "Global pipe-2".to_string(),
                     nodes: vec![],
                 },

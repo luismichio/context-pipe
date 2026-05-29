@@ -90,6 +90,8 @@ IDE hooks that apply pipes transparently after every tool call — without the a
 |---|---|---|
 | **Unix pipe model for AI** | Chain any `stdin` and `stdout` tool into a named pipe. Binary, shell, script, or MCP tool — same contract. | [Advanced Node Types](#-advanced-node-types) |
 | **MCP Node Type** | Call any MCP tool (Figma, GitHub, context-mode) as a first-class pipe node — no wrapper scripts. | [doc/MCP_NODE_SPEC.md](doc/MCP_NODE_SPEC.md) |
+| **Compilation-free topology** | Routing lives in `pipes.json`, not in node code. Reroute, branch, or swap a node by editing the map — no code changes, no recompile, no redeploy of any node. | [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) |
+| **Protocol-first MCP composition** | Swap any MCP server by changing a server key. No imports, no dependency declarations, no build cycle. Every MCP server speaks the same protocol — the entire ecosystem is a drop-in capability layer. | [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) |
 | **Dynamic Pipes** | AI agents construct and execute ad-hoc node lists at runtime via `pipe_run_dynamic` — no `pipes.json` entry required. | [Dynamic Pipes](#dynamic-pipes) |
 | **Shadow MCP Registry** | Keep utility MCP servers invisible to the agent's tool list until needed. `pipe_list_shadow_tools` queries them on demand. | [Shadow MCP Registry](#shadow-mcp-registry) |
 | **A2A Agent Handoff** | Distil Agent A's output before it enters Agent B's context window — framework-agnostic, no monkey-patching. | [A2A Handoff](#-a2a-agent-to-agent-handoff) |
@@ -115,6 +117,26 @@ This perfectly separates **Intent** from **Execution**:
 * **`pipes.json` provides the Execution:** `[pandoc -> jq -> semantic-sift]`
 
 By using brief, concise pipe names, you achieve extreme **prompt compression**. The AI gets a menu of high-level "buttons to push" rather than reading an instruction manual for every utility on the host machine. Better yet, if you upgrade your backend tooling (e.g., swapping `pandoc` for `markitdown`), you **never have to update the LLM's prompt**. The AI still calls the same pipe; the engine behind it just gets faster.
+
+---
+
+## 🔧 Three Independent Axes of Change
+
+A CPP pipeline separates concerns across three layers that evolve on completely independent cycles:
+
+| Layer | What it is | How you change it |
+|---|---|---|
+| **Nodes** | What each step does — a dumb `stdin`/`stdout` tool, unaware of the pipeline around it | Swap the binary, script, or MCP tool |
+| **`pipes.json`** | The topology — how steps connect, branch, and route | Edit the map. No code change. No recompile. No redeploy. |
+| **MCP servers** | The capability behind each tool call | Change the server key. No imports, no dependency declarations, no build cycle. |
+
+Improving a node's quality does not change the topology. Restructuring the routing does not touch any node. Upgrading an MCP server improves every pipe that uses it automatically — with no pipeline changes.
+
+**For MCP nodes specifically,** this dissolves the traditional dependency model entirely. Every MCP server speaks the same protocol: JSON-RPC, `tools/call`, text response. The pipe does not depend on what *implements* the service — it depends on what *speaks the protocol*. The entire MCP ecosystem is therefore the pipe's capability layer. Every current and future MCP server is already a valid drop-in replacement for any node that serves the same semantic purpose.
+
+> *In a script, you depend on what you import. In a pipe, you depend on what speaks the protocol.*
+
+This separation also means routing is **compilation-free**. In a traditional script, safeguards and recovery logic are embedded in code — changing how a workflow recovers requires changing, testing, and redeploying the script. In CPP, routing lives in `pipes.json`. A branch, a reroute, or a node swap is a configuration edit. The feedback loop between *"what if I reroute this"* and *"let me observe what happens"* collapses to near zero.
 
 ---
 
@@ -242,6 +264,13 @@ result = pipe(text)
 **Function signature:**
 ```python
 def pipe(
+    text: str,
+    pipe_name: str | None = None,
+    tool_name: str = "",
+    config_path: str = "pipes.json",
+    vars: dict | None = None,
+) -> str: ...
+// def pipe(
     text: str,
     pipe_name: str | None = None,   # explicit pipe name; auto-routes if omitted
     tool_name: str = "",            # used for trigger matching and telemetry
@@ -419,7 +448,67 @@ Call any MCP tool as a pipe node. No wrapper scripts — the orchestrator spawns
 ```
 Server definitions live in a `servers` block in `pipes.json` or `~/.mcp-pipe.json`. See [doc/MCP_NODE_SPEC.md](doc/MCP_NODE_SPEC.md) for the full spec.
 
----
+### 5. Validator Nodes (Phase 11)
+
+A validator runs a subprocess and **routes on its exit code** instead of flowing linearly. Use this to build self-healing pipelines that try to fix problems automatically before failing.
+
+```json
+{
+  "name": "self-healing-lint",
+  "nodes": [
+    {
+      "cmd": "eslint",
+      "args": ["--format", "compact", "src/"],
+      "type": "validator",
+      "id": "lint-check",
+      "branches": {
+        "0": "done",
+        "1": "auto-fix",
+        "default": "auto-fix"
+      }
+    }
+  ],
+  "branch_sequences": {
+    "auto-fix": [
+      { "cmd": "eslint", "args": ["--fix", "src/"] },
+      { "cmd": "semantic-sift-cli", "args": ["logs"] }
+    ],
+    "done": [
+      { "cmd": "semantic-sift-cli", "args": ["logs"] }
+    ]
+  }
+}
+```
+
+- **Exit 0** → linting passed, jumps to `done` (distil the clean report).
+- **Exit 1** → linting failed, jumps to `auto-fix` (run `--fix`, then distil).
+- `"default"` catches any other exit code (e.g. `2` for ESLint config errors).
+- The validator's `stdout` is forwarded as input to the target sequence.
+
+### 6. Condition Keys (Phase 11)
+
+Any node can be **conditionally skipped** without modifying the pipe definition:
+
+```json
+{
+  "cmd": "neural-summariser",
+  "condition": "size:>8000"
+}
+```
+
+The node only runs if the current input exceeds 8 000 bytes. Supported predicates:
+
+| Predicate | Example | When the node runs |
+|---|---|---|
+| `size:>N` | `size:>10000` | Input length > N bytes |
+| `size:<N` | `size:<500` | Input length < N bytes |
+| `artifact:exists:<path>` | `artifact:exists:dist/app.js` | File exists on disk |
+| `artifact:missing:<path>` | `artifact:missing:output/report.md` | File does NOT exist |
+| `contains:<string>` | `contains:ERROR` | Leading 300 chars contain the substring |
+
+Unknown predicates **fail-open** (warn + run the node) to avoid silently blocking pipelines.
+
+
 
 ## 🔗 The Ecosystem (Studio of Two)
 
@@ -480,12 +569,13 @@ All four tools in one pipe. Each doing exactly one job.
 ---
 
 ## ⚙️ Environment Variables
-
 | Variable | Default | Description |
 |---|---|---|
 | `PIPE_CONFIG_PATH` | `pipes.json` | Absolute path to the project's `pipes.json` config file. |
 | `PIPE_NODE_TIMEOUT_MS` | `30000` | Per-node execution timeout in milliseconds. |
 | `allow_shell` | `false` | Enable arbitrary shell command nodes in dynamic pipes (`pipe_run_dynamic` MCP tool / `run_dynamic_pipe()` API). Requires the final node to be a `semantic-sift` terminal command to guarantee context safety. |
+| `PIPE_LOG_LEVEL` | (none) | Default pipeline logging level (`compact` or `verbose`). Enables logging for all pipes if set. |
+| `PIPE_LOG_PREFIX` | `[PIPE]` | Default text prepended to pipeline execution logs on `stderr`. |
 
 ---
 

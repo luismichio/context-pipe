@@ -5,6 +5,35 @@ All notable changes to the **Context-Pipe** project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### ✨ Added
+- **Phase 11: Conditional Branching & Validator Nodes**: Upgraded the orchestration engine from a linear array to a full **Directed Acyclic Graph (DAG)** traversal in both Python (`context_pipe/orchestrator.py`) and Rust (`crates/cpipe/src/orchestrator.rs`).
+  - **`condition` key** on any node: predicate-based skip logic. Supported predicates: `size:>N`, `size:<N`, `artifact:missing:<path>`, `artifact:exists:<path>`, `contains:<string>`. Unknown predicates fail-open (warn, then run) to avoid blocking pipelines.
+  - **`type: "validator"` nodes**: run a subprocess and branch on its exit code. The `branches` map routes `"0"`, `"1"` (or any exit code string) to named node IDs or branch sequences. A `"default"` key provides a fallback; if no branch matches and there is no default, the node fails (respecting `optional`).
+  - **`branch_sequences`**: top-level map of named sub-graphs. A validator branch target can be a bare sequence name (e.g. `"on-fail"`) — the engine enters the first node of that sequence automatically.
+  - **`id` and `next` fields** on nodes: `id` assigns a stable string identifier for use as a branch target; `next` overrides the natural sequential flow to jump to any named node.
+  - **100-step loop guard**: the DAG engine terminates with a structured `--- [Context-Pipe: Loop Guard] ---` error if a pipeline exceeds 100 steps, preventing infinite loops caused by misconfigured `next` cycles.
+  - **Full Rust parity** in `crates/cpipe`: `Node` struct updated with `condition`, `branches`, `id`, `next`; `Pipe` struct updated with `branch_sequences`. `evaluate_condition()` and DAG traversal implemented identically to Python. 8 new Rust tests (6 unit + 2 integration) verify all predicates and validator branching.
+- **Phase 9: Pipe Transparency Layer**: Implemented real-time pipeline log emission to `stderr` during node execution in both Python and Rust (`cpipe`) orchestrators. Logs are configured per-pipe via a `logging` block in `pipes.json` or fall back to `PIPE_LOG_LEVEL` and `PIPE_LOG_PREFIX` environment variables. Supports `compact` and `verbose` levels and customizable fields (`trigger`, `node`, `tokens`, `timing`).
+
+- **Pre-execution Read Limit Adjustment**: Raised the pre-execution read block threshold to 50KB (51,200 bytes) in `before_tool` and `pipe_read_file` to support file reading workflows in redirection-heavy environments (like Google Antigravity CLI), while removing all line-range blocks and minimum range requirements.
+- **Disk-Based Double-Sift Verification**: Implemented disk-based signature checks to verify if a file on disk has already been sifted, preventing double-sifting of chunked reads (e.g. `output.txt` reads).
+- **Compact Audit Header**: Defaulted to `SIFT_AUDIT_HEADER="compact"` to omit the full stats table for sifting outputs, reducing the character footprint to just the 30-character signature line while preserving the double-sift guardrail.
+
+### 🐛 Fixed
+- **pi.dev extension `execute()` return type** (`context-pipe.ts`): All 6 tool `execute()` methods now return a proper `AgentToolResult` (`{ content: [{type: "text", text}], details: undefined }`) instead of a raw string. Returning a plain string caused `event.content` to be `undefined` in the pi runtime, triggering `Cannot read properties of undefined (reading 'some')`.
+- **pi.dev extension — missing `"auto"` pipe**: Replaced non-existent `"auto"` pipe fallback with `"standard-distill"` in `pipe_read_file` and the `tool_result` auto-interceptor.
+### 🐛 Fixed (previous)
+- **pi.dev extension template (REPORT_031)**: Fixed all 5 defects in `_inject_pi()` generated TypeScript:
+  - Tool execute signatures now use correct `(_toolCallId, params)` parameter positions instead of `(input)`
+  - Fast path uses resolved `mcp-pipe` absolute path instead of bare `cpipe` (not on PATH)
+  - `tool_result` handler reads `event.content?.[0]?.text` instead of undefined `event.result`
+  - `tool_result` returns partial patch object instead of mutating event directly
+  - Command handler uses `handler` property instead of ignored `execute`
+### ✨ Added
+- **Missing pi.dev tools**: Registered `list_pipes`, `pipe_analyze_file`, `pipe_run_dynamic` to match the mandate
+
 ## [0.4.7] — 2026-05-25
 ### ✨ Features & Parity
 - **Onboarding CLI & Auto-Detect**: Added `onboard` subcommand to `mcp-pipe` CLI and enabled auto-detection in `pipe_onboard` MCP tool.

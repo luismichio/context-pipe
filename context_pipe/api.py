@@ -68,7 +68,7 @@ def pipe(
         return text
 
     try:
-        result, _ = asyncio.run(run_pipe(pipe_config, text, tool_name=tool_name or None))
+        result, _ = asyncio.run(run_pipe(pipe_config, text, tool_name=tool_name or None, vars=vars))
         return result
     except Exception:
         return text

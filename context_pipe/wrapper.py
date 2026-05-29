@@ -44,6 +44,21 @@ def _generate_bypass_payload(raw_json: str, platform: str) -> str:
     return raw_json
 
 
+def _is_file_already_sifted(file_path: str) -> bool:
+    """Checks the first line of the file on disk to see if it is already sifted."""
+    if not file_path:
+        return False
+    abs_path = os.path.abspath(file_path)
+    if not os.path.exists(abs_path) or not os.path.isfile(abs_path):
+        return False
+    try:
+        with open(abs_path, "r", encoding="utf-8", errors="ignore") as f:
+            first_line = f.readline()
+            return SIFT_SIGNATURE in first_line
+    except OSError:
+        return False
+
+
 def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     """
     Parses an incoming tool response, applies the optimal context pipe,
@@ -83,28 +98,11 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
             elif isinstance(args, str):
                 file_path = args
             
-            # Check for line range first (Adaptive Gating)
-            line_count = _get_line_count(args)
-            if line_count is not None:
-                if line_count > 50:
-                    block_msg = f"[BLOCKED by Context-Pipe] File read range ({line_count} lines) > 50 lines limit. Use pipe_read_file instead."
-                    if platform in ["Gemini CLI", "Google Antigravity"]:
-                        return json.dumps({"decision": "deny", "reason": block_msg})
-                    else:
-                        return json.dumps({"cancel": True, "errorMessage": block_msg})
-                else:
-                    # Allow small ranges
-                    if platform in ["Gemini CLI", "Google Antigravity"]:
-                        return json.dumps({"decision": "allow"})
-                    else:
-                        return json.dumps({"cancel": False})
-
-            # Fallback to file size check if no range is specified
             if file_path and os.path.exists(file_path) and os.path.isfile(file_path):
                 try:
                     size = os.path.getsize(file_path)
-                    if size > 1024:
-                        block_msg = "[BLOCKED by Context-Pipe] File > 1KB. Use pipe_read_file instead."
+                    if size > 51200:  # 50KB limit
+                        block_msg = f"[BLOCKED by Context-Pipe] File size ({size/1024:.1f}KB) exceeds 50KB safety limit for native read. Use pipe_read_file instead."
                         if platform in ["Gemini CLI", "Google Antigravity"]:
                             return json.dumps({"decision": "deny", "reason": block_msg})
                         else:
@@ -159,16 +157,21 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
     except (json.JSONDecodeError, TypeError):
         pass
     
-    # 2.1 Bypass check for small line ranges in AfterTool (Parity with BeforeTool adaptive threshold)
+    # 2.1 Disk-based check for already sifted file to prevent double-sifting on chunked reads
     if tool_name in ["read_file", "view_file"]:
         args = data.get("arguments") or data.get("tool_input") or data.get("args")
-        line_count = _get_line_count(args)
-        if line_count is not None and line_count <= 50:
+        file_path = None
+        if isinstance(args, dict):
+            file_path = args.get("path") or args.get("file") or args.get("target") or args.get("abspath")
+        elif isinstance(args, str):
+            file_path = args
+        
+        if file_path and _is_file_already_sifted(file_path):
             if debug:
-                logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': Line range <= 50 lines ({line_count}).")
+                logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': File on disk is already sifted.")
             log_bypass_event(
                 tool_name=str(tool_name),
-                reason=f"Line range <= 50 lines ({line_count})",
+                reason="File on disk is already sifted",
                 platform=platform,
                 agent_label=agent_label
             )

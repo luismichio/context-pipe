@@ -38,6 +38,12 @@ enum Commands {
         /// 1-indexed end line (inclusive) to slice from input
         #[arg(long, aliases = ["end_line"])]
         end_line: Option<usize>,
+        /// Runtime variable to substitute into the pipe (repeatable).
+        #[arg(long, aliases = ["var"])]
+        var: Vec<String>,
+        /// Path to write the run manifest JSON (overrides pipe definition).
+        #[arg(long)]
+        manifest: Option<String>,
         /// Prepend audit header (node trace + latency) to output
         #[arg(short, long)]
         verbose: bool,
@@ -186,6 +192,8 @@ async fn cmd_run(
     start_line: Option<usize>,
     end_line: Option<usize>,
     verbose: bool,
+    vars_list: Vec<String>,
+    manifest: Option<String>,
 ) {
     let path = std::path::PathBuf::from(config_path);
     let config = load_pipes_config_with_path(Some(&path));
@@ -219,12 +227,23 @@ async fn cmd_run(
 
     let start_time_str = chrono::Utc::now().to_rfc3339();
     let start_t = std::time::Instant::now();
+    let mut vars_map = std::collections::HashMap::new();
+    for v in vars_list {
+        if let Some((k, val)) = v.split_once('=') {
+            vars_map.insert(k.to_string(), val.to_string());
+        } else {
+            eprintln!("cpipe: error: Invalid var format '{}'. Expected KEY=VALUE.", v);
+            std::process::exit(1);
+        }
+    }
     let (result, trace) = run_pipe(
         pipe,
         &input,
         Some("cli:run"),
         None,
         &config.servers,
+        Some(&vars_map),
+        manifest.as_deref(),
     ).await;
     let latency_ms = start_t.elapsed().as_secs_f64() * 1000.0;
     
@@ -355,7 +374,10 @@ async fn cmd_run_dynamic(nodes_json: &str, input_file: Option<&str>, allow_shell
     let pipe = Pipe {
         name: "dynamic".to_string(),
         description: "Ad-hoc dynamic pipe".to_string(),
+        logging: None,
+        vars: None,
         nodes,
+        branch_sequences: None,
     };
 
     let start_time_str = chrono::Utc::now().to_rfc3339();
@@ -366,6 +388,8 @@ async fn cmd_run_dynamic(nodes_json: &str, input_file: Option<&str>, allow_shell
         Some("cli:run-dynamic"),
         None,
         &config.servers,
+        None,
+        None,
     ).await;
     let latency_ms = start_t.elapsed().as_secs_f64() * 1000.0;
 
@@ -653,6 +677,8 @@ async fn cmd_handoff(
         Some(tool_name),
         None,
         &config.servers,
+        None,
+        None,
     ).await;
     let latency_ms = start_t.elapsed().as_secs_f64() * 1000.0;
     let session_id = format!("a2a-{}-{}", from_agent, to_agent);
@@ -682,8 +708,8 @@ async fn main() {
     let cli = Cli::parse();
     
     match cli.command {
-        Commands::Run { pipe_name, config, input_file, start_line, end_line, verbose } => {
-            cmd_run(&pipe_name, &config, input_file.as_deref(), start_line, end_line, verbose).await;
+        Commands::Run { pipe_name, config, input_file, start_line, end_line, verbose, var, manifest } => {
+            cmd_run(&pipe_name, &config, input_file.as_deref(), start_line, end_line, verbose, var, manifest).await;
         }
         Commands::RunDynamic { nodes_json, input_file, allow_shell, verbose } => {
             cmd_run_dynamic(&nodes_json, input_file.as_deref(), allow_shell, verbose).await;

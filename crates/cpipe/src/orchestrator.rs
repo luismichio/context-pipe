@@ -1,3 +1,134 @@
+
+fn _build_vars(
+    pipe_config: &crate::config::Pipe,
+    invocation_vars: &HashMap<String, String>,
+) -> Result<HashMap<String, String>, String> {
+    let mut merged = HashMap::new();
+    let mut pipe_defaults = HashMap::new();
+
+    if let Some(vars_map) = &pipe_config.vars {
+        for (k, v) in vars_map {
+            let re = regex::Regex::new(r"^[A-Z0-9_]+$").unwrap();
+            if !re.is_match(k) {
+                return Err(format!("Invalid pipe variable name: '{}' (must be [A-Z0-9_]+)", k));
+            }
+            pipe_defaults.insert(k.clone(), v.clone());
+        }
+    }
+
+    for k in invocation_vars.keys() {
+        let re = regex::Regex::new(r"^[A-Z0-9_]+$").unwrap();
+        if !re.is_match(k) {
+            return Err(format!("Invalid invocation variable name: '{}' (must be [A-Z0-9_]+)", k));
+        }
+    }
+
+    // 1. pipe defaults
+    for (k, v) in &pipe_defaults {
+        merged.insert(k.clone(), v.clone());
+    }
+
+    // 2. os.environ
+    for k in pipe_defaults.keys() {
+        if let Ok(val) = std::env::var(k) {
+            merged.insert(k.clone(), val);
+        }
+    }
+
+    // 3. invocation vars always win
+    for (k, v) in invocation_vars {
+        merged.insert(k.clone(), v.clone());
+    }
+
+    // Fail-fast for required empty vars
+    for (k, default_val) in &pipe_defaults {
+        if default_val.is_empty() && !invocation_vars.contains_key(k) {
+            if let Ok(val) = std::env::var(k) {
+                if val.is_empty() {
+                    return Err(format!("Missing pipe variable: {}", k));
+                }
+            } else {
+                return Err(format!("Missing pipe variable: {}", k));
+            }
+        }
+    }
+
+    Ok(merged)
+}
+
+fn _write_manifest(
+    manifest_path: &str,
+    pipe_config: &crate::config::Pipe,
+    vars_used: &HashMap<String, String>,
+    trace: &[HashMap<String, serde_json::Value>],
+    result: &str,
+    status: &str,
+    started_at: &str,
+) {
+    let pipe_name = &pipe_config.name;
+    
+    let resolved_path = if manifest_path == "auto" {
+        let cache_dir = std::env::current_dir().unwrap_or_default().join(".pipe_cache");
+        let _ = std::fs::create_dir_all(&cache_dir);
+        let iso_date = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+        cache_dir.join(format!("{}-{}.json", pipe_name, iso_date)).to_string_lossy().to_string()
+    } else {
+        manifest_path.to_string()
+    };
+
+    let mut steps = Vec::new();
+    for (i, entry) in trace.iter().enumerate() {
+        let mut step = serde_json::Map::new();
+        step.insert("index".to_string(), serde_json::json!(i + 1));
+        let cmd = entry.get("node").cloned().unwrap_or(serde_json::json!("unknown"));
+        step.insert("cmd".to_string(), cmd);
+        
+        if entry.contains_key("error") {
+            step.insert("ok".to_string(), serde_json::json!(false));
+            step.insert("error".to_string(), entry.get("error").cloned().unwrap_or(serde_json::json!("")));
+            step.insert("status".to_string(), serde_json::json!(1));
+        } else {
+            step.insert("ok".to_string(), serde_json::json!(true));
+            step.insert("status".to_string(), serde_json::json!(0));
+            step.insert("inputSize".to_string(), entry.get("input_size").cloned().unwrap_or(serde_json::json!(0)));
+            step.insert("outputSize".to_string(), entry.get("output_size").cloned().unwrap_or(serde_json::json!(0)));
+        }
+        
+        if entry.contains_key("validator_code") {
+            step.insert("validatorExitCode".to_string(), entry.get("validator_code").cloned().unwrap());
+            if let Some(br) = entry.get("branch") {
+                step.insert("branch".to_string(), br.clone());
+            }
+        }
+        steps.push(serde_json::Value::Object(step));
+    }
+    
+    let mut manifest = serde_json::Map::new();
+    manifest.insert("pipe".to_string(), serde_json::json!(pipe_name));
+    manifest.insert("vars".to_string(), serde_json::json!(vars_used));
+    manifest.insert("startedAt".to_string(), serde_json::json!(started_at));
+    manifest.insert("completedAt".to_string(), serde_json::json!(chrono::Utc::now().to_rfc3339()));
+    manifest.insert("status".to_string(), serde_json::json!(status));
+    manifest.insert("steps".to_string(), serde_json::Value::Array(steps));
+    
+    let final_out = if result.len() > 2000 {
+        &result[0..2000]
+    } else {
+        result
+    };
+    manifest.insert("finalOutput".to_string(), serde_json::json!(final_out));
+    
+    if let Some(parent) = std::path::Path::new(&resolved_path).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    
+    if let Ok(mut f) = std::fs::File::create(&resolved_path) {
+        if let Ok(json_str) = serde_json::to_string_pretty(&manifest) {
+            let _ = f.write_all(json_str.as_bytes());
+        }
+    }
+}
+
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 Luis Kobayashi. All rights reserved.
 
@@ -106,7 +237,125 @@ pub fn find_python_interpreter() -> String {
     if cfg!(windows) { "python.exe".to_string() } else { "python3".to_string() }
 }
 
-pub fn check_echo(text: &str, pipe_name: &str, node_index: usize) -> bool {
+fn format_thousands(n: usize) -> String {
+    let s = n.to_string();
+    let mut result = String::new();
+    let mut count = 0;
+    for c in s.chars().rev() {
+        if count > 0 && count % 3 == 0 {
+            result.push(',');
+        }
+        result.push(c);
+        count += 1;
+    }
+    result.chars().rev().collect()
+}
+
+fn emit_pipe_log(
+    pipe_config: &crate::config::Pipe,
+    event: &str,
+    node_name: &str,
+    tool_name: Option<&str>,
+    input_size: usize,
+    output_size: usize,
+    latency_ms: f64,
+    error: bool,
+) {
+    let (enabled, prefix_opt, level_opt, fields_opt) = match &pipe_config.logging {
+        Some(cfg) => (cfg.enabled, cfg.prefix.clone(), cfg.level.clone(), cfg.fields.clone()),
+        None => (None, None, None, None),
+    };
+
+    let is_enabled = if let Some(e) = enabled {
+        e
+    } else {
+        std::env::var("PIPE_LOG_LEVEL").is_ok()
+    };
+
+    if !is_enabled {
+        return;
+    }
+
+    let prefix = prefix_opt
+        .or_else(|| std::env::var("PIPE_LOG_PREFIX").ok())
+        .unwrap_or_else(|| "[PIPE]".to_string());
+
+    let level = level_opt
+        .or_else(|| std::env::var("PIPE_LOG_LEVEL").ok())
+        .unwrap_or_else(|| "compact".to_string())
+        .to_lowercase();
+
+    // If compact and event is entry, skip
+    if level == "compact" && event == "entry" {
+        return;
+    }
+
+    let fields = fields_opt
+        .unwrap_or_else(|| vec![
+            "trigger".to_string(),
+            "node".to_string(),
+            "tokens".to_string(),
+            "timing".to_string(),
+        ]);
+
+    let mut parts = Vec::new();
+    for field in &fields {
+        match field.as_str() {
+            "trigger" => {
+                if let Some(tn) = tool_name {
+                    parts.push(format!("trigger:{}", tn));
+                }
+            }
+            "node" => {
+                if event == "entry" {
+                    parts.push(format!("→ {}", node_name));
+                } else {
+                    let status_icon = if error { "✗" } else { "✓" };
+                    parts.push(format!("{} {}", status_icon, node_name));
+                }
+            }
+            "tokens" => {
+                if event == "exit" {
+                    let delta = output_size as isize - input_size as isize;
+                    let reduction_pct = if input_size > 0 {
+                        (delta as f64 / input_size as f64) * 100.0
+                    } else {
+                        0.0
+                    };
+                    let input_formatted = format_thousands(input_size);
+                    let output_formatted = format_thousands(output_size);
+                    let delta_formatted = if delta >= 0 {
+                        format!("+{}", format_thousands(delta as usize))
+                    } else {
+                        format!("-{}", format_thousands(delta.abs() as usize))
+                    };
+                    parts.push(format!(
+                        "{} → {} chars ({} | {:.1}%)",
+                        input_formatted, output_formatted, delta_formatted, reduction_pct
+                    ));
+                }
+            }
+            "timing" => {
+                if event == "exit" {
+                    let latency_s = latency_ms / 1000.0;
+                    let timing_str = if latency_s < 1.0 {
+                        format!("{:.2}s", latency_s)
+                    } else {
+                        format!("{:.1}s", latency_s)
+                    };
+                    parts.push(timing_str);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if !parts.is_empty() {
+        eprintln!("{} {}", prefix, parts.join(" | "));
+    }
+}
+
+pub fn check_echo(text: &str, pipe_name: &str, node_index: &str) -> bool {
     if text.is_empty() || text.len() < 500 {
         return false;
     }
@@ -182,6 +431,49 @@ pub fn write_tee(
         }
     }
     None
+}
+
+pub fn evaluate_condition(predicate: &str, input_data: &str) -> bool {
+    let predicate = predicate.trim();
+    if predicate.is_empty() {
+        return true;
+    }
+
+    if predicate.starts_with("size:>") {
+        if let Ok(val) = predicate["size:>".len()..].trim().parse::<usize>() {
+            return input_data.len() > val;
+        }
+        eprintln!("[Context-Pipe] Malformed size predicate: {}", predicate);
+        return true;
+    } else if predicate.starts_with("size:<") {
+        if let Ok(val) = predicate["size:<".len()..].trim().parse::<usize>() {
+            return input_data.len() < val;
+        }
+        eprintln!("[Context-Pipe] Malformed size predicate: {}", predicate);
+        return true;
+    } else if predicate.starts_with("artifact:missing:") {
+        let mut path = predicate["artifact:missing:".len()..].trim();
+        if (path.starts_with('"') && path.ends_with('"')) || (path.starts_with('\'') && path.ends_with('\'')) {
+            path = &path[1..path.len() - 1];
+        }
+        return !std::path::Path::new(path).exists();
+    } else if predicate.starts_with("artifact:exists:") {
+        let mut path = predicate["artifact:exists:".len()..].trim();
+        if (path.starts_with('"') && path.ends_with('"')) || (path.starts_with('\'') && path.ends_with('\'')) {
+            path = &path[1..path.len() - 1];
+        }
+        return std::path::Path::new(path).exists();
+    } else if predicate.starts_with("contains:") {
+        let mut sub = predicate["contains:".len()..].trim();
+        if (sub.starts_with('"') && sub.ends_with('"')) || (sub.starts_with('\'') && sub.ends_with('\'')) {
+            sub = &sub[1..sub.len() - 1];
+        }
+        let leading: String = input_data.chars().take(300).collect();
+        return leading.contains(sub);
+    }
+
+    eprintln!("[Context-Pipe] Unknown condition predicate: {}", predicate);
+    return true;
 }
 
 pub fn resolve_pipe_from_context(config: &Config, tool_name: &str, content_len: usize) -> Option<String> {
@@ -373,6 +665,8 @@ pub async fn run_pipe(
     tool_name: Option<&str>,
     agent_label: Option<&str>,
     server_registry: &HashMap<String, ServerConfig>,
+    vars: Option<&HashMap<String, String>>,
+    manifest_path: Option<&str>,
 ) -> (String, Vec<HashMap<String, serde_json::Value>>) {
     if input_data.contains(SIFT_SIGNATURE) {
         return (input_data.to_string(), Vec::new());
@@ -382,6 +676,35 @@ pub async fn run_pipe(
     let mut trace = Vec::new();
     
     let mut process_env = get_env_with_venv_path();
+
+    let empty_vars = HashMap::new();
+    let invocation_vars = vars.unwrap_or(&empty_vars);
+    let run_vars = match _build_vars(pipe_config, invocation_vars) {
+        Ok(v) => v,
+        Err(e) => return (format!("--- [Context-Pipe: Variable Error] ---\n{}", e), vec![]),
+    };
+    for (k, v) in &run_vars {
+        process_env.insert(k.clone(), v.clone());
+    }
+
+    if !process_env.contains_key("SIFT_AUDIT_HEADER") {
+        process_env.insert("SIFT_AUDIT_HEADER".to_string(), "compact".to_string());
+    }
+    
+    let started_at_str = chrono::Utc::now().to_rfc3339();
+    let m_path_str = manifest_path.unwrap_or("").to_string();
+    let write_manifest_if_needed = |res: &str, tr: &[HashMap<String, serde_json::Value>]| {
+        let final_path = m_path_str.clone();
+        if final_path.is_empty() {
+            // "manifest": "auto" logic handled by caller or orchestrator if supported
+            // Actually, we'll just check if manifest_path is explicitly set to "auto"
+        }
+        if !final_path.is_empty() {
+            let status = if res.starts_with("--- [Context-Pipe:") || res.starts_with("Error") { "fail" } else { "pass" };
+            _write_manifest(&final_path, pipe_config, &run_vars, tr, res, status, &started_at_str);
+        }
+    };
+    
     if let Some(tn) = tool_name {
         process_env.insert("SIFT_TOOL_NAME".to_string(), tn.to_string());
     }
@@ -392,13 +715,125 @@ pub async fn run_pipe(
     let raw_timeout = std::env::var("PIPE_NODE_TIMEOUT_MS").unwrap_or_else(|_| "30000".to_string());
     let node_timeout_ms = raw_timeout.parse::<u64>().unwrap_or(30000);
     
-    for (node_index, node) in pipe_config.nodes.iter().enumerate() {
-        if check_echo(&current_input, &pipe_config.name, node_index) {
+    // ── Phase 11-C: DAG Traversal Engine ──────────────────────────────────────
+    // Build a flat ordered node list: linear nodes first, then branch_sequences.
+    // Each node gets a stable string ID for O(1) lookup and loop detection.
+    // ID format: "__node_{i}__" for linear nodes, "__branch_{name}_{i}__" for
+    // branch-sequence nodes that have no explicit `id` field set.
+    
+    // (node_id, node_ref, natural_next_id)
+    let mut ordered_nodes: Vec<(String, crate::config::Node, Option<String>)> = Vec::new();
+    
+    for (i, node) in pipe_config.nodes.iter().enumerate() {
+        let auto_id = format!("__node_{}__", i);
+        let node_id = node.id.clone().unwrap_or(auto_id);
+        let natural_next = if i + 1 < pipe_config.nodes.len() {
+            let next_node = &pipe_config.nodes[i + 1];
+            let next_auto = format!("__node_{}__", i + 1);
+            Some(next_node.id.clone().unwrap_or(next_auto))
+        } else {
+            None
+        };
+        ordered_nodes.push((node_id, node.clone(), natural_next));
+    }
+    
+    // Add branch_sequences nodes into the lookup map (they are not in the main flow
+    // unless a validator's `branches` references them by sequence name).
+    let mut branch_seq_map: HashMap<String, Vec<(String, crate::config::Node, Option<String>)>> = HashMap::new();
+    if let Some(sequences) = &pipe_config.branch_sequences {
+        for (seq_name, seq_nodes) in sequences {
+            let mut seq_ordered = Vec::new();
+            for (i, node) in seq_nodes.iter().enumerate() {
+                let auto_id = format!("__branch_{}_{}__", seq_name, i);
+                let node_id = node.id.clone().unwrap_or(auto_id);
+                let natural_next = if i + 1 < seq_nodes.len() {
+                    let next_node = &seq_nodes[i + 1];
+                    let next_auto = format!("__branch_{}_{}__", seq_name, i + 1);
+                    Some(next_node.id.clone().unwrap_or(next_auto))
+                } else {
+                    None
+                };
+                seq_ordered.push((node_id, node.clone(), natural_next));
+            }
+            branch_seq_map.insert(seq_name.clone(), seq_ordered);
+        }
+    }
+    
+    // Flatten into a single lookup map: id → (node, natural_next_id)
+    let mut node_map: HashMap<String, (crate::config::Node, Option<String>)> = HashMap::new();
+    for (id, node, next) in &ordered_nodes {
+        node_map.insert(id.clone(), (node.clone(), next.clone()));
+    }
+    for seq_nodes in branch_seq_map.values() {
+        for (id, node, next) in seq_nodes {
+            node_map.insert(id.clone(), (node.clone(), next.clone()));
+        }
+    }
+    
+    // Determine the start node ID.
+    let start_id: Option<String> = ordered_nodes.first().map(|(id, _, _)| id.clone());
+    let mut current_node_id: Option<String> = start_id;
+    let mut step_count: usize = 0;
+    const MAX_STEPS: usize = 100;
+    
+    while let Some(node_id_str) = current_node_id.clone() {
+        if step_count >= MAX_STEPS {
+            let msg = format!("--- [Context-Pipe: Loop Guard] ---\nPipe '{}' exceeded {} steps. Possible infinite loop.", pipe_config.name, MAX_STEPS);
+            return (msg, trace);
+        }
+        step_count += 1;
+        
+        let (node, natural_next) = match node_map.get(&node_id_str) {
+            Some(pair) => pair.clone(),
+            None => {
+                // Unknown node ID — possibly a branch target referencing a sequence by name.
+                // Try to enter the sequence at its first node.
+                if let Some(seq) = branch_seq_map.get(&node_id_str) {
+                    if let Some((first_id, _, _)) = seq.first() {
+                        current_node_id = Some(first_id.clone());
+                        continue;
+                    }
+                }
+                eprintln!("[Context-Pipe] Unknown node id '{}' in pipe '{}'. Stopping.", node_id_str, pipe_config.name);
+                break;
+            }
+        };
+        
+        // ── Condition check ───────────────────────────────────────────────────
+        if let Some(cond_str) = &node.condition {
+            if !evaluate_condition(cond_str, &current_input) {
+                current_node_id = natural_next;
+                continue;
+            }
+        }
+        
+        if check_echo(&current_input, &pipe_config.name, &node_id_str) {
+            current_node_id = natural_next;
             continue;
         }
         
         let is_optional = node.optional;
+        let node_type = &node.node_type;
+        let node_name = if node_type == "mcp" {
+            format!("mcp:{}/{}", node.server.as_deref().unwrap_or(""), node.tool.as_deref().unwrap_or(""))
+        } else if node_type == "script" {
+            let script_name = &node.cmd;
+            let script_dir = std::env::var("PIPE_SCRIPT_DIR").unwrap_or_else(|_| ".gemini/scripts".to_string());
+            let py_script = std::path::Path::new(&script_dir).join(format!("{}.py", script_name));
+            let md_mandate = std::path::Path::new(&script_dir).join(format!("{}.md", script_name));
+            if py_script.exists() || md_mandate.exists() {
+                format!("script:{}", script_name)
+            } else {
+                node.cmd.clone()
+            }
+        } else {
+            node.cmd.clone()
+        };
         
+        emit_pipe_log(pipe_config, "entry", &node_name, tool_name, 0, 0, 0.0, false);
+        let node_start_time = std::time::Instant::now();
+        
+        // ── MCP node ──────────────────────────────────────────────────────────
         if node.node_type == "mcp" {
             let start_size = current_input.len();
             let mut tee_path = None;
@@ -409,7 +844,7 @@ pub async fn run_pipe(
             
             let mcp_res = tokio::time::timeout(
                 tokio::time::Duration::from_millis(node_timeout_ms),
-                run_mcp_node(node, &current_input, server_registry, &process_env)
+                run_mcp_node(&node, &current_input, server_registry, &process_env)
             ).await;
             
             let stdout = match mcp_res {
@@ -419,7 +854,11 @@ pub async fn run_pipe(
                     entry.insert("node".to_string(), serde_json::json!(format!("mcp:{}/{}", node.server.as_deref().unwrap_or(""), node.tool.as_deref().unwrap_or(""))));
                     entry.insert("error".to_string(), serde_json::json!(e));
                     trace.push(entry);
-                    if is_optional { continue; }
+                    
+                    let latency_ms = node_start_time.elapsed().as_secs_f64() * 1000.0;
+                    emit_pipe_log(pipe_config, "exit", &node_name, tool_name, start_size, 0, latency_ms, true);
+                    
+                    if is_optional { current_node_id = natural_next; continue; }
                     return (format!("--- [Context-Pipe: MCP Error] ---\n{}", e), trace);
                 }
                 Err(_) => {
@@ -427,7 +866,11 @@ pub async fn run_pipe(
                     entry.insert("node".to_string(), serde_json::json!(format!("mcp:{}/{}", node.server.as_deref().unwrap_or(""), node.tool.as_deref().unwrap_or(""))));
                     entry.insert("error".to_string(), serde_json::json!("Timeout"));
                     trace.push(entry);
-                    if is_optional { continue; }
+                    
+                    let latency_ms = node_start_time.elapsed().as_secs_f64() * 1000.0;
+                    emit_pipe_log(pipe_config, "exit", &node_name, tool_name, start_size, 0, latency_ms, true);
+                    
+                    if is_optional { current_node_id = natural_next; continue; }
                     return (format!("--- [Context-Pipe: Timeout] ---\nMCP node {}/{} exceeded {}s.", node.server.as_deref().unwrap_or(""), node.tool.as_deref().unwrap_or(""), node_timeout_ms / 1000), trace);
                 }
             };
@@ -442,7 +885,12 @@ pub async fn run_pipe(
                 entry.insert("tee_path".to_string(), serde_json::json!(tp));
             }
             trace.push(entry);
+            
+            let latency_ms = node_start_time.elapsed().as_secs_f64() * 1000.0;
+            emit_pipe_log(pipe_config, "exit", &node_name, tool_name, start_size, end_size, latency_ms, false);
+            
             current_input = stdout;
+            current_node_id = node.next.clone().or(natural_next);
             continue;
         }
         
@@ -452,8 +900,8 @@ pub async fn run_pipe(
         if node.node_type == "script" {
             let script_name = &node.cmd;
             let script_dir = std::env::var("PIPE_SCRIPT_DIR").unwrap_or_else(|_| ".gemini/scripts".to_string());
-            let py_script = Path::new(&script_dir).join(format!("{}.py", script_name));
-            let md_mandate = Path::new(&script_dir).join(format!("{}.md", script_name));
+            let py_script = std::path::Path::new(&script_dir).join(format!("{}.py", script_name));
+            let md_mandate = std::path::Path::new(&script_dir).join(format!("{}.md", script_name));
             
             if py_script.exists() {
                 resolved_cmd = find_python_interpreter();
@@ -478,7 +926,11 @@ pub async fn run_pipe(
                     entry.insert("delta".to_string(), serde_json::json!((end_size as isize - start_size as isize)));
                     trace.push(entry);
                     
+                    let latency_ms = node_start_time.elapsed().as_secs_f64() * 1000.0;
+                    emit_pipe_log(pipe_config, "exit", &node_name, tool_name, start_size, end_size, latency_ms, false);
+                    
                     current_input = stdout;
+                    current_node_id = node.next.clone().or(natural_next);
                     continue;
                 } else {
                     resolved_cmd = resolve_node_cmd(&node.cmd);
@@ -553,11 +1005,18 @@ pub async fn run_pipe(
                 entry.insert("node".to_string(), serde_json::json!(node.cmd));
                 entry.insert("error".to_string(), serde_json::json!(err_reason));
                 trace.push(entry);
-                if is_optional { continue; }
+                
+                let latency_ms = node_start_time.elapsed().as_secs_f64() * 1000.0;
+                emit_pipe_log(pipe_config, "exit", &node_name, tool_name, start_size, 0, latency_ms, true);
+                
+                if is_optional { current_node_id = natural_next; continue; }
                 
                 let help_msg = node.help_msg.as_deref().unwrap_or_else(|| "Dependency not found in PATH.");
                 let error_text = format!("--- [Context-Pipe: Dependency Error] ---\n{}", help_msg);
+                {
+                write_manifest_if_needed(&error_text, &trace);
                 return (error_text, trace);
+            }
             }
         };
         
@@ -613,12 +1072,56 @@ pub async fn run_pipe(
         
         match run_result {
             Ok((stdout, stderr, code)) => {
+                // ── Validator branching ───────────────────────────────────────
+                if node.node_type == "validator" {
+                    if let Some(branches) = &node.branches {
+                        let code_key = code.to_string();
+                        let branch_target = branches.get(&code_key)
+                            .or_else(|| branches.get("default"))
+                            .cloned();
+                        match branch_target {
+                            Some(target) => {
+                                let mut entry = HashMap::new();
+                                entry.insert("node".to_string(), serde_json::json!(node.cmd));
+                                entry.insert("validator_code".to_string(), serde_json::json!(code));
+                                entry.insert("branch".to_string(), serde_json::json!(target));
+                                trace.push(entry);
+                                let latency_ms = node_start_time.elapsed().as_secs_f64() * 1000.0;
+                                emit_pipe_log(pipe_config, "exit", &node_name, tool_name, start_size, stdout.len(), latency_ms, false);
+                                // Pass validator stdout as next input
+                                if !stdout.is_empty() {
+                                    current_input = stdout;
+                                }
+                                // target may be a sequence name or a node id
+                                current_node_id = Some(target);
+                                continue;
+                            }
+                            None => {
+                                // No branch matched and no default — fail fast
+                                let mut entry = HashMap::new();
+                                entry.insert("node".to_string(), serde_json::json!(node.cmd));
+                                entry.insert("error".to_string(), serde_json::json!(format!("Validator exited {} with no matching branch", code)));
+                                trace.push(entry);
+                                let latency_ms = node_start_time.elapsed().as_secs_f64() * 1000.0;
+                                emit_pipe_log(pipe_config, "exit", &node_name, tool_name, start_size, 0, latency_ms, true);
+                                if is_optional { current_node_id = natural_next; continue; }
+                                { let e = format!("Error in node {}: {}", node.cmd, stderr); write_manifest_if_needed(&e, &trace); return (e, trace); }
+                            }
+                        }
+                    }
+                    // Validator with no branches: treat as binary (pass-through on 0)
+                }
+                
                 if code != 0 {
                     let mut entry = HashMap::new();
                     entry.insert("node".to_string(), serde_json::json!(node.cmd));
                     entry.insert("error".to_string(), serde_json::json!(stderr.trim()));
                     trace.push(entry);
-                    if is_optional { continue; }
+                    
+                    let latency_ms = node_start_time.elapsed().as_secs_f64() * 1000.0;
+                    emit_pipe_log(pipe_config, "exit", &node_name, tool_name, start_size, 0, latency_ms, true);
+                    
+                    if is_optional { current_node_id = natural_next; continue; }
                     return (format!("Error in node {}: {}", node.cmd, stderr), trace);
                 }
                 
@@ -632,25 +1135,38 @@ pub async fn run_pipe(
                     entry.insert("tee_path".to_string(), serde_json::json!(tp));
                 }
                 trace.push(entry);
+                
+                let latency_ms = node_start_time.elapsed().as_secs_f64() * 1000.0;
+                emit_pipe_log(pipe_config, "exit", &node_name, tool_name, start_size, end_size, latency_ms, false);
+                
                 current_input = stdout;
+                current_node_id = node.next.clone().or(natural_next);
             }
             Err(e) => {
                 let mut entry = HashMap::new();
                 entry.insert("node".to_string(), serde_json::json!(node.cmd));
                 entry.insert("error".to_string(), serde_json::json!(e));
                 trace.push(entry);
-                if is_optional { continue; }
+                
+                let latency_ms = node_start_time.elapsed().as_secs_f64() * 1000.0;
+                emit_pipe_log(pipe_config, "exit", &node_name, tool_name, start_size, 0, latency_ms, true);
+                
+                if is_optional { current_node_id = natural_next; continue; }
                 
                 let error_text = if e == "Timeout" {
                     format!("--- [Context-Pipe: Timeout] ---\nNode {} exceeded {}s.", node.cmd, node_timeout_ms / 1000)
                 } else {
                     format!("--- [Context-Pipe: Error] ---\n{}", e)
                 };
+                {
+                write_manifest_if_needed(&error_text, &trace);
                 return (error_text, trace);
+            }
             }
         }
     }
     
+    write_manifest_if_needed(&current_input, &trace);
     (current_input, trace)
 }
 
@@ -663,6 +1179,7 @@ pub fn detect_client_id() -> String {
         ("ANTIGRAVITY_AGENT", "Google Antigravity"),
         ("OPENCODE", "OpenCode"),
         ("OPENCODE_PID", "OpenCode"),
+        ("PI_CODING_AGENT_DIR", "pi.dev"),
         ("CURSOR_TRACE_ID", "Cursor"),
         ("VSCODE_PID", "VSCode"),
         ("WINDSURF_TOOL_ARGS", "Windsurf"),

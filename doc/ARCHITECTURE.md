@@ -65,10 +65,14 @@ Each node is a dictionary following this schema:
 |---|---|---|---|
 | `cmd` | string | (required) | Binary name, script path, or shell command. |
 | `args` | array | `[]` | List of arguments passed to the command. |
-| `type` | string | `"binary"` | `"binary"`, `"script"`, or `"mcp"`. |
+| `type` | string | `"binary"` | `"binary"`, `"script"`, `"mcp"`, or `"validator"`. |
 | `optional` | boolean | `false` | If `true`, orchestration continues even if the node fails. |
 | `help_msg` | string | `""` | User-friendly instruction shown on node failure. |
 | `tee` | object | `null` | Optional T-Pipe configuration for stream splitting. |
+| `id` | string | auto | Stable node identifier used as a branch target (`__node_N__` if omitted). |
+| `next` | string | auto | Override the natural sequential flow — jump to the node with this `id`. |
+| `condition` | string | `null` | Skip this node if the predicate evaluates to `false`. See §1.5. |
+| `branches` | object | `null` | Exit-code → node-id routing for `validator` nodes. See §1.5. |
 
 ### The Timeout Guard
 Every node execution is wrapped in a **Timeout Guard** (default: 30s, configurable via `PIPE_NODE_TIMEOUT_MS`). If a node hangs (e.g., a stalled network fetch or a heavy neural model), the orchestrator kills the process, prevents an IDE freeze, and returns a structured `--- [Context-Pipe: Timeout] ---` response.
@@ -96,6 +100,81 @@ run_pipe()
 ```
 
 The orchestrator manages the full lifecycle of the MCP server connection for each node, ensuring clean teardown and timeout enforcement.
+
+### 1.5 DAG Traversal Engine (Phase 11)
+
+As of Phase 11, `run_pipe()` executes pipelines as **Directed Acyclic Graphs** rather than simple arrays. The linear array definition in `pipes.json` remains the common case; DAG semantics are additive and backward-compatible.
+
+#### How Traversal Works
+
+1. **ID Assignment** — every node is assigned a stable string ID at pipe-load time. If the node has an explicit `"id"` field, that is used. Otherwise an auto-generated ID is assigned (`__node_0__`, `__node_1__`, … for main-sequence nodes; `__branch_{name}_{i}__` for `branch_sequences` sub-graphs).
+2. **Start** — traversal begins at the first main-sequence node.
+3. **Condition Check** — if a node has a `"condition"` predicate, it is evaluated against the current input data. A `false` result skips the node and advances to the natural next node.
+4. **Execution** — the node runs normally (binary, script, MCP, or validator).
+5. **Next-Node Resolution** — priority order:
+   1. For `validator` nodes: the exit code is stringified and looked up in `"branches"`. If found, the matching target ID is the next node. If not found, the `"default"` key is used. If neither exists, the node fails (respecting `optional`).
+   2. If the node has a `"next"` field, that ID is the next node.
+   3. Otherwise the natural sequential successor is used.
+6. **Branch Sequence Entry** — if the next-node ID matches a `branch_sequences` key (not a node ID), the engine enters that sequence at its first node.
+7. **Loop Guard** — if the step counter exceeds **100**, the engine halts with `--- [Context-Pipe: Loop Guard] ---` and returns an error. This prevents cycles from locking the orchestrator.
+
+#### Condition Predicates (`"condition"`)
+
+| Predicate | Example | Description |
+|---|---|---|
+| `size:>N` | `size:>10000` | Node runs only if input exceeds N bytes. |
+| `size:<N` | `size:<500` | Node runs only if input is smaller than N bytes. |
+| `artifact:exists:<path>` | `artifact:exists:output/report.md` | Node runs if the file at `<path>` already exists on disk. |
+| `artifact:missing:<path>` | `artifact:missing:dist/bundle.js` | Node runs if the file at `<path>` does NOT exist on disk. |
+| `contains:<string>` | `contains:ERROR` | Node runs if the leading 300 chars of input contain `<string>`. |
+
+Unknown predicates **fail-open** — they log a warning and return `true` (run the node) to avoid silently blocking pipelines.
+
+#### Validator Nodes (`"type": "validator"`)
+
+A validator runs like a binary node but its exit code — rather than `stdout` — drives routing:
+
+```json
+{
+  "cmd": "check-schema",
+  "type": "validator",
+  "id": "schema-check",
+  "branches": {
+    "0": "publish-step",
+    "1": "fix-step",
+    "default": "fix-step"
+  }
+}
+```
+
+- If the validator exits `0`, the engine transitions to node `publish-step`.
+- If it exits `1`, it transitions to `fix-step`.
+- `"default"` catches any other exit code.
+- If no branch matches and `"default"` is absent, the node fails (unless `"optional": true`).
+- The validator's `stdout` is passed as input to the branch target.
+
+#### `branch_sequences`
+
+Branch sequences are named sub-graphs of nodes that live outside the main pipe array. They are only entered when a validator (or a `"next"` pointer) references them by name:
+
+```json
+"branch_sequences": {
+  "fix-step": [
+    { "cmd": "auto-fixer", "args": ["--in-place"] },
+    { "cmd": "semantic-sift-cli", "args": ["semantic"] }
+  ]
+}
+```
+
+Sequence nodes also support `condition`, `next`, `id`, and `branches` — the same traversal rules apply recursively.
+
+### Pipe Transparency Layer (Logging)
+To provide real-time visibility into the pipeline's execution (latency, node status, token/character deltas), the orchestrator includes a native logging layer:
+*   **Emission Path**: Logs are printed directly to `stderr` during execution, allowing them to flow in real time through the terminal (e.g. `mcp-pipe run`) or be captured by IDE terminals.
+*   **Log Levels**:
+    *   `compact`: Emits a single exit line when a node completes: `[PIPE] ✓ node_name | input → output chars (delta | reduction%) | timing`.
+    *   `verbose`: Emits both entry and exit lines: `[PIPE] → node_name` then `[PIPE] ✓ node_name ...`.
+*   **Customization**: The log prefix, level, and visible fields are customizable per pipe or globally via environment variables. Data is sourced from the trace map, introducing zero overhead or new instrumentation.
 
 ### Resilient Orchestration (Failure-Bypass)
 By default, the orchestrator follows a **Fail-Fast** strategy: any node failure (FileNotFound, Timeout, or Non-zero Exit Code) aborts the entire pipe.
@@ -434,6 +513,7 @@ The Python-based FastMCP server carries a mandatory cold-start tax (~1000ms) due
 4. **PowerShell JSON Normalization**: Dynamically pre-processes unquoted or single-quoted JSON strings (e.g. `[{cmd: grep}]`) passed via PowerShell arguments using a robust character-by-character scanner, normalising them to valid RFC-JSON before parsing.
 5. **Self-Aware Bypass**: Detects the sifting signature (`--- [Semantic-Sift Audit] ---`) and skips redundant re-processing, preventing infinite sifting loops.
 6. **Path Security**: `resolve_safe_path()` validates file paths against `PIPE_AUTHORIZED_ROOT` (split by the platform-specific path separator to support multiple directories) and the client-reported workspace roots (`CLIENT_ROOTS`) before any I/O, mirroring the Python server's safety contract.
+7. **DAG Traversal Engine (Phase 11)**: Full parity with the Python DAG engine. `Node` struct carries `condition`, `branches`, `id`, `next`. `Pipe` struct carries `branch_sequences`. `evaluate_condition()` implements all 5 predicates. The DAG `while` loop supports validator branching, `branch_sequences` entry, `next` overrides, condition-based node skipping, and the 100-step loop guard.
 
 ### TOML Configuration Support
 

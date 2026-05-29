@@ -167,6 +167,12 @@ The `pipes.json` file is the brain of your Switchboard. It must live in your pro
   "pipes": [
     {
       "name": "standard-distill",
+      "logging": {
+        "enabled": true,
+        "prefix": "[PIPE]",
+        "level": "verbose",
+        "fields": ["trigger", "node", "tokens", "timing"]
+      },
       "nodes": [
         { "cmd": "semantic-sift-cli", "args": ["logs"] }
       ]
@@ -177,6 +183,13 @@ The `pipes.json` file is the brain of your Switchboard. It must live in your pro
   ]
 }
 ```
+
+#### Logging Configuration (Pipe Transparency Layer)
+Each pipe can declare a `logging` block to print real-time execution logs directly to `stderr`:
+*   `enabled`: If `true`, enables logging for this pipe (overrides `PIPE_LOG_LEVEL` environment variable).
+*   `prefix`: Text prepended to every log line (defaults to `[PIPE]` or `PIPE_LOG_PREFIX`).
+*   `level`: `"compact"` (emits on node exit only) or `"verbose"` (emits on node entry and exit).
+*   `fields`: List of fields to display: `"trigger"`, `"node"`, `"tokens"`, `"timing"`.
 
 ---
 
@@ -502,7 +515,7 @@ Incoming content or task
 | Tool | When to call | Key rule |
 |---|---|---|
 | `pipe_analyze_file(path)` | Before `pipe_read_file` when unsure of pipe | Returns recommended `pipe_name` |
-| `pipe_read_file(path, pipe_name, start_line, end_line)` | Instead of any native file read > 1KB | Default pipe: `standard-distill`; optional 1-indexed range boundaries |
+| `pipe_read_file(path, pipe_name, start_line, end_line)` | Instead of any native file read > 50KB | Default pipe: `standard-distill`; optional 1-indexed range boundaries |
 | `list_pipes()` | Before `pipe_run` to see available named pipes | — |
 | `pipe_run(pipe_name, input_text)` | When a named pipe matches the content type | Produces audit header |
 | `pipe_list_shadow_tools()` | Always before `pipe_run_dynamic` | Discover available nodes |

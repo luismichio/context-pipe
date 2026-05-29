@@ -47,7 +47,7 @@ def list_pipes() -> str:
 
 
 @mcp.tool()
-async def pipe_run(pipe_name: str, input_text: str) -> str:
+async def pipe_run(pipe_name: str, input_text: str, vars: Optional[dict] = None) -> str:
     """
     Executes a specific context pipe on the provided input text.
     Args:
@@ -61,7 +61,7 @@ async def pipe_run(pipe_name: str, input_text: str) -> str:
 
     start_t = time.time()
     try:
-        result, trace = await run_pipe(pipe, input_text)
+        result, trace = await run_pipe(pipe, input_text, vars=vars)
         latency_ms = (time.time() - start_t) * 1000
 
         # Log Telemetry for ROI tracking
@@ -161,6 +161,7 @@ async def pipe_read_file(
     """
     try:
         resolved_path = await _resolve_safe_path(path, ctx)
+
         with open(resolved_path, "r", encoding="utf-8", errors="replace") as f:
             if start_line is not None or end_line is not None:
                 lines = f.readlines()

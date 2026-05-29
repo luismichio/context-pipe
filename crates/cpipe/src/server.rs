@@ -550,12 +550,14 @@ async fn run_pipe_internal(pipe_name: &str, input_text: &str, tool_name: &str) -
     let start_time_str = chrono::Utc::now().to_rfc3339();
     let start_t = std::time::Instant::now();
     let (result, _trace) = crate::orchestrator::run_pipe(
-        pipe,
-        input_text,
-        Some(tool_name),
-        None,
-        &config.servers,
-    ).await;
+            pipe,
+            input_text,
+            Some(tool_name),
+            None,
+            &config.servers,
+            None,
+            None,
+        ).await;
     let latency_ms = start_t.elapsed().as_secs_f64() * 1000.0;
     
     let platform = detect_client_id();
@@ -820,12 +822,14 @@ async fn handle_tool_call(name: &str, args: serde_json::Value) -> String {
             let start_time_str = chrono::Utc::now().to_rfc3339();
             let start_t = std::time::Instant::now();
             let (result, _trace) = crate::orchestrator::run_pipe(
-                pipe,
-                output_text,
-                Some("mcp:pipe_agent_handoff"),
-                if from_agent.is_empty() { None } else { Some(from_agent) },
-                &config.servers,
-            ).await;
+            pipe,
+            output_text,
+            Some("mcp:pipe_agent_handoff"),
+            if from_agent.is_empty() { None } else { Some(from_agent) },
+            &config.servers,
+            None,
+            None,
+        ).await;
             let latency_ms = start_t.elapsed().as_secs_f64() * 1000.0;
             
             let platform = detect_client_id();
@@ -868,7 +872,10 @@ async fn handle_tool_call(name: &str, args: serde_json::Value) -> String {
             let pipe = crate::config::Pipe {
                 name: "dynamic".to_string(),
                 description: "Ad-hoc dynamic pipe".to_string(),
+                logging: None,
+                vars: None,
                 nodes,
+                branch_sequences: None,
             };
             
             let config = crate::config::load_pipes_config();
@@ -876,12 +883,14 @@ async fn handle_tool_call(name: &str, args: serde_json::Value) -> String {
             let start_time_str = chrono::Utc::now().to_rfc3339();
             let start_t = std::time::Instant::now();
             let (result, _trace) = crate::orchestrator::run_pipe(
-                &pipe,
-                input_text,
-                Some("mcp:pipe_run_dynamic"),
-                None,
-                &config.servers,
-            ).await;
+            &pipe,
+            input_text,
+            Some("mcp:pipe_run_dynamic"),
+            None,
+            &config.servers,
+            None,
+            None,
+        ).await;
             let latency_ms = start_t.elapsed().as_secs_f64() * 1000.0;
             
             let platform = detect_client_id();

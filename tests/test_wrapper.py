@@ -189,11 +189,10 @@ def test_run_pipe_exception_falls_back_to_raw():
 
     assert result == payload
 
-
 def test_before_tool_gating_blocks_large_file(tmp_path):
     """BeforeTool event with a large file must be blocked with a cancel/deny payload."""
     large_file = tmp_path / "large.txt"
-    large_file.write_text("x" * 2048)  # 2KB > 1KB
+    large_file.write_text("x" * 60000)  # 60KB > 50KB
     
     # Simulate a BeforeTool payload
     payload = json.dumps({
@@ -208,7 +207,7 @@ def test_before_tool_gating_blocks_large_file(tmp_path):
     
     data = json.loads(result)
     assert data.get("cancel") is True
-    assert "BLOCKED by Context-Pipe" in data.get("errorMessage", "")
+    assert "exceeds 50KB safety limit" in data.get("errorMessage", "")
     
     # 2. Test for Gemini CLI (decision: deny)
     with patch("context_pipe.wrapper.detect_client_id", return_value="Gemini CLI"):
@@ -216,13 +215,13 @@ def test_before_tool_gating_blocks_large_file(tmp_path):
         
     data_gemini = json.loads(result_gemini)
     assert data_gemini.get("decision") == "deny"
-    assert "BLOCKED by Context-Pipe" in data_gemini.get("reason", "")
-
-
+    assert "exceeds 50KB safety limit" in data_gemini.get("reason", "")
+ 
+ 
 def test_before_tool_gating_allows_small_file(tmp_path):
     """BeforeTool event with a small file must be allowed."""
     small_file = tmp_path / "small.txt"
-    small_file.write_text("x" * 500)  # 500 bytes <= 1KB
+    small_file.write_text("x" * 40000)  # 40KB <= 50KB
     
     payload = json.dumps({
         "tool": "read_file",
@@ -239,8 +238,8 @@ def test_before_tool_gating_allows_small_file(tmp_path):
         result_gemini = wrap_payload(payload, config)
         
     assert json.loads(result_gemini).get("decision") == "allow"
-
-
+ 
+ 
 def test_before_tool_gating_allows_other_tools():
     """BeforeTool event for other non-file-reading tools must be allowed."""
     payload = json.dumps({
@@ -258,8 +257,8 @@ def test_before_tool_gating_allows_other_tools():
         result_gemini = wrap_payload(payload, config)
         
     assert json.loads(result_gemini).get("decision") == "allow"
-
-
+ 
+ 
 def test_generic_agent_label_extraction():
     """Generic agent labels must be parsed correctly from metadata or agent_label fields."""
     from context_pipe.platforms import extract_content
@@ -285,17 +284,17 @@ def test_generic_agent_label_extraction():
     assert label4 == "Archivist"
 
 
-def test_before_tool_gating_allows_small_line_range(tmp_path):
-    """BeforeTool event with a small requested line range must be allowed even if the file is large."""
-    large_file = tmp_path / "large.txt"
-    large_file.write_text("x" * 5000)  # 5KB > 1KB
+def test_before_tool_gating_allows_any_line_range(tmp_path):
+    """BeforeTool event with any line range or file type must be allowed if under 50KB."""
+    md_file = tmp_path / "readme.md"
+    md_file.write_text("x" * 2000)
     
     payload = json.dumps({
         "tool": "view_file",
         "arguments": {
-            "path": str(large_file),
+            "path": str(md_file),
             "StartLine": 1,
-            "EndLine": 10  # 10 lines <= 50 limit
+            "EndLine": 100
         }
     })
     config = {}
@@ -304,34 +303,43 @@ def test_before_tool_gating_allows_small_line_range(tmp_path):
     assert json.loads(result).get("cancel") is False
 
 
-def test_before_tool_gating_blocks_large_line_range(tmp_path):
-    """BeforeTool event with a line range > 50 must be blocked."""
-    large_file = tmp_path / "large.txt"
-    large_file.write_text("x" * 5000)
+def test_after_tool_bypasses_sifted_file(tmp_path):
+    """AfterTool event for a read of a file already sifted must bypass sifting."""
+    sifted_file = tmp_path / "sifted.txt"
+    sifted_file.write_text("--- [Semantic-Sift Audit] ---\nsome sifted content")
     
-    payload = json.dumps({
-        "tool": "view_file",
-        "arguments": {
-            "path": str(large_file),
-            "StartLine": 1,
-            "EndLine": 100  # 100 lines > 50 limit
-        }
-    })
-    config = {}
-    with patch("context_pipe.wrapper.detect_client_id", return_value="Generic CLI"):
-        result = wrap_payload(payload, config)
-    data = json.loads(result)
-    assert data.get("cancel") is True
-    assert "File read range (100 lines) > 50 lines limit" in data.get("errorMessage", "")
-
-
-def test_after_tool_bypasses_small_line_range():
-    """AfterTool event for a read with range <= 50 lines must bypass sifting."""
     payload = json.dumps({
         "hook_event_name": "AfterTool",
         "tool_name": "view_file",
         "arguments": {
-            "path": "somefile.txt",
+            "path": str(sifted_file),
+            "StartLine": 1,
+            "EndLine": 10
+        },
+        "tool_response": {"llmContent": "some raw text content which is > 500 characters" * 10}
+    })
+    config = _make_config("standard-distill", trigger="default")
+    
+    with patch("context_pipe.wrapper.run_pipe", new_callable=AsyncMock) as mock_run:
+        with patch("context_pipe.wrapper.log_bypass_event") as mock_log_bypass:
+            result = wrap_payload(payload, config)
+            assert result == payload
+            mock_run.assert_not_called()
+            mock_log_bypass.assert_called_once()
+            _, kwargs = mock_log_bypass.call_args
+            assert "File on disk is already sifted" in kwargs.get("reason", "")
+
+
+def test_after_tool_sifts_unsifted_file(tmp_path):
+    """AfterTool event for a read of an unsifted file must trigger sifting."""
+    unsifted_file = tmp_path / "unsifted.txt"
+    unsifted_file.write_text("some regular unsifted file content line 1\nline 2")
+    
+    payload = json.dumps({
+        "hook_event_name": "AfterTool",
+        "tool_name": "view_file",
+        "arguments": {
+            "path": str(unsifted_file),
             "StartLine": 1,
             "EndLine": 10
         },
@@ -340,12 +348,7 @@ def test_after_tool_bypasses_small_line_range():
     config = _make_config("standard-distill", trigger="default")
     
     with patch("context_pipe.wrapper.run_pipe", new_callable=AsyncMock) as mock_run:
-        with patch("context_pipe.wrapper.log_bypass_event") as mock_log_bypass:
-            result = wrap_payload(payload, config)
-            # Should bypass
-            assert result == payload
-            mock_run.assert_not_called()
-            mock_log_bypass.assert_called_once()
-            _, kwargs = mock_log_bypass.call_args
-            assert "Line range <= 50 lines (10)" in kwargs.get("reason", "")
-
+        mock_run.return_value = ("sifted_output", [])
+        result = wrap_payload(payload, config)
+        mock_run.assert_called_once()
+        assert "sifted_output" in result

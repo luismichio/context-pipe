@@ -43,6 +43,9 @@
     {
       "name": "adaptive-chain",
       "description": "Demonstrates recursive placeholders for Adaptive Window Pressure.",
+      "vars": {
+        "SIFT_RATE": "0.6"
+      },
       "nodes": [
         {
           "cmd": "semantic-sift-cli",
@@ -50,6 +53,52 @@
           "help_msg": "Set SIFT_RATE environment variable to dynamically adjust compression."
         }
       ]
+    },
+    {
+      "name": "self-healing-validator",
+      "_comment": "Phase 11: DAG traversal demo. The validator checks schema; on failure it auto-corrects before distilling.",
+      "nodes": [
+        {
+          "cmd": "semantic-sift-cli",
+          "args": ["semantic", "--rate", "0.5"],
+          "condition": "size:>2000",
+          "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
+        },
+        {
+          "cmd": "check-schema",
+          "type": "validator",
+          "id": "schema-check",
+          "optional": true,
+          "help_msg": "check-schema not found — validator step skipped.",
+          "branches": {
+            "0": "done",
+            "1": "on-failure",
+            "default": "on-failure"
+          }
+        }
+      ],
+      "branch_sequences": {
+        "on-failure": [
+          {
+            "cmd": "auto-fixer",
+            "args": ["--mode", "schema"],
+            "optional": true,
+            "help_msg": "auto-fixer not found — manual correction required."
+          },
+          {
+            "cmd": "semantic-sift-cli",
+            "args": ["logs"],
+            "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
+          }
+        ],
+        "done": [
+          {
+            "cmd": "semantic-sift-cli",
+            "args": ["logs"],
+            "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
+          }
+        ]
+      }
     }
   ],
   "mappings": [

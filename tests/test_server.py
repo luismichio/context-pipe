@@ -128,28 +128,29 @@ async def test_resolve_safe_path_fallback_cwd(tmp_path):
         os.chdir(old_cwd)
 
 @pytest.mark.anyio
-async def test_resolve_safe_path_multi_path_env(tmp_path, mock_context):
+async def test_resolve_safe_path_multi_path_env(tmp_path, mock_context, mock_config):
     dir1 = tmp_path / "dir1"
     dir1.mkdir()
     dir2 = tmp_path / "dir2"
     dir2.mkdir()
-    
+
     file1 = dir1 / "file1.txt"
     file1.touch()
     file2 = dir2 / "file2.txt"
     file2.touch()
-    
+
     auth_root_val = f"{dir1}{os.pathsep}{dir2}"
-    with patch.dict(os.environ, {"PIPE_AUTHORIZED_ROOT": auth_root_val}):
-        resolved_1 = await server._resolve_safe_path(str(file1), None)
-        resolved_2 = await server._resolve_safe_path(str(file2), None)
-        assert os.path.exists(resolved_1)
-        assert os.path.exists(resolved_2)
-        
-        outside = tmp_path / "outside.txt"
-        outside.touch()
-        with pytest.raises(PermissionError):
-            await server._resolve_safe_path(str(outside), None)
+    with patch("context_pipe.server.CONFIG_PATH", mock_config):
+        with patch.dict(os.environ, {"PIPE_AUTHORIZED_ROOT": auth_root_val}):
+            resolved_1 = await server._resolve_safe_path(str(file1), None)
+            resolved_2 = await server._resolve_safe_path(str(file2), None)
+            assert os.path.exists(resolved_1)
+            assert os.path.exists(resolved_2)
+
+            outside = tmp_path / "outside.txt"
+            outside.touch()
+            with pytest.raises(PermissionError):
+                await server._resolve_safe_path(str(outside), None)
 
 
 @pytest.mark.anyio
@@ -234,7 +235,7 @@ async def test_pipe_read_file_lines_slicing(tmp_path, mock_config, mock_context)
     f = tmp_path / "read.txt"
     f.write_text("line1\nline2\nline3\nline4\n")
     with patch("context_pipe.server.CONFIG_PATH", mock_config):
-        with patch("context_pipe.server.run_pipe", side_effect=lambda pipe, content: (content, [])):
+        with patch("context_pipe.server.run_pipe", side_effect=lambda pipe, content, **kwargs: (content, [])):
             # Slicing lines 2 to 3 (inclusive, 1-indexed)
             result = await server.pipe_read_file(str(f), "standard-distill", start_line=2, end_line=3, ctx=mock_context)
             assert result == "line2\nline3\n"
@@ -244,14 +245,25 @@ async def test_pipe_read_file_lines_clamping(tmp_path, mock_config, mock_context
     f = tmp_path / "read.txt"
     f.write_text("line1\nline2\n")
     with patch("context_pipe.server.CONFIG_PATH", mock_config):
-        with patch("context_pipe.server.run_pipe", side_effect=lambda pipe, content: (content, [])):
+        with patch("context_pipe.server.run_pipe", side_effect=lambda pipe, content, **kwargs: (content, [])):
             # Slicing lines beyond bounds
             result = await server.pipe_read_file(str(f), "standard-distill", start_line=1, end_line=10, ctx=mock_context)
             assert result == "line1\nline2\n"
             # Out of bounds start_line
             result_empty = await server.pipe_read_file(str(f), "standard-distill", start_line=5, end_line=10, ctx=mock_context)
             assert result_empty == ""
+
+
+@pytest.mark.anyio
+async def test_pipe_read_file_markdown_allows_any_range(tmp_path, mock_config, mock_context):
+    f = tmp_path / "readme.md"
     
+    f.write_text("line\n" * 200)
+    with patch("context_pipe.server.CONFIG_PATH", mock_config):
+        # Small range (< 150 lines) should succeed
+        with patch("context_pipe.server.run_pipe", return_value=("distilled", [])):
+            result_ok = await server.pipe_read_file(str(f), "standard-distill", start_line=1, end_line=10, ctx=mock_context)
+            assert result_ok == "distilled"
 
 
 # ---------------------------------------------------------------------------
