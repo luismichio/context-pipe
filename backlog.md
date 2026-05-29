@@ -306,10 +306,10 @@ Silent by default, traceable on demand. `verbose` lives on the **server config**
 
 **Safety limit:** scan at most 50 non-JSON lines before returning an error — prevents infinite loops against genuinely broken servers that never emit JSON-RPC.
 
-- [ ] **Phase 13-A — Rust** (`crates/cpipe/src/orchestrator.rs`): Replace both raw `read_line()` calls in `run_mcp_node()` with a `read_jsonrpc_line(reader, max_skip)` async helper. Scans stdout lines until one parses as valid JSON, logging non-JSON lines to `stderr` (always) or suppressing them (default). Wire `verbose` flag from server config to control stderr emission. Unit tests: clean server (no banner), banner-before-initialize, banner-between-initialize-and-tool-response, >50 non-JSON lines (error path).
-- [ ] **Phase 13-B — Python** (`context_pipe/orchestrator.py`): The MCP SDK controls stdout reading so injection is not clean. Fix: when `verbose: false` (default), wrap the server's stdout with a pre-filter before `stdio_client` reads it — only forwarding lines that parse as valid JSON (start with `{` after stripping whitespace). When `verbose: true`, forward all lines but log non-JSON ones to `stderr`. Add `verbose` field to server config schema in `config_loader.py`. Tests mirroring Rust test cases.
-- [ ] **Phase 13-C — Schema** (`config_loader.py`, `config.rs`): Add `verbose: bool = false` to the server config schema in both Python and Rust. Document in `pipes.json.example`.
-- [ ] **Phase 13-D — Docs**: `ARCHITECTURE.md` §1 MCP node section, `README.md` servers block reference, `CHANGELOG.md`.
+- [x] **Phase 13-A** (`crates/cpipe/src/orchestrator.rs`): Replace both raw `read_line()` calls in `run_mcp_node()` with a `read_jsonrpc_line(reader, max_skip)` async helper. Scans stdout lines until one parses as valid JSON, logging non-JSON lines to `stderr` (always) or suppressing them (default). Wire `verbose` flag from server config to control stderr emission. Unit tests: clean server (no banner), banner-before-initialize, banner-between-initialize-and-tool-response, >50 non-JSON lines (error path).
+- [x] **Phase 13-B** (`context_pipe/orchestrator.py`): The MCP SDK controls stdout reading so injection is not clean. Fix: when `verbose: false` (default), wrap the server's stdout with a pre-filter before `stdio_client` reads it — only forwarding lines that parse as valid JSON (start with `{` after stripping whitespace). When `verbose: true`, forward all lines but log non-JSON ones to `stderr`. Add `verbose` field to server config schema in `config_loader.py`. Tests mirroring Rust test cases.
+- [x] **Phase 13-C** (`config_loader.py`, `config.rs`): Add `verbose: bool = false` to the server config schema in both Python and Rust. Document in `pipes.json.example`.
+- [x] **Phase 13-D**: Docs: `ARCHITECTURE.md` §1 MCP node section, `README.md` servers block reference, `CHANGELOG.md`.
 
 ## 🟩 Phase 10: Sandboxing & Protocol Security (Done)
 

@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-05-30
+
 ### ✨ Added
+- **Phase 13: MCP Node Banner Tolerance**: Implemented banner tolerance in both Python and Rust engines to gracefully skip up to 50 non-JSON stdout lines emitted by noisy MCP servers during startup or tool execution. Added `verbose` flag to the server config schema to surface skipped lines to `stderr`.
+- **Phase 12: Runtime Variable Injection & Run Manifests**: Ported Phase 12 variables and JSON run manifests from Rust to the Python engine (`context_pipe/orchestrator.py`, `server.py`, `cli.py`, `api.py`). Supports defaults, environment variables, invocation overrides, and serialization of run traces/telemetry.
 - **Phase 11: Conditional Branching & Validator Nodes**: Upgraded the orchestration engine from a linear array to a full **Directed Acyclic Graph (DAG)** traversal in both Python (`context_pipe/orchestrator.py`) and Rust (`crates/cpipe/src/orchestrator.rs`).
   - **`condition` key** on any node: predicate-based skip logic. Supported predicates: `size:>N`, `size:<N`, `artifact:missing:<path>`, `artifact:exists:<path>`, `contains:<string>`. Unknown predicates fail-open (warn, then run) to avoid blocking pipelines.
   - **`type: "validator"` nodes**: run a subprocess and branch on its exit code. The `branches` map routes `"0"`, `"1"` (or any exit code string) to named node IDs or branch sequences. A `"default"` key provides a fallback; if no branch matches and there is no default, the node fails (respecting `optional`).

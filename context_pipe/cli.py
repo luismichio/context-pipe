@@ -467,6 +467,10 @@ def _build_parser() -> argparse.ArgumentParser:
                        help="1-indexed start line (inclusive) to slice from input.")
     run_p.add_argument("--end-line", "--end_line", dest="end_line", type=int, metavar="N",
                        help="1-indexed end line (inclusive) to slice from input.")
+    run_p.add_argument("--var", action="append", default=[], metavar="KEY=VALUE",
+                       help="Runtime variable to substitute into the pipe (repeatable).")
+    run_p.add_argument("--manifest", metavar="PATH",
+                       help="Path to write the run manifest JSON (overrides pipe definition).")
     run_p.add_argument("-v", "--verbose", action="store_true",
                        help="Prepend audit header (node trace + latency) to output.")
 

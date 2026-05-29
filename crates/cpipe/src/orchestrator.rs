@@ -499,6 +499,46 @@ pub fn resolve_pipe_from_context(config: &Config, tool_name: &str, content_len: 
     None
 }
 
+
+async fn read_jsonrpc_line(
+    reader: &mut tokio::io::BufReader<tokio::process::ChildStdout>,
+    verbose: bool,
+) -> Result<String, String> {
+    let max_skip = 50;
+    let mut skipped = 0;
+    let mut line = String::new();
+
+    loop {
+        line.clear();
+        let n = reader.read_line(&mut line).await.map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Err("EOF reached before receiving valid JSON-RPC".to_string());
+        }
+
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if trimmed.starts_with('{') {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                if parsed.get("jsonrpc").is_some() {
+                    return Ok(line.clone());
+                }
+            }
+        }
+
+        skipped += 1;
+        if verbose {
+            eprintln!("[cpipe] MCP server stdout (non-JSON): {}", trimmed);
+        }
+
+        if skipped > max_skip {
+            return Err(format!("MCP server emitted {} non-JSON lines", skipped));
+        }
+    }
+}
+
 pub async fn run_mcp_node(
     node: &Node,
     stdin_data: &str,
@@ -588,8 +628,8 @@ pub async fn run_mcp_node(
     child_stdin.write_all(init_req_str.as_bytes()).await.map_err(|e| e.to_string())?;
     child_stdin.flush().await.map_err(|e| e.to_string())?;
     
-    let mut response_line = String::new();
-    child_stdout.read_line(&mut response_line).await.map_err(|e| e.to_string())?;
+    let is_verbose = server_registry.get(node.server.as_ref().unwrap()).and_then(|c| c.verbose).unwrap_or(false);
+    let mut response_line = read_jsonrpc_line(&mut child_stdout, is_verbose).await?;
     
     // 2. send initialized
     let initialized_notification = serde_json::json!({
@@ -629,7 +669,8 @@ pub async fn run_mcp_node(
     child_stdin.flush().await.map_err(|e| e.to_string())?;
     
     response_line.clear();
-    child_stdout.read_line(&mut response_line).await.map_err(|e| e.to_string())?;
+    let is_verbose = server_registry.get(node.server.as_ref().unwrap()).and_then(|c| c.verbose).unwrap_or(false);
+    response_line = read_jsonrpc_line(&mut child_stdout, is_verbose).await?;
     
     let _ = child.kill().await;
     

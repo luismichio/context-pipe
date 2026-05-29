@@ -47,12 +47,19 @@ def list_pipes() -> str:
 
 
 @mcp.tool()
-async def pipe_run(pipe_name: str, input_text: str, vars: Optional[dict] = None) -> str:
+async def pipe_run(
+    pipe_name: str,
+    input_text: str,
+    vars: Optional[dict] = None,
+    manifest_path: Optional[str] = None,
+) -> str:
     """
     Executes a specific context pipe on the provided input text.
     Args:
-        pipe_name: The name of the pipe to run (e.g., 'standard-distill', 'semantic-refinery').
-        input_text: The raw text to be processed through the pipe.
+        pipe_name:     The name of the pipe to run (e.g., 'standard-distill', 'semantic-refinery').
+        input_text:    The raw text to be processed through the pipe.
+        vars:          Optional key-value pairs for variable substitution.
+        manifest_path: Optional path to write a run manifest JSON.
     """
     config = load_config()
     pipe = next((p for p in config.get("pipes", []) if p["name"] == pipe_name), None)
@@ -61,7 +68,7 @@ async def pipe_run(pipe_name: str, input_text: str, vars: Optional[dict] = None)
 
     start_t = time.time()
     try:
-        result, trace = await run_pipe(pipe, input_text, vars=vars)
+        result, trace = await run_pipe(pipe, input_text, vars=vars, manifest_path=manifest_path)
         latency_ms = (time.time() - start_t) * 1000
 
         # Log Telemetry for ROI tracking

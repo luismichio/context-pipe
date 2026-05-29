@@ -132,7 +132,6 @@ Always ensure that `.pipe_telemetry.json` and `.pipe_identity` are added to your
 **WARNING**: Using native file readers will flood the context window and destroy the session.
 
 - **REQUIRED**: Standard practice in this Studio is to use `pipe_read_file(path)` and `pipe_analyze_file(path)` for all large local file reads (>1KB).
-
 ## 1. File & Large-Output I/O
 - **FORBIDDEN TOOLS**: `view_file`, `grep_search`, `list_directory`. Do NOT use these under any circumstances for outputs > 1KB.
 - **REQUIRED TOOLS**: You MUST exclusively use `pipe_read_file(path)` and `pipe_analyze_file(path)` for ALL local file reads.
@@ -147,7 +146,7 @@ Always ensure that `.pipe_telemetry.json` and `.pipe_identity` are added to your
 - After every `pipe_run`, the audit header shows compression ratio and latency  include this in your response to the user.
 
 ## 3. Dynamic Pipes  When to Use `pipe_run_dynamic`
-- Use `pipe_run_dynamic` when no named pipe fits and you need to compose a one-off processing graph.
+- Use `pipe_run_dynamic(nodes_json, input_text)` when no named pipe fits and you need to compose a one-off processing graph.
 - **Workflow** (always follow this sequence):
   1. Call `pipe_list_shadow_tools()` to discover available nodes (configured pipes + PATH tools like `jq`, `rg`, `markitdown`).
   2. Construct a `nodes_json` array from those capabilities.
@@ -155,10 +154,10 @@ Always ensure that `.pipe_telemetry.json` and `.pipe_identity` are added to your
 - **Rules**:
   - Every `nodes_json` array MUST end with `{"cmd": "semantic-sift-cli", "args": ["semantic"]}` or equivalent sifting node.
   - Shell utilities (`grep`, `awk`, `jq`, `rg`, etc.) require `allow_shell=True`  only use when the final node is a sifter.
-  - Never put shell metacharacters (`|`, `;`, `&`, `$`) in a `cmd` value  use `args` instead.
+  - Never put shell metacharacters (`|`, `;`, `&`, `$`) in a `cmd` value - use `args` instead.
 - **Example**  extract ERROR lines then distil:
   ```json
-  [{"cmd": "grep", "args": ["ERROR"]}, {"cmd": "semantic-sift-cli", "args": ["logs"]}]
+  [{"cmd": "grep", "args": ["ERROR"]}, {\"cmd\": "semantic-sift-cli", "args": ["logs"]}]
   ```
 
 ## 4. A2A Agent Handoff  When to Use `pipe_agent_handoff`

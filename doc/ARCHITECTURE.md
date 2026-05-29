@@ -99,6 +99,11 @@ run_pipe()
           next node input <─────────────────────┘
 ```
 
+#### MCP Node Banner Tolerance (Phase 13)
+To handle non-conformant MCP servers that emit startup banners or debug messages to `stdout` before or between JSON-RPC frames, both the Python and Rust engines implement a tolerance filter:
+- **Behavior**: Non-JSON lines are silently discarded up to a limit of 50 lines.
+- **Verbosity**: Setting `verbose: true` in the server configuration surfaces skipped lines to `stderr`.
+
 The orchestrator manages the full lifecycle of the MCP server connection for each node, ensuring clean teardown and timeout enforcement.
 
 ### 1.5 DAG Traversal Engine (Phase 11)

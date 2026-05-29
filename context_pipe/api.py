@@ -27,6 +27,7 @@ def pipe(
     pipe_name: Optional[str] = None,
     tool_name: str = "",
     config_path: str = "pipes.json",
+    vars: Optional[dict] = None,
 ) -> str:
     """
     Run text through a context pipe and return the distilled result.
@@ -68,7 +69,9 @@ def pipe(
         return text
 
     try:
-        result, _ = asyncio.run(run_pipe(pipe_config, text, tool_name=tool_name or None, vars=vars))
+        result, _ = asyncio.run(
+            run_pipe(pipe_config, text, tool_name=tool_name or None, vars=vars)
+        )
         return result
     except Exception:
         return text
