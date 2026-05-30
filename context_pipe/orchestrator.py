@@ -282,9 +282,17 @@ async def _run_mcp_node(
     cmd_raw = server_cfg["command"]
     if isinstance(cmd_raw, str):
         import shlex
-        cmd = shlex.split(cmd_raw)
+        cmd = shlex.split(cmd_raw, posix=(os.name != "nt"))
     else:
         cmd = list(cmd_raw)
+
+    server_args = server_cfg.get("args")
+    if server_args:
+        if isinstance(server_args, str):
+            import shlex
+            cmd.extend(shlex.split(server_args, posix=(os.name != "nt")))
+        else:
+            cmd.extend(list(server_args))
 
     cmd = resolve_placeholders(cmd, child_env)
     

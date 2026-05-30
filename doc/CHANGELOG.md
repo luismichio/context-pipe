@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5] — 2026-05-31
+
 ### Fixed
 - Added `encoding='utf-8'` and `encoding_error_handler='replace'` to `StdioServerParameters` in the Python engine to prevent `UnicodeDecodeError` crash on Windows when reading non-UTF-8 banner lines (REPORT_040).
 - Re-implemented `read_jsonrpc_line` in the Rust engine to read raw bytes line-by-line using `read_until` and decode them lossily via `String::from_utf8_lossy` to prevent invalid UTF-8 bytes from throwing I/O decode errors (REPORT_040).
+- Fixed `_run_mcp_node` in the Python engine to correctly append server-level `args` and use `posix=(os.name != "nt")` in `shlex.split` to prevent interactive shell hangs and `FileNotFoundError` on Windows (REPORT_041).
 
 ## [0.5.3] — 2026-05-30
 
