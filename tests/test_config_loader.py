@@ -149,12 +149,13 @@ def test_env_placeholder_resolved():
         assert resolved["API_KEY"] == "secret-value"
 
 
-def test_env_placeholder_unknown_left_as_is():
-    """${UNKNOWN_VAR} left verbatim, no exception."""
+def test_env_placeholder_unknown_raises_value_error():
+    """${UNKNOWN_VAR} raises ValueError."""
+    import pytest
     with patch.dict(os.environ, {}, clear=True):
         env_dict = {"API_KEY": "${UNKNOWN_VAR}"}
-        resolved = config_loader.resolve_placeholders(env_dict)
-        assert resolved["API_KEY"] == "${UNKNOWN_VAR}"
+        with pytest.raises(ValueError, match="Missing pipe variable: UNKNOWN_VAR"):
+            config_loader.resolve_placeholders(env_dict)
 
 
 def test_env_placeholder_empty_dict():

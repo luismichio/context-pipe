@@ -561,7 +561,7 @@ pub async fn run_mcp_node(
     
     for (k, v) in &server_cfg.env {
         let v_val = serde_json::Value::String(v.clone());
-        let resolved_v = resolve_placeholders(v_val, &resolved_env);
+        let resolved_v = resolve_placeholders(v_val, &resolved_env)?;
         if let Some(s) = resolved_v.as_str() {
             resolved_env.insert(k.clone(), s.to_string());
         }
@@ -577,10 +577,10 @@ pub async fn run_mcp_node(
     let resolved_cmd_list: Vec<String> = cmd_list.into_iter()
         .map(|c| {
             let c_val = serde_json::Value::String(c);
-            let res = resolve_placeholders(c_val, &resolved_env);
-            res.as_str().unwrap_or("").to_string()
+            let res = resolve_placeholders(c_val, &resolved_env)?;
+            Ok(res.as_str().unwrap_or("").to_string())
         })
-        .collect();
+        .collect::<Result<Vec<String>, String>>()?;
         
     if resolved_cmd_list.is_empty() {
         return Err(format!("Server '{}' has an empty command list.", server_key));
@@ -645,7 +645,7 @@ pub async fn run_mcp_node(
     let mut static_args = serde_json::Map::new();
     if let serde_json::Value::Object(map) = &node.args {
         for (k, v) in map {
-            let resolved_val = resolve_placeholders(v.clone(), &resolved_env);
+            let resolved_val = resolve_placeholders(v.clone(), &resolved_env)?;
             static_args.insert(k.clone(), resolved_val);
         }
     }
@@ -840,6 +840,10 @@ pub async fn run_pipe(
             }
         };
         
+        let active_timeout_ms = node.timeout
+            .map(|t| (t * 1000.0) as u64)
+            .unwrap_or(node_timeout_ms);
+        
         // ── Condition check ───────────────────────────────────────────────────
         if let Some(cond_str) = &node.condition {
             if !evaluate_condition(cond_str, &current_input) {
@@ -884,7 +888,7 @@ pub async fn run_pipe(
             }
             
             let mcp_res = tokio::time::timeout(
-                tokio::time::Duration::from_millis(node_timeout_ms),
+                tokio::time::Duration::from_millis(active_timeout_ms),
                 run_mcp_node(&node, &current_input, server_registry, &process_env)
             ).await;
             
@@ -912,7 +916,7 @@ pub async fn run_pipe(
                     emit_pipe_log(pipe_config, "exit", &node_name, tool_name, start_size, 0, latency_ms, true);
                     
                     if is_optional { current_node_id = natural_next; continue; }
-                    return (format!("--- [Context-Pipe: Timeout] ---\nMCP node {}/{} exceeded {}s.", node.server.as_deref().unwrap_or(""), node.tool.as_deref().unwrap_or(""), node_timeout_ms / 1000), trace);
+                    return (format!("--- [Context-Pipe: Timeout] ---\nMCP node {}/{} exceeded {}s.", node.server.as_deref().unwrap_or(""), node.tool.as_deref().unwrap_or(""), active_timeout_ms / 1000), trace);
                 }
             };
             
@@ -1009,13 +1013,18 @@ pub async fn run_pipe(
             raw_cmd_args.push(arg.clone());
         }
         
-        let resolved_cmd_args: Vec<String> = raw_cmd_args.into_iter()
+        let resolved_cmd_args_res: Result<Vec<String>, String> = raw_cmd_args.into_iter()
             .map(|a| {
                 let a_val = serde_json::Value::String(a);
-                let res = resolve_placeholders(c_val_to_string_compat(a_val), &process_env);
-                res.as_str().unwrap_or("").to_string()
+                let res = resolve_placeholders(c_val_to_string_compat(a_val), &process_env)?;
+                Ok(res.as_str().unwrap_or("").to_string())
             })
             .collect();
+            
+        let resolved_cmd_args = match resolved_cmd_args_res {
+            Ok(v) => v,
+            Err(e) => return (format!("--- [Context-Pipe: Variable Error] ---\n{}", e), vec![]),
+        };
             
         let cmd_exe = &resolved_cmd_args[0];
         let cmd_args = &resolved_cmd_args[1..];
@@ -1105,7 +1114,7 @@ pub async fn run_pipe(
                     Err(e) => Err(format!("Wait Error: {}", e)),
                 }
             }
-            _ = tokio::time::sleep(tokio::time::Duration::from_millis(node_timeout_ms)) => {
+            _ = tokio::time::sleep(tokio::time::Duration::from_millis(active_timeout_ms)) => {
                 let _ = child.kill().await;
                 Err("Timeout".to_string())
             }
@@ -1195,7 +1204,7 @@ pub async fn run_pipe(
                 if is_optional { current_node_id = natural_next; continue; }
                 
                 let error_text = if e == "Timeout" {
-                    format!("--- [Context-Pipe: Timeout] ---\nNode {} exceeded {}s.", node.cmd, node_timeout_ms / 1000)
+                    format!("--- [Context-Pipe: Timeout] ---\nNode {} exceeded {}s.", node.cmd, active_timeout_ms / 1000)
                 } else {
                     format!("--- [Context-Pipe: Error] ---\n{}", e)
                 };

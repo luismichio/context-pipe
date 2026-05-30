@@ -89,6 +89,8 @@ pub struct Node {
     pub condition: Option<String>,
     #[serde(default)]
     pub branches: Option<std::collections::HashMap<String, String>>,
+    #[serde(default)]
+    pub timeout: Option<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -336,10 +338,11 @@ pub fn merge_configs(local: Option<Config>, global: Option<Config>) -> Config {
     }
 }
 
-pub fn resolve_placeholders(value: serde_json::Value, env: &HashMap<String, String>) -> serde_json::Value {
+pub fn resolve_placeholders(value: serde_json::Value, env: &HashMap<String, String>) -> Result<serde_json::Value, String> {
     match value {
         serde_json::Value::String(s) => {
             let re = regex::Regex::new(r"\$\{([^}]+)\}").unwrap();
+            let mut missing_var = None;
             let resolved_str = re.replace_all(&s, |caps: &regex::Captures| {
                 let var_name = &caps[1];
                 if let Some(val) = env.get(var_name) {
@@ -347,18 +350,31 @@ pub fn resolve_placeholders(value: serde_json::Value, env: &HashMap<String, Stri
                 } else if let Ok(val) = std::env::var(var_name) {
                     val
                 } else {
+                    missing_var = Some(var_name.to_string());
                     caps[0].to_string()
                 }
             });
-            serde_json::Value::String(resolved_str.into_owned())
+            if let Some(var) = missing_var {
+                Err(format!("Missing pipe variable: {}", var))
+            } else {
+                Ok(serde_json::Value::String(resolved_str.into_owned()))
+            }
         }
         serde_json::Value::Array(arr) => {
-            serde_json::Value::Array(arr.into_iter().map(|v| resolve_placeholders(v, env)).collect())
+            let mut resolved_arr = Vec::new();
+            for v in arr {
+                resolved_arr.push(resolve_placeholders(v, env)?);
+            }
+            Ok(serde_json::Value::Array(resolved_arr))
         }
         serde_json::Value::Object(obj) => {
-            serde_json::Value::Object(obj.into_iter().map(|(k, v)| (k, resolve_placeholders(v, env))).collect())
+            let mut resolved_obj = serde_json::Map::new();
+            for (k, v) in obj {
+                resolved_obj.insert(k, resolve_placeholders(v, env)?);
+            }
+            Ok(serde_json::Value::Object(resolved_obj))
         }
-        _ => value,
+        _ => Ok(value),
     }
 }
 
@@ -376,17 +392,26 @@ mod tests {
         let mut env = HashMap::new();
         env.insert("FOO".to_string(), "bar".to_string());
         std::env::set_var("BAZ", "qux");
-
         let val = json!({
             "key1": "hello ${FOO}",
             "key2": "value ${BAZ}",
             "key3": ["nested ${FOO}", "other"]
         });
-
-        let resolved = resolve_placeholders(val, &env);
+        let resolved = resolve_placeholders(val, &env).unwrap();
         assert_eq!(resolved["key1"], "hello bar");
         assert_eq!(resolved["key2"], "value qux");
         assert_eq!(resolved["key3"][0], "nested bar");
+    }
+
+    #[test]
+    fn test_resolve_placeholders_missing() {
+        let env = HashMap::new();
+        let val = json!({
+            "key": "hello ${MISSING_VAR}"
+        });
+        let res = resolve_placeholders(val, &env);
+        assert!(res.is_err());
+        assert_eq!(res.err().unwrap(), "Missing pipe variable: MISSING_VAR");
     }
 
     #[test]

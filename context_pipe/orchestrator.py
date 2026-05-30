@@ -197,11 +197,29 @@ def _extract_text(result: object) -> str:
 
 class _StdoutToleranceWrapper:
     """Wraps an anyio ObjectReceiveStream to silently drop non-JSON lines."""
+
     def __init__(self, original_stream, verbose: bool):
         self._orig = original_stream
         self.verbose = verbose
         self.skipped_count = 0
         self.max_skip = 50
+
+    async def __aenter__(self):
+        await self._orig.__aenter__()
+        return self
+
+    async def __aexit__(self, *args):
+        return await self._orig.__aexit__(*args)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        import anyio
+        try:
+            return await self.receive()
+        except anyio.EndOfStream:
+            raise StopAsyncIteration
 
     async def receive(self):
         while True:
@@ -212,7 +230,7 @@ class _StdoutToleranceWrapper:
                     import sys
                     sys.stderr.write(f"[cpipe] MCP server stdout (non-JSON): {str(chunk)}\n")
                 if self.skipped_count > self.max_skip:
-                    return chunk # give up
+                    return chunk  # give up
                 continue
             return chunk
 
@@ -279,8 +297,12 @@ async def _run_mcp_node(
         env=child_env,
     )
 
-    raw_timeout = os.environ.get("PIPE_NODE_TIMEOUT_MS", "30000")
-    timeout_s = int(raw_timeout) / 1000.0
+    node_timeout_override = node.get("timeout")
+    if node_timeout_override is not None:
+        timeout_s = float(node_timeout_override)
+    else:
+        raw_timeout = os.environ.get("PIPE_NODE_TIMEOUT_MS", "30000")
+        timeout_s = int(raw_timeout) / 1000.0
 
     is_verbose = server_cfg.get("verbose", False)
     async with stdio_client(server_params) as (read, write):
@@ -603,6 +625,8 @@ async def run_pipe(
             break
 
         node, natural_next = node_map[current_node_id]
+        node_timeout_override = node.get("timeout")
+        active_timeout = float(node_timeout_override) if node_timeout_override is not None else node_timeout
 
         # Check condition
         cond_str = node.get("condition")
@@ -641,7 +665,7 @@ async def run_pipe(
             except asyncio.TimeoutError:
                 latency_ms = (time.monotonic() - t_start) * 1000
                 _emit_pipe_log(pipe_config, "exit", node_name, tool_name, start_size, 0, latency_ms, True)
-                error_text = f"--- [Context-Pipe: Timeout] ---\nMCP node {node['server']}/{node['tool']} exceeded {node_timeout}s."
+                error_text = f"--- [Context-Pipe: Timeout] ---\nMCP node {node['server']}/{node['tool']} exceeded {active_timeout}s."
                 trace.append({"node": f"mcp:{node['server']}/{node['tool']}", "error": "Timeout"})
                 if is_optional:
                     current_node_id = natural_next
@@ -751,7 +775,7 @@ async def run_pipe(
                 try:
                     stdout_bytes, stderr_bytes = await asyncio.wait_for(
                         process.communicate(input=current_input.encode("utf-8", errors="replace")),
-                        timeout=node_timeout
+                        timeout=active_timeout
                     )
                 except asyncio.TimeoutError:
                     try:
@@ -779,7 +803,7 @@ async def run_pipe(
 
         if err_reason == "Timeout":
             _emit_pipe_log(pipe_config, "exit", node_name, tool_name, start_size, 0, latency_ms, True)
-            error_text = f"--- [Context-Pipe: Timeout] ---\nNode {node['cmd']} exceeded {node_timeout}s."
+            error_text = f"--- [Context-Pipe: Timeout] ---\nNode {node['cmd']} exceeded {active_timeout}s."
             trace.append({"node": node["cmd"], "error": "Timeout"})
             if is_optional:
                 current_node_id = natural_next

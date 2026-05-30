@@ -106,8 +106,9 @@ def resolve_placeholders(obj: Any, env: dict | None = None) -> Any:
 
         def _replace(m: _re.Match) -> str:
             var = m.group(1)
-            # leave unreplaced if missing
-            return str(effective_env.get(var, m.group(0)))
+            if var not in effective_env:
+                raise ValueError(f"Missing pipe variable: {var}")
+            return str(effective_env[var])
 
         return _re.sub(r"\$\{([^}]+)\}", _replace, obj)
 

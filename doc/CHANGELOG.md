@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-05-30
+
+### Fixed
+- Implemented async context manager (`__aenter__`/`__aexit__`) and async iterator (`__aiter__`/`__anext__`) protocols on `_StdoutToleranceWrapper` to prevent errors in MCP stdio client sessions (REPORT_037).
+- Re-implemented `resolve_placeholders` in Python and Rust to fail-fast with a `ValueError` / error result when encountering an unresolved pipe variable placeholder `${VAR}` instead of passing it literally to subprocesses (REPORT_038).
+- Fixed orchestrator in Python and Rust to respect the node-level `timeout` override field specified in `pipes.json` (REPORT_039).
+
 ## [0.5.2] — 2026-05-30
 
 ### Fixed

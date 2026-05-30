@@ -154,6 +154,30 @@ async def test_mcp_node_timeout_returns_error():
             assert trace[0]["error"] == "Timeout"
 
 @pytest.mark.anyio
+async def test_mcp_node_timeout_override():
+    """Node-level timeout override is used in wait_for."""
+    with patch("context_pipe.orchestrator.stdio_client") as mock_stdio:
+        mock_stdio.return_value.__aenter__.return_value = (MagicMock(), MagicMock())
+        with patch("context_pipe.orchestrator.ClientSession") as mock_session_cls:
+            mock_session = mock_session_cls.return_value.__aenter__.return_value
+            mock_session.initialize = AsyncMock()
+            
+            pipe_config = {
+                "nodes": [
+                    {"type": "mcp", "server": "slow", "tool": "wait", "timeout": 2.5}
+                ]
+            }
+            server_registry = {"slow": {"command": ["mock"]}}
+            
+            with patch("asyncio.wait_for") as mock_wait_for:
+                mock_wait_for.side_effect = asyncio.TimeoutError()
+                result, trace = await run_pipe(pipe_config, "input", server_registry=server_registry)
+                
+                # Verify wait_for was called with timeout=2.5 instead of default 30.0
+                mock_wait_for.assert_called_once()
+                assert mock_wait_for.call_args[1]["timeout"] == 2.5
+
+@pytest.mark.anyio
 async def test_mcp_node_server_not_found_error():
     """Missing server key returns error trace entry."""
     pipe_config = {"nodes": [{"type": "mcp", "server": "missing", "tool": "tool"}]}
