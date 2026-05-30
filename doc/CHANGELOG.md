@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-05-30
+
+### Fixed
+- Fixed v0.5.1 onboarding `_inject_pi()` template tools execute handlers to return structured `{ content }` objects instead of raw strings to prevent pi session crashes (REPORT_034).
+- Replaced `execSync` with `spawnSync` in `callCli` to prevent JSON parsing issues with unquoted shell arguments in `pipe_run_dynamic` (REPORT_035 Defect A).
+- Re-implemented `pipe_analyze_file` in the onboarding template to perform a stat-only operation instead of full file read and piping (REPORT_035 Defect B).
+- Configured 50 MB `maxBuffer` limit for CLI calls in the template to avoid silent truncation on large outputs (REPORT_035 Defect C).
+- Re-implemented `tool_call` interceptor in the template to correctly return block directives for native `read` calls > 1KB (REPORT_035 Defect D / REPORT_036).
+- Added `setStatus` indicators in the template auto-sift interceptor (REPORT_035 Defect E).
+
 ## [0.5.1] — 2026-05-30
 
 ### Fixed

@@ -1210,28 +1210,31 @@ def _inject_pi(target_dir: str, cmd_str: str) -> list[str]:
  */
 import { ExtensionAPI, isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { execSync } from "child_process";
-import { readFileSync } from "fs";
+import { spawnSync } from "child_process";
+import { readFileSync, statSync } from "fs";
+import { basename } from "path";
 
 export default function (pi: ExtensionAPI) {
   const pythonExe = "{PY_EXE_PLACEHOLDER}";
   const mcpPipePath = "{MCP_PIPE_PLACEHOLDER}";
 
   const callCli = (args: string[], input?: string) => {
-    try {
-      // Try mcp-pipe binary first (fast path)
-      const cmd = `"${mcpPipePath}" ${args.join(" ")}`;
-      return execSync(cmd, { input, encoding: "utf-8" });
-    } catch (e) {
-      // Fallback to python module
-      try {
-        const cmd = `"${pythonExe}" -m context_pipe.cli ${args.join(" ")}`;
-        return execSync(cmd, { input, encoding: "utf-8" });
-      } catch (e2: any) {
-        console.error("[Context-Pipe] CLI call failed:", e2.message);
-        throw e2;
-      }
+    const maxBuffer = 50 * 1024 * 1024;
+    
+    // Try mcp-pipe binary first (fast path)
+    if (mcpPipePath) {
+      const result = spawnSync(mcpPipePath, args, { input, encoding: "utf-8", maxBuffer });
+      if (result.status === 0) return result.stdout;
     }
+    
+    // Fallback to python module
+    const pythonArgs = ["-m", "context_pipe.cli", ...args];
+    const result2 = spawnSync(pythonExe, pythonArgs, { input, encoding: "utf-8", maxBuffer });
+    if (result2.status === 0) return result2.stdout;
+    
+    const errorMsg = result2.stderr || "CLI call failed";
+    console.error("[Context-Pipe] CLI call failed:", errorMsg);
+    throw new Error(errorMsg);
   };
 
   // 1. Register Native Tools
@@ -1245,7 +1248,8 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params) {
       const text = readFileSync(params.path, "utf-8");
-      return callCli(["run", params.pipe_name || "standard-distill"], text);
+      const sifted = callCli(["run", params.pipe_name || "standard-distill"], text);
+      return { content: [{ type: "text", text: sifted }] };
     }
   });
 
@@ -1258,7 +1262,8 @@ export default function (pi: ExtensionAPI) {
       input_text: Type.String({ description: "Raw text to process." }),
     }),
     async execute(_toolCallId, params) {
-      return callCli(["run", params.pipe_name], params.input_text);
+      const sifted = callCli(["run", params.pipe_name], params.input_text);
+      return { content: [{ type: "text", text: sifted }] };
     }
   });
 
@@ -1268,7 +1273,8 @@ export default function (pi: ExtensionAPI) {
     description: "View the Context-Pipe Balance Sheet (ROI).",
     parameters: Type.Object({}),
     async execute(_toolCallId, _params) {
-      return callCli(["stats"]);
+      const stats = callCli(["stats"]);
+      return { content: [{ type: "text", text: stats }] };
     }
   });
 
@@ -1278,7 +1284,8 @@ export default function (pi: ExtensionAPI) {
     description: "Lists all available context pipes and their descriptions.",
     parameters: Type.Object({}),
     async execute(_toolCallId, _params) {
-      return callCli(["list"]);
+      const list = callCli(["list"]);
+      return { content: [{ type: "text", text: list }] };
     }
   });
 
@@ -1291,8 +1298,10 @@ export default function (pi: ExtensionAPI) {
       pipe_name: Type.Optional(Type.String({ description: "Explicit pipe name (default: semantic-refinery)." })),
     }),
     async execute(_toolCallId, params) {
-      const text = readFileSync(params.path, "utf-8");
-      return callCli(["run", params.pipe_name || "semantic-refinery"], text);
+      const size = statSync(params.path).size;
+      const recommendation = size > 10000 ? "semantic-refinery" : "standard-distill";
+      const resultText = `File: ${basename(params.path)}\nSize: ${size} bytes\nRecommendation: Use pipe_read_file with pipe_name='${recommendation}'.`;
+      return { content: [{ type: "text", text: resultText }] };
     }
   });
 
@@ -1305,7 +1314,8 @@ export default function (pi: ExtensionAPI) {
       input_text: Type.String({ description: "Raw input text to process." }),
     }),
     async execute(_toolCallId, params) {
-      return callCli(["run-dynamic", params.nodes_json], params.input_text);
+      const sifted = callCli(["run-dynamic", params.nodes_json], params.input_text);
+      return { content: [{ type: "text", text: sifted }] };
     }
   });
 
@@ -1314,10 +1324,12 @@ export default function (pi: ExtensionAPI) {
     if (isToolCallEventType("read", event)) {
       const filePath = event.input.path;
       try {
-        const { statSync } = require("fs");
         const stats = statSync(filePath);
         if (stats.size > 1024) {
-          ctx.ui.notify("Large file detected. Redirecting to pipe_read_file.", "info");
+          return {
+            block: true,
+            reason: `File is ${(stats.size / 1024).toFixed(1)}KB. Use pipe_read_file("${filePath}") instead.`
+          };
         }
       } catch (e) {}
     }
@@ -1329,6 +1341,7 @@ export default function (pi: ExtensionAPI) {
     if (typeof text === "string" && text.length > 5000) {
       if (text.includes("--- [Context-Pipe Audit] ---")) return;
       try {
+        ctx.ui.setStatus("context-pipe", "Sifting output...");
         const sifted = callCli(["run", "standard-distill"], text);
         return { content: [{ type: "text", text: sifted }] };
       } catch (e) {
