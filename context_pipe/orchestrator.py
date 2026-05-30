@@ -295,6 +295,8 @@ async def _run_mcp_node(
         command=cmd[0],
         args=cmd[1:],
         env=child_env,
+        encoding='utf-8',
+        encoding_error_handler='replace',
     )
 
     node_timeout_override = node.get("timeout")

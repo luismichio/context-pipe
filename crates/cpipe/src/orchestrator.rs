@@ -506,15 +506,16 @@ async fn read_jsonrpc_line(
 ) -> Result<String, String> {
     let max_skip = 50;
     let mut skipped = 0;
-    let mut line = String::new();
+    let mut line_bytes = Vec::new();
 
     loop {
-        line.clear();
-        let n = reader.read_line(&mut line).await.map_err(|e| e.to_string())?;
+        line_bytes.clear();
+        let n = reader.read_until(b'\n', &mut line_bytes).await.map_err(|e| e.to_string())?;
         if n == 0 {
             return Err("EOF reached before receiving valid JSON-RPC".to_string());
         }
 
+        let line = String::from_utf8_lossy(&line_bytes).into_owned();
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
@@ -523,7 +524,7 @@ async fn read_jsonrpc_line(
         if trimmed.starts_with('{') {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(trimmed) {
                 if parsed.get("jsonrpc").is_some() {
-                    return Ok(line.clone());
+                    return Ok(line);
                 }
             }
         }
