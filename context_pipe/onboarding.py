@@ -1245,7 +1245,7 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params) {
       const text = readFileSync(params.path, "utf-8");
-      return callCli(["run", params.pipe_name || "auto"], text);
+      return callCli(["run", params.pipe_name || "standard-distill"], text);
     }
   });
 
@@ -1329,7 +1329,7 @@ export default function (pi: ExtensionAPI) {
     if (typeof text === "string" && text.length > 5000) {
       if (text.includes("--- [Context-Pipe Audit] ---")) return;
       try {
-        const sifted = callCli(["run", "auto"], text);
+        const sifted = callCli(["run", "standard-distill"], text);
         return { content: [{ type: "text", text: sifted }] };
       } catch (e) {
         console.error("[Context-Pipe] Auto-sift failed");

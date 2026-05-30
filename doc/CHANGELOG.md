@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-05-30
+
+### Fixed
+- Fixed v0.5.0 onboarding `_inject_pi()` template fallback pipe name from `"auto"` to `"standard-distill"` for both `pipe_read_file` tool execution and auto-sift interceptor to prevent CLI failures.
+
 ## [0.5.0] — 2026-05-30
 
 ### ✨ Added

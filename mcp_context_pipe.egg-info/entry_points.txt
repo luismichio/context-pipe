@@ -1,5 +1,6 @@
 [console_scripts]
 context-pipe = context_pipe.orchestrator:main
+context-pipe-onboard = context_pipe.onboarding:main
 context-pipe-script = context_pipe.scripts:main
 context-pipe-server = context_pipe.server:main
 mcp-pipe = context_pipe.cli:main
