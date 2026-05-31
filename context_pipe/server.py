@@ -159,7 +159,9 @@ async def pipe_read_file(
 ) -> str:
     """
     Reads a local file safely and streams it directly through a context pipe.
+    Supports reading a specific range of lines (start_line to end_line, 1-indexed).
     Use this instead of native file readers to prevent context window flooding.
+
     Args:
         path: Absolute or relative path to the file.
         pipe_name: The name of the pipe to run (e.g., 'standard-distill', 'full-refinery').
@@ -211,9 +213,17 @@ async def pipe_analyze_file(path: str, ctx: Optional[Context] = None) -> str:
 
 
 @mcp.tool()
-def get_pipe_stats() -> str:
-    """Returns the Context Balance Sheet (ROI) for the entire pipeline ecosystem."""
-    sheet = get_balance_sheet()
+def get_pipe_stats(
+    session_id: Optional[str] = None,
+    last_hours: Optional[float] = None,
+) -> str:
+    """Returns the Context Balance Sheet (ROI) for the entire pipeline ecosystem.
+
+    Args:
+        session_id: Optional session ID to filter stats to a specific run.
+        last_hours: Optional number of hours to look back (e.g. 1.0 for last hour, 24.0 for last day).
+    """
+    sheet = get_balance_sheet(session_id=session_id, last_hours=last_hours)
     # Format the Net Change string
     net_label = "Saved" if sheet["net_change"] < 0 else "Added"
     return f"""
@@ -281,30 +291,35 @@ def pipe_verify() -> str:
 
 
 @mcp.tool()
-def pipe_audit_last() -> str:
+def pipe_audit_last(limit: int = 1) -> str:
     """
-    Returns the absolute last recorded telemetry event for manual auditing.
+    Returns the last recorded telemetry event(s) for manual auditing.
     Use this to 'Trust but Verify' that the context reduction reported in
     an audit header matches the actual data committed to the ledger.
+
+    Args:
+        limit: The number of recent events to retrieve (default 1).
     """
-    from .telemetry import get_latest_telemetry
-    last = get_latest_telemetry()
-    if not last:
+    from .telemetry import get_recent_telemetry
+    events = get_recent_telemetry(limit=limit)
+    if not events:
         return "No telemetry events found in the ledger.\n"
 
-    reduction = (1 - (last["final_chars"] / last["original_chars"])) * 100 if last["original_chars"] > 0 else 0
-
-    return f"""
-##  Context-Pipe Audit: Last Event
+    lines = [f"##  Context-Pipe Audit (Last {len(events)} Events)"]
+    for i, last in enumerate(events):
+        reduction = (1 - (last["final_chars"] / last["original_chars"])) * 100 if last["original_chars"] > 0 else 0
+        lines.append(f"""
+### Event {i+1}
 - **Tool Call:** `{last['tool_key']}`
 - **Original Size:** {last['original_chars']:,} chars
 - **Final Size:** {last['final_chars']:,} chars
 - **Net Reduction:** {reduction:.1f}%
-- **Latency:** {last['total_latency_ms']:.1f}ms
+- **Latency:** {last['latency_ms']:.1f}ms
 - **Platform:** {last['platform']}
 - **Agent Label:** {last['agent']}
 - **Session ID:** `{last['session_id']}`
-"""
+""")
+    return "\n".join(lines)
 
 
 @mcp.tool()
@@ -394,10 +409,13 @@ To protect your context window, always consider streaming large tool outputs thr
 async def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool = False) -> str:
     """
     Executes an ad-hoc context pipe defined as a JSON array of node objects.
-    Use this when no named pipe in pipes.json fits and you need to compose a
-    one-off processing graph on the fly.
+    
+    IMPORTANT: ALWAYS prefer this over running raw terminal command pipes (e.g., using grep, jq, rg)
+    via shell execution. Raw shell commands dump all intermediate outputs directly into your main
+    context window, causing context flooding. This tool executes the pipeline in a safe background
+    subprocess, ensuring only the final, highly-sifted output is returned to your context.
 
-    Mandatory workflow  always follow this sequence:
+    Mandatory workflow - always follow this sequence:
       1. Call pipe_list_shadow_tools() to discover available nodes.
       2. Construct nodes_json from those capabilities.
       3. Call this tool.
@@ -406,7 +424,7 @@ async def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool =
       - Every array MUST end with a sifting node to guarantee context safety:
         [{"cmd": "semantic-sift-cli", "args": ["semantic"]}]
       - Shell utilities (grep, awk, jq, rg, etc.) require allow_shell=True.
-      - Never put shell metacharacters (|, ;, &, $, `) in a cmd value  use args[] instead.
+      - Never put shell metacharacters (|, ;, &, $, `) in a cmd value - use args[] instead.
       - Each node must have a "cmd" key; "args" is optional.
 
     Examples:
@@ -459,16 +477,12 @@ async def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool =
 @mcp.tool()
 def pipe_list_shadow_tools() -> str:
     """
-    Lists all available context-processing tools: configured pipes from pipes.json
-    and well-known CLI tools discovered on PATH (jq, yq, markitdown, pandoc, rg, fd, bat).
+    Lists all available context-processing capabilities, including configured pipes from pipes.json
+    and well-known CLI tools discovered on the system PATH (e.g., jq, yq, markitdown, pandoc, rg, fd, bat).
 
-    ALWAYS call this before pipe_run_dynamic to discover what nodes are available
-    for constructing an ad-hoc processing graph. This is the just-in-time RAG
-    step that ensures your nodes_json references real, resolvable commands.
-
-    Workflow:
-      1. pipe_list_shadow_tools()          -> discover available nodes
-      2. Construct nodes_json array        -> must end with semantic-sift-cli
+    ALWAYS call this before composing custom pipelines (with pipe_run_dynamic) to discover what 
+    processing nodes are available on the current host. This provides just-in-time discovery
+    so you can build valid JSON pipeline graphs.
     """
     tools = list_shadow_tools(CONFIG_PATH)
     if not tools:

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.6] — 2026-05-31
+
+### Added
+- Extended the `get_pipe_stats` tool and backend `get_balance_sheet` logic to support `session_id` and `last_hours` filtering for targeted context ROI reporting.
+- Extended the `pipe_audit_last` tool to accept a `limit` parameter to retrieve a chronological range of recent telemetry events.
+- Upgraded the `pipe_list_shadow_tools` tool to discover and display configured MCP servers from `pipes.json`, and format MCP nodes as `mcp:server/tool` for clearer agent visibility.
+- Added comprehensive unit tests in `tests/test_range_telemetry.py` validating telemetry range filtering, chronological retrieval, and MCP shadow tool/server discovery.
+
+### Fixed
+- Changed the native `read` tool interception threshold in the pi.dev extension (`context-pipe.ts`) from 1KB (`1024` bytes) to 50KB (`51200` bytes) to resolve consistency issues with the Python BeforeTool hook and eliminate false-positive blocks on small files (REPORT_042).
+- Resolved a `KeyError` bug in `pipe_audit_last` when attempting to read `total_latency_ms` instead of `latency_ms`.
+- Improved docstrings for `pipe_run_dynamic` and `pipe_list_shadow_tools` to highlight Context Window Protection benefits and entice agent usage over raw terminal piping.
+
 ## [0.5.5] — 2026-05-31
 
 ### Fixed

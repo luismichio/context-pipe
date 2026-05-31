@@ -73,16 +73,46 @@ pub fn which(cmd: &str, path_env: Option<&str>) -> Option<PathBuf> {
 pub fn list_shadow_tools(config_path: Option<&Path>) -> Vec<DiscoveredTool> {
     let mut tools = Vec::new();
     
-    // 1. Configured pipes
+    // 1. Configured pipes and servers
     if let Some(path) = config_path {
         if path.exists() {
             if let Ok(config) = load_config_file(path) {
+                // Configured pipes
                 for pipe in config.pipes {
+                    let mut nodes_desc = Vec::new();
+                    for n in &pipe.nodes {
+                        if n.node_type == "mcp" {
+                            let server = n.server.as_deref().unwrap_or("unknown");
+                            let tool = n.tool.as_deref().unwrap_or("unknown");
+                            nodes_desc.push(format!("mcp:{}/{}", server, tool));
+                        } else if !n.cmd.is_empty() {
+                            nodes_desc.push(n.cmd.clone());
+                        } else {
+                            nodes_desc.push(format!("{:?}", n));
+                        }
+                    }
                     tools.push(DiscoveredTool {
                         name: pipe.name,
                         source: "pipes.json".to_string(),
                         description: pipe.description,
-                        nodes: pipe.nodes.iter().map(|n| n.cmd.clone()).collect(),
+                        nodes: nodes_desc,
+                    });
+                }
+
+                // Configured servers
+                let mut server_names: Vec<&String> = config.servers.keys().collect();
+                server_names.sort();
+                for name in server_names {
+                    if name.starts_with('_') {
+                        continue;
+                    }
+                    let srv_cfg = &config.servers[name];
+                    let desc = srv_cfg.description.as_deref().unwrap_or("Registered MCP server. Can be run in custom pipes.");
+                    tools.push(DiscoveredTool {
+                        name: name.clone(),
+                        source: "pipes.json".to_string(),
+                        description: desc.to_string(),
+                        nodes: Vec::new(),
                     });
                 }
             }

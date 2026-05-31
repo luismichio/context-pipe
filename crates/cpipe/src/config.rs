@@ -121,6 +121,8 @@ pub struct ServerConfig {
     pub env: HashMap<String, String>,
     #[serde(default)]
     pub verbose: Option<bool>,
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]

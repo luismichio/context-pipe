@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-context-pipe"
-version = "0.5.5"
+version = "0.5.6"
 description = "Universal switchboard for the Context-Pipe Protocol (CPP)"
 readme = "README.md"
 requires-python = ">=3.10"

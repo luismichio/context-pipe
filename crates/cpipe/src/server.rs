@@ -417,7 +417,16 @@ fn get_tools_definition() -> serde_json::Value {
             "description": "Returns the Context Balance Sheet (ROI) for the entire pipeline ecosystem.",
             "inputSchema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "description": "Optional session ID to filter stats to a specific run."
+                    },
+                    "last_hours": {
+                        "type": "number",
+                        "description": "Optional number of hours to look back (e.g. 1.0 for last hour, 24.0 for last day)."
+                    }
+                }
             }
         },
         {
@@ -430,10 +439,15 @@ fn get_tools_definition() -> serde_json::Value {
         },
         {
             "name": "pipe_audit_last",
-            "description": "Returns the absolute last recorded telemetry event for manual auditing.",
+            "description": "Returns the last recorded telemetry event(s) for manual auditing.",
             "inputSchema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "The number of recent events to retrieve (default 1)."
+                    }
+                }
             }
         },
         {
@@ -654,15 +668,17 @@ async fn handle_tool_call(name: &str, args: serde_json::Value) -> String {
             )
         }
         "get_pipe_stats" => {
-            let sheet = crate::telemetry::get_balance_sheet();
+            let session_id = args.get("session_id").and_then(|v| v.as_str());
+            let last_hours = args.get("last_hours").and_then(|v| v.as_f64());
+            let sheet = crate::telemetry::get_balance_sheet(session_id, last_hours);
             let net_label = if sheet.net_change < 0 { "Saved" } else { "Added" };
             format!(
-                "## dY\"S Context-Pipe Balance Sheet\n\
-                 - **Signal Injected (Augmentation):** +{} chars\n\
-                 - **Noise Incinerated (Reduction):** -{} chars\n\
-                 - **Net Context {}:** {} chars\n\
-                 - **Platform Events:** {}\n\
-                 - **Avg Node Latency:** {:.2}ms\n",
+                "## 📊 Context-Pipe Balance Sheet\n\
+                - **Signal Injected (Augmentation):** +{} chars\n\
+                - **Noise Incinerated (Reduction):** -{} chars\n\
+                - **Net Context {}:** {} chars\n\
+                - **Platform Events:** {}\n\
+                - **Avg Node Latency:** {:.2}ms\n",
                 sheet.signal_added,
                 sheet.noise_removed,
                 net_label,
@@ -709,39 +725,42 @@ async fn handle_tool_call(name: &str, args: serde_json::Value) -> String {
             format_verify_report(report_val)
         }
         "pipe_audit_last" => {
-            let last = crate::telemetry::get_latest_telemetry();
-            let last = match last {
-                Some(l) => l,
-                None => return "No telemetry events found in the ledger.\n".to_string(),
-            };
-            
-            let reduction = if last.original_chars > 0 {
-                (1.0 - (last.final_chars as f64 / last.original_chars as f64)) * 100.0
-            } else {
-                0.0
-            };
-            
-            format!(
-                "## Last Telemetry Event Audit\n\
-                 - **Pipe Name:** {}\n\
-                 - **Tool Name:** {}\n\
-                 - **Original Size:** {} chars\n\
-                 - **Final Size:** {} chars\n\
-                 - **Reduction:** {:.2}%\n\
-                 - **Latency:** {:.2}ms\n\
-                 - **Platform:** {}\n\
-                 - **Agent Label:** {}\n\
-                 - **Session ID:** `{}`\n",
-                last.pipe_name,
-                last.tool_name,
-                last.original_chars,
-                last.final_chars,
-                reduction,
-                last.latency_ms,
-                last.platform,
-                last.agent,
-                last.session_id
-            )
+            let limit = args.get("limit").and_then(|v| v.as_u64()).map(|n| n as usize).unwrap_or(1);
+            let events = crate::telemetry::get_recent_telemetry(limit);
+            if events.is_empty() {
+                return "No telemetry events found in the ledger.\n".to_string();
+            }
+            let mut lines = vec![format!("## Context-Pipe Audit (Last {} Events)", events.len())];
+            for (i, last) in events.iter().enumerate() {
+                let reduction = if last.original_chars > 0 {
+                    (1.0 - (last.final_chars as f64 / last.original_chars as f64)) * 100.0
+                } else {
+                    0.0
+                };
+                lines.push(format!(
+                    "\n### Event {}\n\
+                    - **Pipe Name:** {}\n\
+                    - **Tool Name:** {}\n\
+                    - **Original Size:** {} chars\n\
+                    - **Final Size:** {} chars\n\
+                    - **Reduction:** {:.2}%\n\
+                    - **Latency:** {:.2}ms\n\
+                    - **Platform:** {}\n\
+                    - **Agent Label:** {}\n\
+                    - **Session ID:** `{}`\n",
+                    i + 1,
+                    last.pipe_name,
+                    last.tool_name,
+                    last.original_chars,
+                    last.final_chars,
+                    reduction,
+                    last.latency_ms,
+                    last.platform,
+                    last.agent,
+                    last.session_id
+                ));
+            }
+            lines.join("\n")
         }
         "pipe_onboard" => {
             let environment = args.get("environment").and_then(|v| v.as_str()).unwrap_or("");

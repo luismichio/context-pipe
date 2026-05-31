@@ -450,6 +450,27 @@ cpipe serve
 ```
 Launches a lightweight JSON-RPC MCP server on stdio. See [§ cpipe serve — MCP Tool Reference](#4-cpipe-serve--mcp-tool-reference) below.
 
+#### `cpipe tool` — Invoke MCP Tool Directly
+```bash
+cpipe tool <server_name> [<tool_name>] [options]
+```
+Directly executes an MCP tool from a registered server in `pipes.json`/`pipes.toml` using `stdin`/`stdout`.
+
+Options:
+- `-a`, `--arg KEY=VALUE`: Pass a static argument to the tool. Can be repeated.
+- `--input-key KEY`: The JSON key to place `stdin` input in (default: `"content"`).
+- `--input-file FILE`: Read input content from this file instead of `stdin`.
+- `--config PATH`: Explicit path to config.
+- `--list-tools`: List all tools available on the named server and exit.
+- `-v`, `--verbose`: Print execution latency and telemetry to `stderr`.
+
+#### `cpipe aliases` — Manage Shell Aliases
+```bash
+cpipe aliases install [--shells <shells>]
+cpipe aliases remove
+```
+Installs or removes the `cpipe` shell alias into profile files (`~/.bashrc`, `~/.zshrc`, etc.) to automatically hook into CLI environments.
+
 ---
 
 ### 3. Tauri Sidecar Integration
@@ -490,14 +511,14 @@ To embed `cpipe` as a sidecar inside a Tauri application:
 | :--- | :--- |
 | `list_pipes` | Lists all named pipes from the active config. |
 | `pipe_run` | Runs a named pipe on `input_text`. Args: `pipe_name`, `input_text`. |
-| `pipe_read_file` | Reads a file through a pipe. Args: `path`, `pipe_name` (default: `standard-distill`). Validated against `PIPE_AUTHORIZED_ROOT`. |
+| `pipe_read_file` | Reads a file through a pipe. Args: `path`, `pipe_name` (default: `standard-distill`), `start_line` (optional 1-indexed start line), `end_line` (optional 1-indexed end line). Validated against `PIPE_AUTHORIZED_ROOT`. |
 | `pipe_analyze_file` | Reports file size and recommends a pipe — call before `pipe_read_file` for large files. |
 | `pipe_run_dynamic` | Runs an ad-hoc node chain. Args: `nodes_json`, `input_text`, `allow_shell`. |
 | `pipe_list_shadow_tools` | Returns all configured pipes + curated PATH tools (same as `cpipe list`). |
 | `pipe_agent_handoff` | Distils Agent A output before passing to Agent B. Args: `output`, `pipe_name`, `from_agent`, `to_agent`. |
-| `get_pipe_stats` | Returns the Context Balance Sheet (ROI ledger). |
+| `get_pipe_stats` | Returns the Context Balance Sheet (ROI ledger). Args: `session_id` (optional session ID filter), `last_hours` (optional float for range lookback). |
 | `pipe_verify` | Health-checks the installation: tests each node, reports missing tools and how to fix them. |
-| `pipe_audit_last` | Returns the most recent raw telemetry event for debugging. |
+| `pipe_audit_last` | Returns the most recent raw telemetry event(s) for debugging. Args: `limit` (optional integer count of events to return, default 1). |
 | `pipe_onboard` | Injects IDE hooks, slash commands, and SOP into the current project. Args: `environment`, `target_dir`. |
 | `pipe_install_aliases` | Installs the `cpipe` shell alias into profile files. Args: `shells`. |
 | `pipe_remove_aliases` | Removes the managed alias block from all shell profiles. |

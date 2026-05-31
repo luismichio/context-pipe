@@ -268,20 +268,69 @@ pub struct BalanceSheet {
     pub unmapped_events: usize,
 }
 
-pub fn get_balance_sheet() -> BalanceSheet {
+fn parse_time_string(time_str: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    use chrono::TimeZone;
+    if time_str.is_empty() {
+        return None;
+    }
+    if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(time_str, "%a %b %d %H:%M:%S %Y") {
+        return Some(chrono::Utc.from_utc_datetime(&naive));
+    }
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(time_str) {
+        return Some(dt.with_timezone(&chrono::Utc));
+    }
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc2822(time_str) {
+        return Some(dt.with_timezone(&chrono::Utc));
+    }
+    if let Ok(val) = time_str.parse::<f64>() {
+        let secs = val.trunc() as i64;
+        let nsecs = (val.fract() * 1_000_000_000.0) as u32;
+        if let Some(naive) = chrono::NaiveDateTime::from_timestamp_opt(secs, nsecs) {
+            return Some(chrono::Utc.from_utc_datetime(&naive));
+        }
+    }
+    None
+}
+
+pub fn get_balance_sheet(
+    session_id: Option<&str>,
+    last_hours: Option<f64>,
+) -> BalanceSheet {
     let mut sheet = BalanceSheet::default();
     let path = resolve_telemetry_path();
-    
+    let now = chrono::Utc::now();
+
     if path.exists() {
         if let Ok(content) = std::fs::read_to_string(path) {
             let mut total_latency = 0.0;
             let mut tool_calls = 0;
-            
             for line in content.lines() {
                 if line.trim().is_empty() {
                     continue;
                 }
                 if let Ok(event) = serde_json::from_str::<TelemetryEvent>(line) {
+                    // Apply filters
+                    if let Some(sid) = session_id {
+                        if event.session_id != sid {
+                            continue;
+                        }
+                    }
+                    if let Some(hours) = last_hours {
+                        let ts_str = if !event.start_time.is_empty() {
+                            &event.start_time
+                        } else if !event.timestamp.is_empty() {
+                            &event.timestamp
+                        } else {
+                            ""
+                        };
+                        if let Some(event_time) = parse_time_string(ts_str) {
+                            let duration = now.signed_duration_since(event_time);
+                            if duration.num_seconds() as f64 > hours * 3600.0 {
+                                continue;
+                            }
+                        }
+                    }
+
                     match event.event_type.as_str() {
                         "fallback" => sheet.fallback_events += 1,
                         "bypass" => sheet.bypass_events += 1,
@@ -311,6 +360,30 @@ pub fn get_balance_sheet() -> BalanceSheet {
     
     sheet.net_change = sheet.signal_added as isize - sheet.noise_removed as isize;
     sheet
+}
+
+pub fn get_recent_telemetry(limit: usize) -> Vec<TelemetryEvent> {
+    let path = resolve_telemetry_path();
+    if !path.exists() {
+        return Vec::new();
+    }
+    if let Ok(content) = std::fs::read_to_string(path) {
+        let mut events = Vec::new();
+        for line in content.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Ok(event) = serde_json::from_str::<TelemetryEvent>(line) {
+                if event.event_type == "tool_call" {
+                    events.push(event);
+                }
+            }
+        }
+        events.reverse();
+        events.truncate(limit);
+        return events;
+    }
+    Vec::new()
 }
 
 pub fn generate_audit_header(pipe_name: &str, trace: &[HashMap<String, serde_json::Value>], latency_ms: f64) -> String {
@@ -379,4 +452,128 @@ pub fn get_latest_telemetry() -> Option<TelemetryEvent> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TempEnv {
+        key: &'static str,
+        old_val: Option<String>,
+    }
+
+    impl TempEnv {
+        fn set(key: &'static str, val: &str) -> Self {
+            let old_val = std::env::var(key).ok();
+            std::env::set_var(key, val);
+            Self { key, old_val }
+        }
+    }
+
+    impl Drop for TempEnv {
+        fn drop(&mut self) {
+            if let Some(ref val) = self.old_val {
+                std::env::set_var(self.key, val);
+            } else {
+                std::env::remove_var(self.key);
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_time_string() {
+        assert!(parse_time_string("").is_none());
+        
+        // ctime format
+        let dt_ctime = parse_time_string("Sun May 31 10:08:47 2026");
+        assert!(dt_ctime.is_some());
+        assert_eq!(dt_ctime.unwrap().format("%Y-%m-%d %H:%M:%S").to_string(), "2026-05-31 10:08:47");
+
+        // RFC 3339
+        let dt_rfc = parse_time_string("2026-05-31T10:08:47Z");
+        assert!(dt_rfc.is_some());
+        assert_eq!(dt_rfc.unwrap().format("%Y-%m-%d %H:%M:%S").to_string(), "2026-05-31 10:08:47");
+
+        // Epoch f64 string
+        let dt_epoch = parse_time_string("1772359727.0");
+        assert!(dt_epoch.is_some());
+    }
+
+    #[test]
+    fn test_get_recent_telemetry_and_balance_sheet() {
+        let temp_dir = std::env::temp_dir();
+        let file_path = temp_dir.join("test_rust_telemetry.jsonl");
+        if file_path.exists() {
+            let _ = std::fs::remove_file(&file_path);
+        }
+
+        let _guard = TempEnv::set("CPP_TELEMETRY_FILE", file_path.to_str().unwrap());
+
+        // Log events
+        log_bypass_event("tool1", "reason1", "platform1", "pipe1", Some("agent1"));
+
+        // Use custom log writing since log_telemetry usually delegates/validates opt-in
+        let event1 = TelemetryEvent {
+            event_type: "tool_call".to_string(),
+            session_id: "s1".to_string(),
+            start_time: "Sun May 31 10:00:00 2026".to_string(),
+            tool_name: "tool1".to_string(),
+            original_chars: 100,
+            final_chars: 40,
+            original_tokens: 25,
+            final_tokens: 10,
+            latency_ms: 10.0,
+            cache_hit: false,
+            platform: "platform1".to_string(),
+            agent: "agent1".to_string(),
+            pipe_name: "pipe1".to_string(),
+            tier: "tier1".to_string(),
+            reason: String::new(),
+            timestamp: String::new(),
+        };
+
+        let event2 = TelemetryEvent {
+            event_type: "tool_call".to_string(),
+            session_id: "s2".to_string(),
+            start_time: "Sun May 31 10:05:00 2026".to_string(),
+            tool_name: "tool2".to_string(),
+            original_chars: 200,
+            final_chars: 80,
+            original_tokens: 50,
+            final_tokens: 20,
+            latency_ms: 20.0,
+            cache_hit: false,
+            platform: "platform2".to_string(),
+            agent: "agent2".to_string(),
+            pipe_name: "pipe2".to_string(),
+            tier: "tier2".to_string(),
+            reason: String::new(),
+            timestamp: String::new(),
+        };
+
+        {
+            let mut file = OpenOptions::new().create(true).append(true).open(&file_path).unwrap();
+            let _ = writeln!(file, "{}", serde_json::to_string(&event1).unwrap());
+            let _ = writeln!(file, "{}", serde_json::to_string(&event2).unwrap());
+        }
+
+        // Test get_recent_telemetry
+        let recent = get_recent_telemetry(2);
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent[0].session_id, "s2");
+        assert_eq!(recent[1].session_id, "s1");
+
+        // Test get_balance_sheet session filtering
+        let sheet_s1 = get_balance_sheet(Some("s1"), None);
+        assert_eq!(sheet_s1.total_events, 1);
+        assert_eq!(sheet_s1.noise_removed, 60);
+
+        let sheet_s2 = get_balance_sheet(Some("s2"), None);
+        assert_eq!(sheet_s2.total_events, 1);
+        assert_eq!(sheet_s2.noise_removed, 120);
+
+        // Cleanup
+        let _ = std::fs::remove_file(file_path);
+    }
 }

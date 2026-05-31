@@ -451,7 +451,7 @@ fn cmd_list(config_path: &str) {
 }
 
 fn cmd_stats() {
-    let sheet = get_balance_sheet();
+    let sheet = get_balance_sheet(None, None);
     let net_label = if sheet.net_change < 0 { "Saved" } else { "Added" };
     println!("\n## Context-Pipe Balance Sheet");
     println!("- **Signal Injected (Augmentation):** +{} chars", sheet.signal_added);

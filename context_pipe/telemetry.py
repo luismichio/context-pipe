@@ -310,8 +310,33 @@ def get_latest_telemetry() -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_balance_sheet() -> Dict[str, Any]:
-    """Calculates context ROI. Aggregates both local JSONL and Semantic-Sift ledgers."""
+def _parse_time_string(time_str: Optional[str]) -> Optional[float]:
+    if not time_str:
+        return None
+    try:
+        t_struct = time.strptime(time_str, "%a %b %d %H:%M:%S %Y")
+        return time.mktime(t_struct)
+    except Exception:
+        pass
+    try:
+        from datetime import datetime
+        dt = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+        return dt.timestamp()
+    except Exception:
+        pass
+    try:
+        return float(time_str)
+    except Exception:
+        return None
+
+
+def get_balance_sheet(
+    session_id: Optional[str] = None,
+    last_hours: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Calculates context ROI. Aggregates both local JSONL and Semantic-Sift ledgers.
+    Supports filtering by session_id and last_hours.
+    """
     results = {
         "signal_added": 0,
         "noise_removed": 0,
@@ -323,6 +348,10 @@ def get_balance_sheet() -> Dict[str, Any]:
         "unmapped_events": 0,
     }
 
+    total_latency = 0.0
+    latency_calls = 0
+    now = time.time()
+
     # 1. Process Semantic-Sift Ledger (JSON)
     try:
         from semantic_sift.telemetry import TELEMETRY_FILE as SIFT_FILE
@@ -330,6 +359,13 @@ def get_balance_sheet() -> Dict[str, Any]:
             with open(SIFT_FILE, "r") as f:
                 sift_data = json.load(f)
             for sid, sdata in sift_data.items():
+                if session_id and sid != session_id:
+                    continue
+                if last_hours is not None:
+                    ts_str = sdata.get("timestamp") or sdata.get("start_time")
+                    event_time = _parse_time_string(ts_str)
+                    if event_time is not None and (now - event_time > last_hours * 3600):
+                        continue
                 for tool, stats in sdata.get("tools", {}).items():
                     oc = stats.get("original_chars", 0)
                     fc = stats.get("final_chars", 0)
@@ -338,7 +374,12 @@ def get_balance_sheet() -> Dict[str, Any]:
                         results["signal_added"] += delta
                     else:
                         results["noise_removed"] += abs(delta)
-                    results["total_events"] += stats.get("calls", 0)
+                    calls = stats.get("calls", 0)
+                    results["total_events"] += calls
+
+                    lat = stats.get("latency_ms", 0.0) or stats.get("latency", 0.0)
+                    total_latency += lat * calls
+                    latency_calls += calls
     except Exception:
         pass
 
@@ -352,6 +393,16 @@ def get_balance_sheet() -> Dict[str, Any]:
                         continue
                     try:
                         event = json.loads(line)
+
+                        # Apply filters
+                        if session_id and event.get("session_id") != session_id:
+                            continue
+                        if last_hours is not None:
+                            ts_str = event.get("start_time") or event.get("timestamp")
+                            event_time = _parse_time_string(ts_str)
+                            if event_time is not None and (now - event_time > last_hours * 3600):
+                                continue
+
                         if event.get("type") == "fallback":
                             results["fallback_events"] += 1
                             continue
@@ -370,12 +421,53 @@ def get_balance_sheet() -> Dict[str, Any]:
                                 results["signal_added"] += delta
                             else:
                                 results["noise_removed"] += abs(delta)
+                            
+                            lat = event.get("latency_ms", 0.0)
+                            total_latency += lat
+                            latency_calls += 1
                     except Exception:
                         pass
         except Exception:
             pass
 
     results["net_change"] = results["signal_added"] - results["noise_removed"]
+    if latency_calls > 0:
+        results["avg_latency_ms"] = total_latency / latency_calls
     return results
+
+
+def get_recent_telemetry(limit: int = 1) -> list[Dict[str, Any]]:
+    """Retrieves the last recorded tool telemetry event(s) in reverse chronological order (newest first)."""
+    if not os.path.exists(TELEMETRY_FILE):
+        return []
+    try:
+        events = []
+        with _TELEMETRY_LOCK:
+            with open(TELEMETRY_FILE, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                        if event.get("type") == "tool_call":
+                            events.append({
+                                "session_id": event.get("session_id"),
+                                "tool_key": event.get("tool_name"),
+                                "original_chars": event.get("original_chars", 0),
+                                "final_chars": event.get("final_chars", 0),
+                                "original_tokens": event.get("original_tokens", 0),
+                                "final_tokens": event.get("final_tokens", 0),
+                                "latency_ms": event.get("latency_ms", 0.0),
+                                "cache_hit": event.get("cache_hit", False),
+                                "platform": event.get("platform", "unknown"),
+                                "agent": event.get("agent", "Main"),
+                                "tier": event.get("tier", "Real-World"),
+                            })
+                    except Exception:
+                        pass
+        return events[-limit:][::-1]
+    except Exception:
+        return []
 
 # --- [Semantic-Sift Audit] ---
