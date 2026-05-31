@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.7] — 2026-05-31
+### Fixed
+- Fixed an indefinite hang in Python integration tests on Linux CI runners by registering a `ThreadedChildWatcher` event loop policy in `conftest.py` to prevent nested `asyncio.run` subprocess deadlocks.
+- Harmonized all native read blocker thresholds in `context_pipe/onboarding.py` (including security gateway inhibitor commands, Cline hooks, and the pi.dev native extension template) to `50KB` (51200 bytes) to fully resolve inconsistencies and prevent false positives on small files (REPORT_042).
+
 ## [0.5.6] — 2026-05-31
 
 ### Added

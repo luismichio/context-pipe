@@ -331,14 +331,14 @@ def get_security_gateway_command() -> str:
         return (
             'pwsh -NoProfile -Command "$p=$env:WINDSURF_TOOL_ARGS; '
             "if (Test-Path $p) { "
-            "if ((Get-Item $p).Length -gt 1024) { "
-            '[Console]::Error.WriteLine("[BLOCKED by Context-Pipe] File > 1KB. Use pipe_read_file instead."); '
+            "if ((Get-Item $p).Length -gt 51200) { "
+            '[Console]::Error.WriteLine("[BLOCKED by Context-Pipe] File > 50KB. Use pipe_read_file instead."); '
             'exit 2 } }" '
         )
     return (
         'SIZE=$(stat -c %s "$WINDSURF_TOOL_ARGS" 2>/dev/null || stat -f %z "$WINDSURF_TOOL_ARGS" 2>/dev/null || wc -c < "$WINDSURF_TOOL_ARGS" 2>/dev/null); '
-        'if [ "$SIZE" -gt 1024 ] 2>/dev/null; then '
-        'echo "[BLOCKED by Context-Pipe] File > 1KB. Use pipe_read_file instead." > /dev/stderr; '
+        'if [ "$SIZE" -gt 51200 ] 2>/dev/null; then '
+        'echo "[BLOCKED by Context-Pipe] File > 50KB. Use pipe_read_file instead." > /dev/stderr; '
         "exit 2; fi"
     )
 
@@ -1057,8 +1057,8 @@ if ($inputJson.preToolUse.toolName -eq 'read_file' -or $inputJson.preToolUse.too
     $filePath = $inputJson.preToolUse.parameters.path
     if (Test-Path $filePath) {
         $size = (Get-Item $filePath).Length
-        if ($size -gt 1024) {
-            $response = @{ cancel = $true; errorMessage = "[BLOCKED by Context-Pipe] File > 1KB. Use pipe_read_file instead." }
+        if ($size -gt 51200) {
+            $response = @{ cancel = $true; errorMessage = "[BLOCKED by Context-Pipe] File > 50KB. Use pipe_read_file instead." }
             $response | ConvertTo-Json -Compress | Write-Output
             exit 0
         }
@@ -1079,8 +1079,8 @@ if [[ "$TOOL_NAME" == "read_file" ]] || [[ "$TOOL_NAME" == "view_file" ]]; then
     FILE_PATH=$(echo "$INPUT" | grep -oP '(?<="path":")[^"]*')
     if [[ -f "$FILE_PATH" ]]; then
         SIZE=$(wc -c < "$FILE_PATH" 2>/dev/null || stat -f %s "$FILE_PATH" 2>/dev/null || stat -c %s "$FILE_PATH" 2>/dev/null)
-        if [[ "$SIZE" -gt 1024 ]]; then
-            echo '{"cancel": true, "errorMessage": "[BLOCKED by Context-Pipe] File > 1KB. Use pipe_read_file instead."}'
+        if [[ "$SIZE" -gt 51200 ]]; then
+            echo '{"cancel": true, "errorMessage": "[BLOCKED by Context-Pipe] File > 50KB. Use pipe_read_file instead."}'
             exit 0
         fi
     fi
@@ -1325,7 +1325,7 @@ export default function (pi: ExtensionAPI) {
       const filePath = event.input.path;
       try {
         const stats = statSync(filePath);
-        if (stats.size > 1024) {
+        if (stats.size > 51200) {
           return {
             block: true,
             reason: `File is ${(stats.size / 1024).toFixed(1)}KB. Use pipe_read_file("${filePath}") instead.`
