@@ -77,6 +77,7 @@ def pipe_agent_handoff(
             original_size=input_size,
             final_size=output_size,
             latency_ms=0.0,
+            config_path=config_path,
         )
     except Exception:
         pass  # Telemetry failure must never block the handoff

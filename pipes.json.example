@@ -8,6 +8,11 @@
       "description": "Fast log sifting via Semantic-Sift.",
       "nodes": [
         {
+          "type": "script",
+          "cmd": "collapse_logs",
+          "help_msg": "collapse_logs script not found."
+        },
+        {
           "cmd": "semantic-sift-cli",
           "args": ["logs"],
           "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
@@ -99,12 +104,82 @@
           }
         ]
       }
+    },
+    {
+      "name": "web-sift",
+      "description": "Scrape web content via Firecrawl and neural sift the results.",
+      "nodes": [
+        {
+          "type": "mcp",
+          "server": "firecrawl",
+          "tool": "firecrawl_scrape",
+          "input_key": "url",
+          "help_msg": "Firecrawl MCP server node execution failed."
+        },
+        {
+          "cmd": "semantic-sift-cli",
+          "args": ["semantic", "--rate", "0.5"],
+          "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
+        }
+      ]
+    },
+    {
+      "name": "supabase-refinery",
+      "description": "Scopes queries to Supabase database, executing them and sifting results.",
+      "nodes": [
+        {
+          "type": "mcp",
+          "server": "supabase",
+          "tool": "execute_sql",
+          "input_key": "query",
+          "help_msg": "Supabase MCP server node execution failed. Ensure SUPABASE_PROJECT_REF and SUPABASE_ACCESS_TOKEN are set."
+        },
+        {
+          "cmd": "semantic-sift-cli",
+          "args": ["semantic", "--rate", "0.5"],
+          "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
+        }
+      ]
+    },
+    {
+      "name": "web-index-sift",
+      "description": "Scrapes a URL via Firecrawl, semantic sifts it, and indexes it into context-mode.",
+      "nodes": [
+        {
+          "type": "mcp",
+          "server": "firecrawl",
+          "tool": "firecrawl_scrape",
+          "input_key": "url"
+        },
+        {
+          "cmd": "semantic-sift-cli",
+          "args": [
+            "semantic",
+            "--rate",
+            "0.5"
+          ],
+          "help_msg": "semantic-sift-cli not found. Run 'uv tool install semantic-sift'."
+        },
+        {
+          "type": "mcp",
+          "server": "context-mode",
+          "tool": "ctx_index",
+          "input_key": "content",
+          "args": {
+            "source": "web-sift"
+          }
+        }
+      ]
     }
   ],
   "mappings": [
     {
-      "trigger": "tool:web_search|web_fetch|google_web_search",
-      "pipe": "semantic-refinery"
+      "trigger": "tool:web_search|web_fetch|google_web_search|scrape|firecrawl_scrape",
+      "pipe": "web-sift"
+    },
+    {
+      "trigger": "tool:query_db|execute_sql|get_schema|list_tables",
+      "pipe": "supabase-refinery"
     },
     {
       "trigger": "tool:search_code|grep_search|glob|find_symbol",
@@ -120,16 +195,29 @@
     }
   ],
   "servers": {
+    "context-mode": {
+      "command": [
+        "node",
+        "C:\\Users\\luism\\AppData\\Local\\Yarn\\Data\\global\\node_modules\\context-mode\\cli.bundle.mjs"
+      ]
+    },
     "firecrawl": {
       "command": [
-        "python",
-        "-m",
-        "firecrawl_mcp.server"
+        "npx",
+        "-y",
+        "firecrawl-mcp"
       ],
       "env": {
         "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
       },
       "verbose": true
+    },
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=${SUPABASE_PROJECT_REF}",
+      "headers": {
+        "Authorization": "Bearer ${SUPABASE_ACCESS_TOKEN}"
+      }
     }
   }
 }

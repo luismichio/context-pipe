@@ -212,3 +212,122 @@ def test_log_bypass_event_skips_cloud_pulse_for_range(isolated_telemetry):
             platform="Generic CLI"
         )
         mock_sift_tel.send_telemetry_pulse.assert_not_called()
+
+
+def test_multi_workspace_telemetry_isolation(tmp_path, monkeypatch):
+    """When config_path is provided, telemetry must be routed to the respective project directory."""
+    monkeypatch.setenv("SIFT_TELEMETRY_OPTED_IN", "true")
+    project_a_dir = tmp_path / "project_a"
+    project_b_dir = tmp_path / "project_b"
+    project_a_dir.mkdir()
+    project_b_dir.mkdir()
+
+    config_a = str(project_a_dir / "pipes.json")
+    config_b = str(project_b_dir / "pipes.json")
+
+    # Isolate from semantic_sift to only test local path
+    with patch.dict("sys.modules", {"semantic_sift.telemetry": None}):
+        tel.log_telemetry(
+            session_id="session-a",
+            start_time="now",
+            tool_name="toolA",
+            original_size=100,
+            final_size=50,
+            latency_ms=10.0,
+            config_path=config_a,
+        )
+
+        tel.log_telemetry(
+            session_id="session-b",
+            start_time="now",
+            tool_name="toolB",
+            original_size=200,
+            final_size=150,
+            latency_ms=20.0,
+            config_path=config_b,
+        )
+
+        # Check telemetry files are created in respective workspace folders
+        telemetry_a_file = project_a_dir / ".pipe_telemetry.jsonl"
+        telemetry_b_file = project_b_dir / ".pipe_telemetry.jsonl"
+        assert telemetry_a_file.exists()
+        assert telemetry_b_file.exists()
+
+        # Check stats isolation
+        sheet_a = tel.get_balance_sheet(config_path=config_a)
+        sheet_b = tel.get_balance_sheet(config_path=config_b)
+
+        assert sheet_a["noise_removed"] == 50
+        assert sheet_a["total_events"] == 1
+
+        assert sheet_b["noise_removed"] == 50
+        assert sheet_b["total_events"] == 1
+
+
+def test_telemetry_double_counting_prevention(isolated_telemetry):
+    """get_balance_sheet must skip node-level sifts or events marked as is_node to prevent double counting."""
+    # 1. Log overall pipe-level call (100 -> 10 chars = 90 noise removed)
+    tel.log_telemetry("s1", "t1", "tool1", 100, 10, 10.0, pipe_name="my-pipe")
+    # 2. Log an internal node call
+    tel.log_telemetry("s1", "t1", "tool1", 50, 10, 5.0, pipe_name="my-pipe")
+    
+    # Overwrite the last log entry in the file to have is_node = True for testing
+    import json
+    with open(isolated_telemetry, "r", encoding="utf-8") as f:
+        events = [json.loads(line) for line in f]
+    
+    if len(events) >= 2:
+        events[1]["is_node"] = True
+    
+    with open(isolated_telemetry, "w", encoding="utf-8") as f:
+        for ev in events:
+            f.write(json.dumps(ev) + "\n")
+
+    # 3. Verify get_balance_sheet aggregates only the pipe-level event
+    with patch.dict("sys.modules", {"semantic_sift.telemetry": None}):
+        sheet = tel.get_balance_sheet()
+        assert sheet["noise_removed"] == 90
+        assert sheet["total_events"] == 1
+
+
+def test_get_balance_sheet_filters_sift_shared_ledger(tmp_path, monkeypatch):
+    """get_balance_sheet must skip tools containing 'sift_cli_' or marked with 'is_node' in the shared ledger."""
+    sift_file = tmp_path / "mock_sift_telemetry.json"
+    sift_data = {
+        "session-1": {
+            "start_time": "2026-06-05T20:00:00Z",
+            "tools": {
+                "my-pipe:tool1": {
+                    "calls": 1,
+                    "original_chars": 100,
+                    "final_chars": 10,
+                    "latency_ms": 10.0
+                },
+                "sift_cli_semantic:tool1": {
+                    "calls": 1,
+                    "original_chars": 50,
+                    "final_chars": 10,
+                    "latency_ms": 5.0
+                },
+                "another-node:tool1": {
+                    "calls": 1,
+                    "original_chars": 50,
+                    "final_chars": 10,
+                    "latency_ms": 5.0,
+                    "is_node": True
+                }
+            }
+        }
+    }
+    with open(sift_file, "w", encoding="utf-8") as f:
+        json.dump(sift_data, f)
+
+    # Mock semantic_sift.telemetry.TELEMETRY_FILE path
+    mock_sift_module = MagicMock()
+    mock_sift_module.TELEMETRY_FILE = str(sift_file)
+    with patch.dict("sys.modules", {"semantic_sift.telemetry": mock_sift_module}), \
+         patch("context_pipe.telemetry.resolve_telemetry_file", return_value=str(tmp_path / "empty_local.jsonl")):
+        sheet = tel.get_balance_sheet()
+        
+    assert sheet["noise_removed"] == 90
+    assert sheet["total_events"] == 1

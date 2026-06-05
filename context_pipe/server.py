@@ -29,14 +29,34 @@ START_TIME = time.ctime()
 CONFIG_PATH = os.environ.get("PIPE_CONFIG_PATH", "pipes.json")
 
 
-def load_config() -> dict:
-    return config_loader.load_pipes_config(CONFIG_PATH)
+def load_config(config_path: Optional[str] = None) -> dict:
+    path = config_path or CONFIG_PATH
+    return config_loader.load_pipes_config(path)
+
+
+def _find_config_upward(file_path: str) -> Optional[str]:
+    """Finds pipes.json by walking up the directory tree from file_path."""
+    try:
+        curr = os.path.dirname(os.path.abspath(file_path))
+        while True:
+            candidate = os.path.join(curr, "pipes.json")
+            if os.path.exists(candidate):
+                return candidate
+            if os.path.exists(os.path.join(curr, ".pipe_identity")):
+                return os.path.join(curr, "pipes.json")
+            parent = os.path.dirname(curr)
+            if parent == curr:
+                break
+            curr = parent
+    except Exception:
+        pass
+    return None
 
 
 @mcp.tool()
-def list_pipes() -> str:
+def list_pipes(config_path: Optional[str] = None) -> str:
     """Lists all available context pipes and their descriptions."""
-    config = load_config()
+    config = load_config(config_path)
     pipes = config.get("pipes", [])
     if not pipes:
         return "No pipes configured.\n"
@@ -52,6 +72,7 @@ async def pipe_run(
     input_text: str,
     vars: Optional[dict] = None,
     manifest_path: Optional[str] = None,
+    config_path: Optional[str] = None,
 ) -> str:
     """
     Executes a specific context pipe on the provided input text.
@@ -60,15 +81,16 @@ async def pipe_run(
         input_text:    The raw text to be processed through the pipe.
         vars:          Optional key-value pairs for variable substitution.
         manifest_path: Optional path to write a run manifest JSON.
+        config_path:   Optional path to pipes.json.
     """
-    config = load_config()
+    config = load_config(config_path)
     pipe = next((p for p in config.get("pipes", []) if p["name"] == pipe_name), None)
     if not pipe:
         return f"Error: Pipe '{pipe_name}' not found.\n"
 
     start_t = time.time()
     try:
-        result, trace = await run_pipe(pipe, input_text, vars=vars, manifest_path=manifest_path)
+        result, trace = await run_pipe(pipe, input_text, vars=vars, manifest_path=manifest_path, config_path=config_path)
         latency_ms = (time.time() - start_t) * 1000
 
         # Log Telemetry for ROI tracking
@@ -82,6 +104,7 @@ async def pipe_run(
             final_size=len(result),
             latency_ms=latency_ms,
             platform=platform,
+            config_path=config_path,
         )
 
         # Silent Orchestrator: No headers or signatures added here.
@@ -91,7 +114,7 @@ async def pipe_run(
         return f"Error executing pipe: {str(e)}\n"
 
 
-async def _resolve_safe_path(path: str, ctx: Optional[Context] = None) -> str:
+async def _resolve_safe_path(path: str, ctx: Optional[Context] = None, config_path: Optional[str] = None) -> str:
     """Validates the path is within the authorized workspace roots.
 
     Roots are sourced from (in merge order):
@@ -117,7 +140,7 @@ async def _resolve_safe_path(path: str, ctx: Optional[Context] = None) -> str:
     # 2. Config-file roots  survives client env-var override because the
     #    client can only inject env vars, not rewrite file contents.
     try:
-        cfg = load_config()
+        cfg = load_config(config_path)
         for root in cfg.get("authorized_roots", []):
             root = root.strip()
             if root:
@@ -156,6 +179,7 @@ async def pipe_read_file(
     start_line: Optional[int] = None,
     end_line: Optional[int] = None,
     ctx: Optional[Context] = None,
+    config_path: Optional[str] = None,
 ) -> str:
     """
     Reads a local file safely and streams it directly through a context pipe.
@@ -167,9 +191,13 @@ async def pipe_read_file(
         pipe_name: The name of the pipe to run (e.g., 'standard-distill', 'full-refinery').
         start_line: 1-indexed start line (inclusive).
         end_line: 1-indexed end line (inclusive).
+        config_path: Optional path to pipes.json.
     """
     try:
-        resolved_path = await _resolve_safe_path(path, ctx)
+        resolved_path = await _resolve_safe_path(path, ctx, config_path=config_path)
+
+        if not config_path:
+            config_path = _find_config_upward(resolved_path)
 
         with open(resolved_path, "r", encoding="utf-8", errors="replace") as f:
             if start_line is not None or end_line is not None:
@@ -183,11 +211,15 @@ async def pipe_read_file(
                 content = f.read()
     except Exception as e:
         return f"Error reading file: {str(e)}\n"
-    return await pipe_run(pipe_name, content)
+    return await pipe_run(pipe_name, content, config_path=config_path)
 
 
 @mcp.tool()
-async def pipe_analyze_file(path: str, ctx: Optional[Context] = None) -> str:
+async def pipe_analyze_file(
+    path: str,
+    ctx: Optional[Context] = None,
+    config_path: Optional[str] = None,
+) -> str:
     """
     Analyzes a file's size and structure to recommend the optimal context pipe,
     without flooding the context window.
@@ -198,9 +230,10 @@ async def pipe_analyze_file(path: str, ctx: Optional[Context] = None) -> str:
       - >= 10KB -> 'semantic-refinery' (neural compression)
     Args:
         path: Absolute or relative path to the file.
+        config_path: Optional path to pipes.json.
     """
     try:
-        resolved_path = await _resolve_safe_path(path, ctx)
+        resolved_path = await _resolve_safe_path(path, ctx, config_path=config_path)
         size = os.path.getsize(resolved_path)
     except Exception as e:
         return f"Error analyzing file: {str(e)}\n"
@@ -216,14 +249,16 @@ async def pipe_analyze_file(path: str, ctx: Optional[Context] = None) -> str:
 def get_pipe_stats(
     session_id: Optional[str] = None,
     last_hours: Optional[float] = None,
+    config_path: Optional[str] = None,
 ) -> str:
     """Returns the Context Balance Sheet (ROI) for the entire pipeline ecosystem.
 
     Args:
         session_id: Optional session ID to filter stats to a specific run.
         last_hours: Optional number of hours to look back (e.g. 1.0 for last hour, 24.0 for last day).
+        config_path: Optional path to pipes.json.
     """
-    sheet = get_balance_sheet(session_id=session_id, last_hours=last_hours)
+    sheet = get_balance_sheet(session_id=session_id, last_hours=last_hours, config_path=config_path)
     # Format the Net Change string
     net_label = "Saved" if sheet["net_change"] < 0 else "Added"
     return f"""
@@ -237,14 +272,14 @@ def get_pipe_stats(
 
 
 @mcp.tool()
-def pipe_verify() -> str:
+def pipe_verify(config_path: Optional[str] = None) -> str:
     """
     Verifies the context-pipe + semantic-sift installation health.
     Reports what is working, what is missing, and how to fix it.
     Automatically resolves and links semantic-sift-cli in pipes.json if found.
     """
     # Auto-resolve pipes.json nodes first
-    pipes_path = CONFIG_PATH
+    pipes_path = config_path or CONFIG_PATH
     resolve_result = resolve_pipes_config(pipes_path)
     report = verify_installation(pipes_path)
 
@@ -406,7 +441,7 @@ To protect your context window, always consider streaming large tool outputs thr
 
 
 @mcp.tool()
-async def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool = False) -> str:
+async def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool = False, config_path: Optional[str] = None) -> str:
     """
     Executes an ad-hoc context pipe defined as a JSON array of node objects.
     
@@ -444,6 +479,7 @@ async def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool =
         input_text:  The raw text to process through the graph.
         allow_shell: When True, shell utilities from SHELL_UTILITY_ALLOWLIST are permitted.
                      The final node MUST be semantic-sift-cli. Default False.
+        config_path: Optional path to pipes.json.
     """
     try:
         nodes = json.loads(nodes_json)
@@ -465,6 +501,7 @@ async def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool =
             final_size=len(result),
             latency_ms=latency_ms,
             platform=platform,
+            config_path=config_path,
         )
 
         return result
@@ -475,7 +512,7 @@ async def pipe_run_dynamic(nodes_json: str, input_text: str, allow_shell: bool =
 
 
 @mcp.tool()
-def pipe_list_shadow_tools() -> str:
+def pipe_list_shadow_tools(config_path: Optional[str] = None) -> str:
     """
     Lists all available context-processing capabilities, including configured pipes from pipes.json
     and well-known CLI tools discovered on the system PATH (e.g., jq, yq, markitdown, pandoc, rg, fd, bat).
@@ -484,7 +521,7 @@ def pipe_list_shadow_tools() -> str:
     processing nodes are available on the current host. This provides just-in-time discovery
     so you can build valid JSON pipeline graphs.
     """
-    tools = list_shadow_tools(CONFIG_PATH)
+    tools = list_shadow_tools(config_path or CONFIG_PATH)
     if not tools:
         return "No context-processing tools found (no pipes.json and no known CLI tools on PATH).\n"
 

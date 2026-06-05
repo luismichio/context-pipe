@@ -62,7 +62,8 @@ pub struct Pipe {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Node {
-    pub cmd: String,
+    #[serde(default)]
+    pub cmd: Option<String>,
     #[serde(default = "default_args")]
     pub args: serde_json::Value,
     #[serde(default)]
@@ -116,13 +117,20 @@ impl Default for CommandValue {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ServerConfig {
-    pub command: CommandValue,
+    #[serde(default)]
+    pub command: Option<CommandValue>,
     #[serde(default)]
     pub env: HashMap<String, String>,
     #[serde(default)]
     pub verbose: Option<bool>,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(rename = "type", default)]
+    pub type_: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub headers: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]

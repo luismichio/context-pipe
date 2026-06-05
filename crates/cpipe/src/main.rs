@@ -581,7 +581,7 @@ async fn cmd_tool(
     }
 
     let node = Node {
-        cmd: String::new(), 
+        cmd: None, 
         args: serde_json::Value::Object(static_args),
         node_type: "mcp".to_string(),
         server: Some(server_key.to_string()),

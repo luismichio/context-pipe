@@ -19,6 +19,35 @@ logger = logging.getLogger(__name__)
 GLOBAL_CONFIG_PATH: str = os.path.expanduser("~/.mcp-pipe.json")
 
 
+def load_dotenv_fallback() -> None:
+    """Finds and loads a .env file from the current directory or parent directories into os.environ."""
+    curr = os.path.abspath(os.getcwd())
+    while True:
+        dotenv_path = os.path.join(curr, ".env")
+        if os.path.exists(dotenv_path):
+            try:
+                with open(dotenv_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        if "=" in line:
+                            k, v = line.split("=", 1)
+                            k = k.strip()
+                            v = v.strip()
+                            if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
+                                v = v[1:-1]
+                            if k and k not in os.environ:
+                                os.environ[k] = v
+            except Exception:
+                pass
+            break
+        parent = os.path.dirname(curr)
+        if parent == curr:
+            break
+        curr = parent
+
+
 def load_pipes_config(local_path: str = "pipes.json") -> dict:
     """
     Loads the pipes configuration, merging local and global sources.
@@ -42,6 +71,7 @@ def load_pipes_config(local_path: str = "pipes.json") -> dict:
     Returns:
         Merged config dict with ``"pipes"``, ``"servers"``, and ``"mappings"`` keys.
     """
+    load_dotenv_fallback()
     local_config: dict | None = _try_load(local_path, label="local")
     global_config: dict | None = _try_load(GLOBAL_CONFIG_PATH, label="global")
 

@@ -85,8 +85,12 @@ pub fn list_shadow_tools(config_path: Option<&Path>) -> Vec<DiscoveredTool> {
                             let server = n.server.as_deref().unwrap_or("unknown");
                             let tool = n.tool.as_deref().unwrap_or("unknown");
                             nodes_desc.push(format!("mcp:{}/{}", server, tool));
-                        } else if !n.cmd.is_empty() {
-                            nodes_desc.push(n.cmd.clone());
+                        } else if let Some(ref cmd) = n.cmd {
+                            if !cmd.is_empty() {
+                                nodes_desc.push(cmd.clone());
+                            } else {
+                                nodes_desc.push(format!("{:?}", n));
+                            }
                         } else {
                             nodes_desc.push(format!("{:?}", n));
                         }

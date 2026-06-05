@@ -1115,18 +1115,19 @@ pub fn validate_nodes(nodes: &[crate::config::Node], allow_shell: bool) -> Resul
             continue;
         }
         
-        if node.cmd.is_empty() {
-            return Err(format!("Node at index {} is missing required key 'cmd'.", i));
-        }
+        let cmd = match &node.cmd {
+            Some(c) if !c.is_empty() => c,
+            _ => return Err(format!("Node at index {} is missing required key 'cmd'.", i)),
+        };
         
-        if shell_meta.is_match(&node.cmd) {
+        if shell_meta.is_match(cmd) {
             return Err(format!(
                 "Node cmd '{}' contains shell metacharacters. Use args[] for arguments - cmd must be a bare executable name.",
-                node.cmd
+                cmd
             ));
         }
         
-        let exe = node.cmd.split_whitespace().next().unwrap_or(&node.cmd);
+        let exe = cmd.split_whitespace().next().unwrap_or(cmd);
         if shell_utility_allowlist.contains(exe) {
             if !allow_shell {
                 return Err(format!(
@@ -1140,7 +1141,8 @@ pub fn validate_nodes(nodes: &[crate::config::Node], allow_shell: bool) -> Resul
     
     if has_shell_utility {
         if let Some(last_node) = nodes.last() {
-            let last_exe = last_node.cmd.split_whitespace().next().unwrap_or(&last_node.cmd);
+            let last_cmd = last_node.cmd.as_deref().unwrap_or("");
+            let last_exe = last_cmd.split_whitespace().next().unwrap_or(last_cmd);
             if !sift_terminal_cmds.contains(last_exe) {
                 return Err(format!(
                     "Pipes containing shell utilities must end with a semantic-sift-cli node to guarantee context safety. Last node cmd was '{}'. Add a terminal node: {{\"cmd\": \"semantic-sift-cli\", \"args\": [\"--rate\", \"0.5\"]}}.",

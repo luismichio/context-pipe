@@ -374,3 +374,11 @@ async def test_run_pipe_max_steps_prevent_loop():
     }
     res, trace = await run_pipe(pipe_config, "input")
     assert "Maximum pipe execution steps (100) exceeded" in res
+
+
+def test_evaluate_condition_is_json():
+    from context_pipe.orchestrator import _evaluate_condition
+    assert _evaluate_condition("is_json", '{"key": "value"}') is True
+    assert _evaluate_condition("is_json", '  {"array": [1, 2, 3]}  ') is True
+    assert _evaluate_condition("is_json", 'plain text') is False
+    assert _evaluate_condition("is_json", '{"broken": ') is False

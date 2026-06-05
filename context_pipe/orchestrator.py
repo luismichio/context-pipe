@@ -76,17 +76,24 @@ def resolve_node_cmd(cmd: str) -> str:
     return cmd
 
 
-def check_echo(text: str, pipe_name: str = "", node_index: int = 0) -> bool:
+def check_echo(text: str, pipe_name: str = "", node_index: int = 0, config_path: Optional[str] = None) -> bool:
     """Checks if the content was processed recently to prevent loops (30s TTL)."""
     if not text or len(text) < 500:
         return False
 
     # Unified with Context-Pipe (.pipe_cache)
-    cache_dir = os.path.join(os.getcwd(), ".pipe_cache")
+    if config_path:
+        project_dir = os.path.dirname(os.path.abspath(config_path))
+        cache_dir = os.path.join(project_dir, ".pipe_cache")
+        # include project fingerprint (hash of config_path)
+        project_hash = hashlib.sha256(os.path.abspath(config_path).encode()).hexdigest()[:8]
+        raw_key = f"{project_hash}:{pipe_name}:{node_index}:{text}"
+    else:
+        cache_dir = os.path.join(os.getcwd(), ".pipe_cache")
+        raw_key = f"{pipe_name}:{node_index}:{text}"
+
     os.makedirs(cache_dir, exist_ok=True)
 
-    # Scoped hash: (pipe_name, node_index, content)
-    raw_key = f"{pipe_name}:{node_index}:{text}"
     content_hash = hashlib.sha256(raw_key.encode()).hexdigest()[:16]
     echo_path = os.path.join(cache_dir, f"echo_{content_hash}.tmp")
     now = time.time()
@@ -279,7 +286,50 @@ async def _run_mcp_node(
     resolved_env = resolve_placeholders(server_cfg.get("env", {}), env)
     child_env = {**env, **resolved_env}
 
-    cmd_raw = server_cfg["command"]
+    node_timeout_override = node.get("timeout")
+    if node_timeout_override is not None:
+        timeout_s = float(node_timeout_override)
+    else:
+        raw_timeout = os.environ.get("PIPE_NODE_TIMEOUT_MS", "30000")
+        timeout_s = int(raw_timeout) / 1000.0
+
+    is_verbose = server_cfg.get("verbose", False)
+
+    is_http_streamable = server_cfg.get("type") == "http"
+    is_sse = server_cfg.get("type") == "sse" or (not is_http_streamable and str(server_cfg.get("url", "")).startswith("http"))
+    if is_http_streamable or is_sse:
+        url = resolve_placeholders(server_cfg["url"], child_env)
+        headers = resolve_placeholders(server_cfg.get("headers", {}), child_env)
+        if is_http_streamable:
+            import httpx
+            from mcp.client.streamable_http import streamable_http_client
+            client = httpx.AsyncClient(headers=headers)
+            async with client:
+                async with streamable_http_client(url, http_client=client) as (read, write, _):
+                    async with ClientSession(read, write) as session:  # type: ignore[arg-type]
+                        await session.initialize()
+                        arguments = {input_key: stdin_data, **static_args}
+                        result = await asyncio.wait_for(
+                            session.call_tool(tool_name, arguments),
+                            timeout=timeout_s,
+                        )
+                        return _extract_text(result)
+        else:
+            from mcp.client.sse import sse_client
+            async with sse_client(url, headers=headers) as (read, write):
+                async with ClientSession(read, write) as session:  # type: ignore[arg-type]
+                    await session.initialize()
+                    arguments = {input_key: stdin_data, **static_args}
+                    result = await asyncio.wait_for(
+                        session.call_tool(tool_name, arguments),
+                        timeout=timeout_s,
+                    )
+                    return _extract_text(result)
+
+    cmd_raw = server_cfg.get("command")
+    if not cmd_raw:
+        raise ValueError(f"Server '{server_key}' configuration must define either 'url' or 'command'.")
+
     if isinstance(cmd_raw, str):
         import shlex
         cmd = shlex.split(cmd_raw, posix=(os.name != "nt"))
@@ -307,14 +357,6 @@ async def _run_mcp_node(
         encoding_error_handler='replace',
     )
 
-    node_timeout_override = node.get("timeout")
-    if node_timeout_override is not None:
-        timeout_s = float(node_timeout_override)
-    else:
-        raw_timeout = os.environ.get("PIPE_NODE_TIMEOUT_MS", "30000")
-        timeout_s = int(raw_timeout) / 1000.0
-
-    is_verbose = server_cfg.get("verbose", False)
     async with stdio_client(server_params) as (read, write):
         if not is_verbose:
             read = _StdoutToleranceWrapper(read, verbose=False)
@@ -377,10 +419,15 @@ def _write_manifest(
     result: str,
     status: str,
     started_at: str,
+    config_path: Optional[str] = None,
 ) -> None:
     pipe_name = pipe_config.get("name", "unknown")
     if manifest_path == "auto":
-        cache_dir = os.path.join(os.getcwd(), ".pipe_cache")
+        if config_path:
+            project_dir = os.path.dirname(os.path.abspath(config_path))
+            cache_dir = os.path.join(project_dir, ".pipe_cache")
+        else:
+            cache_dir = os.path.join(os.getcwd(), ".pipe_cache")
         os.makedirs(cache_dir, exist_ok=True)
         iso_date = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         resolved_path = os.path.join(cache_dir, f"{pipe_name}-{iso_date}.json")
@@ -467,6 +514,12 @@ def _evaluate_condition(predicate: str, input_data: str) -> bool:
             sub = sub[1:-1]
         leading = input_data[:300]
         return sub in leading
+    elif predicate == "is_json":
+        try:
+            json.loads(input_data.strip())
+            return True
+        except ValueError:
+            return False
 
     logger.warning(f"Unknown condition predicate: {predicate}")
     return True
@@ -534,11 +587,17 @@ async def run_pipe(
     server_registry: Dict[str, Any] | None = None,
     vars: Optional[Dict[str, str]] = None,
     manifest_path: Optional[str] = None,
+    config_path: Optional[str] = None,
 ) -> tuple[str, List[Dict[str, Any]]]:
     """Executes a chain of nodes and tracks context deltas with a timeout guard."""
     # 0. Early Bypass (Sift-Centric)
     if SIFT_SIGNATURE in input_data:
         return input_data, []
+
+    if server_registry is None:
+        from .config_loader import load_pipes_config
+        cfg = load_pipes_config(config_path or "pipes.json")
+        server_registry = cfg.get("servers", {})
 
     started_at_str = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -551,7 +610,7 @@ async def run_pipe(
         m_path = manifest_path or pipe_config.get("manifest")
         if m_path:
             status = "fail" if (res.startswith("--- [Context-Pipe:") or res.startswith("Error") or "error" in (tr[-1] if tr else {})) else "pass"
-            _write_manifest(m_path, pipe_config, run_vars, tr, res, status, started_at_str)
+            _write_manifest(m_path, pipe_config, run_vars, tr, res, status, started_at_str, config_path=config_path)
 
     current_input = input_data
     trace: List[Dict[str, Any]] = []
@@ -565,6 +624,8 @@ async def run_pipe(
         process_env["SIFT_TOOL_NAME"] = tool_name
     if agent_label:
         process_env["SIFT_AGENT_LABEL"] = agent_label
+    process_env["CPP_RUNNING_IN_PIPE"] = "true"
+    process_env["CPP_PIPE_NAME"] = pipe_config.get("name", "unknown")
 
     # ── DAG Traversal Engine ──
     ordered_nodes = []
@@ -647,7 +708,7 @@ async def run_pipe(
 
         # Echo Guard: skip node if input was recently processed
         node_idx = node_index_map.get(current_node_id, 0)
-        if check_echo(current_input, pipe_name=pipe_config.get("name", "unknown"), node_index=node_idx):
+        if check_echo(current_input, pipe_name=pipe_config.get("name", "unknown"), node_index=node_idx, config_path=config_path):
             current_node_id = natural_next
             continue
 
@@ -980,7 +1041,8 @@ def main():
         wrap_parser.add_argument("--config", default="pipes.json", help="Path to pipes.json")
 
         # 3. 'stats' command (Balance Sheet)
-        subparsers.add_parser("stats", help="Display Context-Pipe ROI Balance Sheet")
+        stats_parser = subparsers.add_parser("stats", help="Display Context-Pipe ROI Balance Sheet")
+        stats_parser.add_argument("--config", default="pipes.json", help="Path to pipes.json")
 
         # Compatibility with old behavior (no subcommand)
         if len(sys.argv) > 1 and sys.argv[1] not in ["run", "wrap", "stats"]:
@@ -1007,7 +1069,7 @@ def main():
                 sys.exit(0)
 
             # Run the pipe
-            result, trace = asyncio.run(run_pipe(pipe, raw_input))
+            result, trace = asyncio.run(run_pipe(pipe, raw_input, config_path=config_path))
             sys.stdout.write(result)
 
         elif args.command == "wrap":
@@ -1015,13 +1077,13 @@ def main():
                 sys.exit(0)
             from .wrapper import wrap_payload
 
-            result = wrap_payload(raw_input, config)
+            result = wrap_payload(raw_input, config, config_path=config_path)
             sys.stdout.write(result)
 
         elif args.command == "stats":
             from .telemetry import get_balance_sheet
 
-            sheet = get_balance_sheet()
+            sheet = get_balance_sheet(config_path=config_path)
             net_label = "Saved" if sheet["net_change"] < 0 else "Added"
 
             print("\n--- [Context-Pipe: ROI Balance Sheet] ---")

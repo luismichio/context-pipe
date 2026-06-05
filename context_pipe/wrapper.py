@@ -59,7 +59,7 @@ def _is_file_already_sifted(file_path: str) -> bool:
         return False
 
 
-def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
+def wrap_payload(raw_json: str, config: Dict[str, Any], config_path: Optional[str] = None) -> str:
     """
     Parses an incoming tool response, applies the optimal context pipe,
     and returns the re-wrapped JSON response.
@@ -152,7 +152,7 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
                     if len(stripped) < 10000:
                         if debug:
                             logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': Structured JSON detected.")
-                        log_bypass_event(tool_name=str(tool_name), reason="Structured JSON detected", platform=platform, agent_label=agent_label)
+                        log_bypass_event(tool_name=str(tool_name), reason="Structured JSON detected", platform=platform, agent_label=agent_label, config_path=config_path)
                         return _generate_bypass_payload(raw_json, platform)
     except (json.JSONDecodeError, TypeError):
         pass
@@ -173,7 +173,8 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
                 tool_name=str(tool_name),
                 reason="File on disk is already sifted",
                 platform=platform,
-                agent_label=agent_label
+                agent_label=agent_label,
+                config_path=config_path,
             )
             return _generate_bypass_payload(raw_json, platform)
 
@@ -183,19 +184,19 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
         content_len = len(str(raw_content))
         if content_len > 10240:
             sys.stderr.write(f"\n[Context-Pipe Alert: Unmapped heavy tool call '{tool_name}' ({content_len/1024:.1f}KB) detected. Add to pipes.json to optimize.]\n")
-            log_unmapped_event(tool_name=str(tool_name), original_size=content_len, platform=platform, agent_label=agent_label)
+            log_unmapped_event(tool_name=str(tool_name), original_size=content_len, platform=platform, agent_label=agent_label, config_path=config_path)
             
         if debug:
             logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': No routing match found.")
-        log_bypass_event(tool_name=str(tool_name), reason="No routing match found", platform=platform, agent_label=agent_label)
+        log_bypass_event(tool_name=str(tool_name), reason="No routing match found", platform=platform, agent_label=agent_label, config_path=config_path)
         return _generate_bypass_payload(raw_json, platform)
 
     # 4. Guard: Echo Detection (Disk-Based)
     # Scoped to pipe_name with index -1 to prevent collision with node_index 0 in run_pipe
-    if check_echo(str(raw_content), pipe_name=pipe_name, node_index=-1):
+    if check_echo(str(raw_content), pipe_name=pipe_name, node_index=-1, config_path=config_path):
         if debug:
             logger.debug(f"[CPP DEBUG] Bypassing '{tool_name}': Echo Guard hit (recently processed).")
-        log_bypass_event(tool_name=str(tool_name), reason="Echo Guard hit", platform=platform, pipe_name=pipe_name, agent_label=agent_label)
+        log_bypass_event(tool_name=str(tool_name), reason="Echo Guard hit", platform=platform, pipe_name=pipe_name, agent_label=agent_label, config_path=config_path)
         return _generate_bypass_payload(raw_json, platform)
 
     pipe = next((p for p in config.get("pipes", []) if p["name"] == pipe_name), None)
@@ -206,31 +207,52 @@ def wrap_payload(raw_json: str, config: Dict[str, Any]) -> str:
 
     # 5. Execution
     try:
-        sifted_content, trace = asyncio.run(run_pipe(pipe, str(raw_content), tool_name=tool_name, agent_label=agent_label))
+        sifted_content, trace = asyncio.run(run_pipe(pipe, str(raw_content), tool_name=tool_name, agent_label=agent_label, config_path=config_path))
         latency_ms = (time.time() - start_t) * 1000
 
         if debug:
             logger.debug(f"[CPP DEBUG] Intercepted '{tool_name}': Applied '{pipe_name}' ({len(str(raw_content))} -> {len(sifted_content)}) in {latency_ms:.1f}ms")
 
-        # 6. Telemetry (Accounting per node)
-        latency_per_node = latency_ms / max(1, len(trace))
-        for entry in trace:
-            if "error" in entry:
-                continue
+        # 6. Telemetry (Pipe-level unified accounting)
+        log_telemetry(
+            session_id=WRAPPER_SESSION_ID,
+            start_time=WRAPPER_START_TIME,
+            pipe_name=pipe_name,
+            tool_name=tool_name or "unknown",
+            original_size=len(str(raw_content)),
+            final_size=len(sifted_content),
+            latency_ms=latency_ms,
+            platform=platform,
+            agent_label=agent_label,
+            config_path=config_path,
+            trace=trace,
+        )
 
-            # Note: We use the node-level data for high-fidelity attribution,
-            # but log_telemetry is designed to handle this session-keyed schema.
-            log_telemetry(
-                session_id=WRAPPER_SESSION_ID,
-                start_time=WRAPPER_START_TIME,
-                pipe_name=pipe_name,
-                tool_name=f"{entry.get('node', 'unknown')}:{tool_name}",
-                original_size=entry.get("input_size", 0),
-                final_size=entry.get("output_size", 0),
-                latency_ms=latency_per_node,
-                platform=platform,
-                agent_label=agent_label,
-            )
+        # 6.1 Cloud Pulse (Enriched with pipe metrics if sifter node was executed)
+        sift_entry = None
+        for entry in trace:
+            if "error" not in entry and "node" in entry:
+                node_name = str(entry["node"]).lower()
+                if "sift" in node_name or "refinery" in node_name or "refine" in node_name:
+                    sift_entry = entry
+                    break
+
+        if sift_entry:
+            try:
+                from semantic_sift.telemetry import send_telemetry_pulse
+                send_telemetry_pulse(
+                    tool_name=f"sift_cli_semantic:{tool_name}",
+                    original=sift_entry.get("input_size", 0),
+                    final=sift_entry.get("output_size", 0),
+                    latency=latency_ms,
+                    client_id_override=platform,
+                    agent_label=agent_label,
+                    pipe_original_chars=len(str(raw_content)),
+                    pipe_final_chars=len(sifted_content),
+                    pipe_name=pipe_name,
+                )
+            except Exception:
+                pass
 
         # 7. Inject (Silent Orchestrator)
         # Orchestrator is now transparent; headers and signatures are handled by engine nodes.

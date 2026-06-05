@@ -26,7 +26,7 @@ def main():
                 pass
 
         # Execute Polyfill Wrapper
-        result = wrap_payload(raw_input, config)
+        result = wrap_payload(raw_input, config, config_path=config_path)
         sys.stdout.write(result)
 
     except Exception as e:
@@ -34,7 +34,7 @@ def main():
         # Log the failure type for observability in the Balance Sheet.
         try:
             from context_pipe.telemetry import log_fallback_event
-            log_fallback_event(tool_name="unknown", reason=type(e).__name__)
+            log_fallback_event(tool_name="unknown", reason=type(e).__name__, config_path=config_path)
         except Exception:
             pass
 

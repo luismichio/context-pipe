@@ -181,3 +181,22 @@ def test_load_global_path_is_user_home():
     """GLOBAL_CONFIG_PATH resolves to ~/.mcp-pipe.json."""
     expected = os.path.expanduser("~/.mcp-pipe.json")
     assert GLOBAL_CONFIG_PATH == expected
+
+
+def test_load_dotenv_fallback(tmp_path, monkeypatch):
+    """load_dotenv_fallback loads .env variables into os.environ."""
+    monkeypatch.chdir(tmp_path)
+    
+    # Create a dummy .env file
+    dotenv_file = tmp_path / ".env"
+    dotenv_file.write_text("TEST_KEY=test_value\n# Comment\nANOTHER_KEY='another_value'\n", encoding="utf-8")
+    
+    # Clear from os.environ if present
+    monkeypatch.delenv("TEST_KEY", raising=False)
+    monkeypatch.delenv("ANOTHER_KEY", raising=False)
+    
+    from context_pipe.config_loader import load_dotenv_fallback
+    load_dotenv_fallback()
+    
+    assert os.environ.get("TEST_KEY") == "test_value"
+    assert os.environ.get("ANOTHER_KEY") == "another_value"

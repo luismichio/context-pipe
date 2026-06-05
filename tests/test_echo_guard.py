@@ -94,3 +94,27 @@ async def test_echo_guard_genuine_double_sift_cross_pipe():
     assert len(trace2) == 0
     assert result2 == content
     mock_popen.assert_not_called()
+
+
+def test_echo_guard_multi_workspace_isolation(tmp_path):
+    """Echo guard must isolate caching namespaces using project config fingerprint."""
+    project_a_dir = tmp_path / "project_a"
+    project_b_dir = tmp_path / "project_b"
+    project_a_dir.mkdir()
+    project_b_dir.mkdir()
+
+    config_a = str(project_a_dir / "pipes.json")
+    config_b = str(project_b_dir / "pipes.json")
+
+    content = "D" * 600
+    pipe_name = "shared-pipe"
+
+    # First call for project A: must not be an echo
+    assert check_echo(content, pipe_name, node_index=0, config_path=config_a) is False
+    # Second call for project A: IS an echo
+    assert check_echo(content, pipe_name, node_index=0, config_path=config_a) is True
+
+    # First call for project B with SAME content: must NOT be an echo (isolated namespaces)
+    assert check_echo(content, pipe_name, node_index=0, config_path=config_b) is False
+    # Second call for project B: IS an echo
+    assert check_echo(content, pipe_name, node_index=0, config_path=config_b) is True

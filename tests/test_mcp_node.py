@@ -237,3 +237,129 @@ async def test_mcp_node_tee_on_mcp_node(tmp_path):
             assert os.path.exists(sink)
             content = open(sink).read()
             assert "raw data for tee" in content
+
+
+@pytest.mark.anyio
+async def test_mcp_node_http_sse_call():
+    """MCP node with type 'sse' connects via sse_client."""
+    mock_session = _make_mock_session("supabase result")
+    
+    # Mock sse_client
+    mock_sse = MagicMock()
+    mock_sse.__aenter__ = AsyncMock(return_value=(MagicMock(), MagicMock()))
+    mock_sse.__aexit__ = AsyncMock()
+    
+    with patch("mcp.client.sse.sse_client", return_value=mock_sse) as mock_sse_func, \
+         patch("context_pipe.orchestrator.ClientSession", return_value=mock_session):
+         
+        pipe_config = {
+            "nodes": [
+                {
+                    "type": "mcp",
+                    "server": "supabase-mcp",
+                    "tool": "query_db",
+                }
+            ]
+        }
+        server_registry = {
+            "supabase-mcp": {
+                "type": "sse",
+                "url": "https://mcp.supabase.com/mcp?project_ref=${PROJECT_REF}",
+                "headers": {
+                    "Authorization": "Bearer ${AUTH_TOKEN}"
+                }
+            }
+        }
+        
+        # Inject env vars
+        os.environ["PROJECT_REF"] = "abc123"
+        os.environ["AUTH_TOKEN"] = "token123"
+        
+        result, trace = await run_pipe(
+            pipe_config,
+            "SELECT * FROM users",
+            server_registry=server_registry
+        )
+        
+        assert result == "supabase result"
+        mock_sse_func.assert_called_once_with(
+            "https://mcp.supabase.com/mcp?project_ref=abc123",
+            headers={"Authorization": "Bearer token123"}
+        )
+
+
+@pytest.mark.anyio
+async def test_run_pipe_loads_registry_automatically():
+    """Verify that run_pipe dynamically loads the server registry if it is None."""
+    mock_session = _make_mock_session("auto loaded registry output")
+    pipe_config = {
+        "nodes": [
+            {
+                "type": "mcp",
+                "server": "test-auto-server",
+                "tool": "test-tool",
+            }
+        ]
+    }
+    
+    mock_config = {
+        "servers": {
+            "test-auto-server": {
+                "command": ["mock-cmd"]
+            }
+        }
+    }
+    
+    with patch("context_pipe.orchestrator.stdio_client") as mock_stdio, \
+         patch("context_pipe.orchestrator.ClientSession", return_value=mock_session), \
+         patch("context_pipe.config_loader.load_pipes_config", return_value=mock_config):
+        mock_stdio.return_value.__aenter__.return_value = (MagicMock(), MagicMock())
+        
+        result, trace = await run_pipe(
+            pipe_config,
+            "input text",
+            server_registry=None
+        )
+        assert result == "auto loaded registry output"
+
+
+@pytest.mark.anyio
+async def test_mcp_node_streamable_http_call():
+    """Verify that type: http executes via streamable_http_client."""
+    mock_session = _make_mock_session("streamable http output")
+    mock_streamable = MagicMock()
+    mock_streamable.__aenter__ = AsyncMock(return_value=(MagicMock(), MagicMock(), MagicMock()))
+    mock_streamable.__aexit__ = AsyncMock()
+
+    pipe_config = {
+        "nodes": [
+            {
+                "type": "mcp",
+                "server": "supabase-http",
+                "tool": "query_db",
+            }
+        ]
+    }
+    server_registry = {
+        "supabase-http": {
+            "type": "http",
+            "url": "https://mcp.supabase.com/mcp?project_ref=ref123",
+            "headers": {
+                "Authorization": "Bearer tok123"
+            }
+        }
+    }
+
+    with patch("mcp.client.streamable_http.streamable_http_client", return_value=mock_streamable) as mock_client_func, \
+         patch("context_pipe.orchestrator.ClientSession", return_value=mock_session), \
+         patch("httpx.AsyncClient"):
+        
+        result, trace = await run_pipe(
+            pipe_config,
+            "query data",
+            server_registry=server_registry
+        )
+        assert result == "streamable http output"
+        mock_client_func.assert_called_once()
+        # Ensure it passed the configured url
+        assert mock_client_func.call_args[0][0] == "https://mcp.supabase.com/mcp?project_ref=ref123"

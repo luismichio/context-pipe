@@ -5,7 +5,7 @@ import os
 import json
 import time
 import threading
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 # Telemetry Configuration (Unified with Studio of Two standards)
 # Primary: CPP_TELEMETRY_FILE, Fallback: .pipe_telemetry.jsonl
@@ -34,10 +34,19 @@ def _resolve_telemetry_path() -> str:
 
 TELEMETRY_FILE = _resolve_telemetry_path()
 
+
+def resolve_telemetry_file(config_path: Optional[str] = None) -> str:
+    """Resolves telemetry path at call time based on active config_path."""
+    if config_path:
+        project_dir = os.path.dirname(os.path.abspath(config_path))
+        return os.path.join(project_dir, ".pipe_telemetry.jsonl")
+    return TELEMETRY_FILE
+
+
 # Telemetry Consent Gate (Opt-In by Default)
 # Telemetry runs ONLY when SIFT_TELEMETRY_OPTED_IN=true is explicitly set.
 # Kill-switch CPP_TELEMETRY_DISABLED=true is respected for privacy.
-def _check_telemetry_disabled() -> bool:
+def check_telemetry_disabled(config_path: Optional[str] = None) -> bool:
     # 1. Environment variable (Highest priority kill-switch)
     if (os.environ.get("CPP_TELEMETRY_DISABLED", "").lower() == "true" or 
         os.environ.get("PIPE_TELEMETRY_DISABLED", "").lower() == "true"):
@@ -59,7 +68,11 @@ def _check_telemetry_disabled() -> bool:
                         return res
             return None
 
-        curr = os.path.abspath(os.getcwd())
+        if config_path:
+            curr = os.path.abspath(os.path.dirname(config_path))
+        else:
+            curr = os.path.abspath(os.getcwd())
+
         while True:
             settings_path = os.path.join(curr, ".gemini", "settings.json")
             if os.path.exists(settings_path):
@@ -78,7 +91,8 @@ def _check_telemetry_disabled() -> bool:
     # Default to disabled if no settings found (safe default for IDE hooks)
     return True
 
-PIPE_TELEMETRY_DISABLED = _check_telemetry_disabled()
+
+PIPE_TELEMETRY_DISABLED = check_telemetry_disabled()
 
 # Locks for concurrent file access
 _TELEMETRY_LOCK = threading.Lock()
@@ -96,13 +110,15 @@ def log_telemetry(
     agent_label: Optional[str] = None,
     pipe_name: str = "unknown",
     tier: str = "Real-World",
+    config_path: Optional[str] = None,
+    trace: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     """
     Logs tool performance metrics. 
     Prioritizes delegation to semantic_sift (Shared Local Ledger) to avoid
     dual formats, falling back to local JSONL if sift is unavailable.
     """
-    if PIPE_TELEMETRY_DISABLED:
+    if PIPE_TELEMETRY_DISABLED or check_telemetry_disabled(config_path):
         return
 
     # Attempt delegation to Semantic-Sift (Studio of Two standard)
@@ -144,11 +160,14 @@ def log_telemetry(
             "platform": platform,
             "agent": agent_label or "Main",
             "pipe_name": pipe_name,
-            "tier": tier
+            "tier": tier,
+            "project": os.path.basename(os.path.dirname(config_path)) if config_path else "unknown"
         }
+        if trace is not None:
+            event["trace"] = trace
 
         with _TELEMETRY_LOCK:
-            with open(TELEMETRY_FILE, "a", encoding="utf-8") as f:
+            with open(resolve_telemetry_file(config_path), "a", encoding="utf-8") as f:
                 f.write(json.dumps(event) + "\n")
 
     except Exception:
@@ -161,10 +180,11 @@ def log_bypass_event(
     reason: str,
     platform: str = "unknown",
     pipe_name: str = "unknown",
-    agent_label: Optional[str] = None
+    agent_label: Optional[str] = None,
+    config_path: Optional[str] = None,
 ) -> None:
     """Records why a pipe was bypassed (e.g., Echo Guard, Signature detected)."""
-    if PIPE_TELEMETRY_DISABLED:
+    if PIPE_TELEMETRY_DISABLED or check_telemetry_disabled(config_path):
         return
 
     # Local Ledger
@@ -176,10 +196,11 @@ def log_bypass_event(
             "platform": platform,
             "pipe_name": pipe_name,
             "agent": agent_label or "Main",
-            "timestamp": time.ctime()
+            "timestamp": time.ctime(),
+            "project": os.path.basename(os.path.dirname(config_path)) if config_path else "unknown"
         }
         with _TELEMETRY_LOCK:
-            with open(TELEMETRY_FILE, "a", encoding="utf-8") as f:
+            with open(resolve_telemetry_file(config_path), "a", encoding="utf-8") as f:
                 f.write(json.dumps(event) + "\n")
     except Exception:
         pass
@@ -217,10 +238,11 @@ def log_unmapped_event(
     tool_name: str,
     original_size: int,
     platform: str = "unknown",
-    agent_label: Optional[str] = None
+    agent_label: Optional[str] = None,
+    config_path: Optional[str] = None,
 ) -> None:
     """Records an unmapped heavy tool call event."""
-    if PIPE_TELEMETRY_DISABLED:
+    if PIPE_TELEMETRY_DISABLED or check_telemetry_disabled(config_path):
         return
 
     try:
@@ -230,36 +252,42 @@ def log_unmapped_event(
             "original_chars": original_size,
             "platform": platform,
             "agent": agent_label or "Main",
-            "timestamp": time.ctime()
+            "timestamp": time.ctime(),
+            "project": os.path.basename(os.path.dirname(config_path)) if config_path else "unknown"
         }
         with _TELEMETRY_LOCK:
-            with open(TELEMETRY_FILE, "a", encoding="utf-8") as f:
+            with open(resolve_telemetry_file(config_path), "a", encoding="utf-8") as f:
                 f.write(json.dumps(event) + "\n")
     except Exception:
         pass
 
-def log_fallback_event(tool_name: str, reason: str) -> None:
+def log_fallback_event(
+    tool_name: str,
+    reason: str,
+    config_path: Optional[str] = None,
+) -> None:
     """
     Records a hook fallback event  fired when ``pipe_hook.py`` catches an
     unexpected exception and returns raw input to the agent unchanged.
     """
-    if PIPE_TELEMETRY_DISABLED:
+    if PIPE_TELEMETRY_DISABLED or check_telemetry_disabled(config_path):
         return
 
     try:
         event = {
             "type": "fallback",
             "tool_name": tool_name,
-            "reason": reason
+            "reason": reason,
+            "project": os.path.basename(os.path.dirname(config_path)) if config_path else "unknown"
         }
         with _TELEMETRY_LOCK:
-            with open(TELEMETRY_FILE, "a", encoding="utf-8") as f:
+            with open(resolve_telemetry_file(config_path), "a", encoding="utf-8") as f:
                 f.write(json.dumps(event) + "\n")
     except Exception:
         pass
 
 
-def get_latest_telemetry() -> Optional[Dict[str, Any]]:
+def get_latest_telemetry(config_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Retrieves the absolute last recorded tool telemetry event."""
     # Priority: Semantic-Sift ledger
     try:
@@ -273,13 +301,14 @@ def get_latest_telemetry() -> Optional[Dict[str, Any]]:
     except Exception:
         pass
 
-    if not os.path.exists(TELEMETRY_FILE):
+    telemetry_file = resolve_telemetry_file(config_path)
+    if not os.path.exists(telemetry_file):
         return None
 
     try:
         last_tool_event = None
         with _TELEMETRY_LOCK:
-            with open(TELEMETRY_FILE, "r", encoding="utf-8") as f:
+            with open(telemetry_file, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if not line:
@@ -333,6 +362,7 @@ def _parse_time_string(time_str: Optional[str]) -> Optional[float]:
 def get_balance_sheet(
     session_id: Optional[str] = None,
     last_hours: Optional[float] = None,
+    config_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Calculates context ROI. Aggregates both local JSONL and Semantic-Sift ledgers.
     Supports filtering by session_id and last_hours.
@@ -367,6 +397,8 @@ def get_balance_sheet(
                     if event_time is not None and (now - event_time > last_hours * 3600):
                         continue
                 for tool, stats in sdata.get("tools", {}).items():
+                    if stats.get("is_node") or "sift_cli_" in tool:
+                        continue
                     oc = stats.get("original_chars", 0)
                     fc = stats.get("final_chars", 0)
                     delta = fc - oc
@@ -384,9 +416,10 @@ def get_balance_sheet(
         pass
 
     # 2. Process Local Ledger (JSONL)
-    if os.path.exists(TELEMETRY_FILE):
+    telemetry_file = resolve_telemetry_file(config_path)
+    if os.path.exists(telemetry_file):
         try:
-            with open(TELEMETRY_FILE, "r", encoding="utf-8") as f:
+            with open(telemetry_file, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if not line:
@@ -413,6 +446,8 @@ def get_balance_sheet(
                             results["unmapped_events"] += 1
                             continue
                         if event.get("type") == "tool_call":
+                            if event.get("is_node"):
+                                continue
                             results["total_events"] += 1
                             orig = event.get("original_chars", 0)
                             final = event.get("final_chars", 0)
@@ -436,14 +471,15 @@ def get_balance_sheet(
     return results
 
 
-def get_recent_telemetry(limit: int = 1) -> list[Dict[str, Any]]:
+def get_recent_telemetry(limit: int = 1, config_path: Optional[str] = None) -> list[Dict[str, Any]]:
     """Retrieves the last recorded tool telemetry event(s) in reverse chronological order (newest first)."""
-    if not os.path.exists(TELEMETRY_FILE):
+    telemetry_file = resolve_telemetry_file(config_path)
+    if not os.path.exists(telemetry_file):
         return []
     try:
         events = []
         with _TELEMETRY_LOCK:
-            with open(TELEMETRY_FILE, "r", encoding="utf-8") as f:
+            with open(telemetry_file, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if not line:

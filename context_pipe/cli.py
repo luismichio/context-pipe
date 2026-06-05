@@ -123,7 +123,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         else:
             _die(f"Invalid var format '{v}'. Expected KEY=VALUE.")
 
-    result, trace = asyncio.run(run_pipe(pipe, input_text, tool_name="cli:run", server_registry=config.get("servers", {}), vars=vars_dict, manifest_path=getattr(args, "manifest", None)))
+    result, trace = asyncio.run(run_pipe(pipe, input_text, tool_name="cli:run", server_registry=config.get("servers", {}), vars=vars_dict, manifest_path=getattr(args, "manifest", None), config_path=args.config))
     latency_ms = (time.monotonic() - t0) * 1000
 
     _print_audit(result, trace, args.pipe_name, latency_ms, verbose=getattr(args, "verbose", False))
@@ -222,9 +222,9 @@ def _cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_stats(_args: argparse.Namespace) -> int:
+def _cmd_stats(args: argparse.Namespace) -> int:
     """Prints the Context Balance Sheet."""
-    sheet = get_balance_sheet()
+    sheet = get_balance_sheet(config_path=args.config)
     net_label = "Saved" if sheet["net_change"] < 0 else "Added"
 
     print("\n--- [mcp-pipe: Context Balance Sheet] ---")
@@ -491,7 +491,9 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="Path to local pipes.json (default: pipes.json).")
 
     # --- stats ---
-    sub.add_parser("stats", help="Print the Context Balance Sheet (ROI).")
+    stats_p = sub.add_parser("stats", help="Print the Context Balance Sheet (ROI).")
+    stats_p.add_argument("--config", default="pipes.json", metavar="PATH",
+                         help="Path to local pipes.json (default: pipes.json).")
 
     # --- tool (Phase 7.6) ---
     tool_p = sub.add_parser("tool", help="Directly invoke an MCP tool from the shell.")

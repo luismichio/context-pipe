@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.8] — 2026-06-06
+
+### Added
+- Implemented enriched pipe-level telemetry reporting to track total (original) vs. piped (distilled) context sizes, preventing double-counting in balance sheets.
+- Extended sifter cloud pulses with parent pipe metrics to accurately attribute context-pipe cleaning savings alongside sifting performance.
+- Added `is_json` predicate condition check in orchestrator to prevent JSON-specific nodes from crashing on raw text inputs.
+- Added a `collapse_logs` script node to strip log timestamps and compress repeated stack traces/lines.
+- Added automatic `.env` file loading in orchestrator to support API keys and pipeline configuration variables.
+- Activated the `firecrawl` MCP server and added the `web-sift` pipe template to standard configurations.
+- Added support for HTTP/SSE and Streamable HTTP transports for remote MCP servers in orchestrator (specifically supporting cloud-hosted servers like Supabase).
+- Integrated the `supabase` HTTP MCP server config and triggers in `pipes.json`.
+- Added support for the `context-mode` MCP server and created the `web-index-sift` pipe to automate scraping, sifting, and indexing of web content in a single step.
+
+### Fixed
+- Fixed a bug where `run_pipe` failed to resolve the `server_registry` when executing MCP nodes if called via the MCP server's `pipe_run` or the interceptor wrapper, due to the parameter defaulting to `None`.
+- Resolved CWD-anchoring of `.pipe_cache`, `.pipe_telemetry.jsonl`, and `get_pipe_stats` under VS Code multi-root workspaces, ensuring isolated caching and telemetry relative to each active project directory (REPORT_043).
+- Fixed Rust native core (`cpipe`) deserialization crash when loading `pipes.json` containing HTTP/SSE MCP nodes or remote-only servers (missing `cmd`/`command` fields). `Node.cmd` and `ServerConfig.command` are now `Option<String>`.
+- Added descriptive runtime error in `cpipe` `run_mcp_node` when a remote HTTP/SSE/Streamable HTTP MCP server is invoked, directing users to the Python transport layer.
+- Removed unused `mock_httpx_client` variable in `tests/test_mcp_node.py` (Ruff F841).
+- Fixed `tool_name: str | None` incompatible argument type in `wrapper.py` `log_telemetry` call (Mypy arg-type).
+
 ## [0.5.7] — 2026-05-31
 ### Fixed
 - Fixed an indefinite hang in Python integration tests on Linux CI runners by registering a `ThreadedChildWatcher` event loop policy in `conftest.py` to prevent nested `asyncio.run` subprocess deadlocks.

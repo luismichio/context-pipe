@@ -11,6 +11,11 @@
       "description": "The flagship log sifting template.",
       "nodes": [
         {
+          "type": "script",
+          "cmd": "collapse_logs",
+          "help_msg": "collapse_logs script not found."
+        },
+        {
           "cmd": "C:\\Users\\luism\\Workbench\\GitHub\\context-pipe\\venv\\Scripts\\semantic-sift-cli.exe",
           "args": [
             "logs"
@@ -85,12 +90,94 @@
           "help_msg": "findstr not found. On Unix, use 'grep' instead."
         }
       ]
+    },
+    {
+      "name": "web-sift",
+      "description": "Scrape web content via Firecrawl and neural sift the results.",
+      "nodes": [
+        {
+          "type": "mcp",
+          "server": "firecrawl",
+          "tool": "firecrawl_scrape",
+          "input_key": "url",
+          "help_msg": "Firecrawl MCP server node execution failed."
+        },
+        {
+          "cmd": "C:\\Users\\luism\\Workbench\\GitHub\\context-pipe\\venv\\Scripts\\semantic-sift-cli.exe",
+          "args": [
+            "semantic",
+            "--rate",
+            "0.5"
+          ],
+          "help_msg": "semantic-sift-cli not found. Please install via: uv tool install semantic-sift"
+        }
+      ]
+    },
+    {
+      "name": "supabase-refinery",
+      "description": "Scopes queries to Supabase database, executing them and sifting results.",
+      "nodes": [
+        {
+          "type": "mcp",
+          "server": "supabase",
+          "tool": "execute_sql",
+          "input_key": "query",
+          "help_msg": "Supabase MCP server node execution failed. Ensure SUPABASE_PROJECT_REF and SUPABASE_ACCESS_TOKEN are set."
+        },
+        {
+          "cmd": "C:\\Users\\luism\\Workbench\\GitHub\\context-pipe\\venv\\Scripts\\semantic-sift-cli.exe",
+          "args": [
+            "semantic",
+            "--rate",
+            "0.5"
+          ],
+          "help_msg": "semantic-sift-cli not found. Please install via: uv tool install semantic-sift"
+        }
+      ]
+    },
+    {
+      "name": "web-index-sift",
+      "description": "Scrapes a URL via Firecrawl, semantic sifts it, and indexes it into context-mode.",
+      "nodes": [
+        {
+          "type": "mcp",
+          "server": "firecrawl",
+          "tool": "firecrawl_scrape",
+          "input_key": "url"
+        },
+        {
+          "cmd": "C:\\Users\\luism\\Workbench\\GitHub\\context-pipe\\venv\\Scripts\\semantic-sift-cli.exe",
+          "args": [
+            "semantic",
+            "--rate",
+            "0.5"
+          ],
+          "help_msg": "semantic-sift-cli not found. Please install via: uv tool install semantic-sift"
+        },
+        {
+          "type": "mcp",
+          "server": "context-mode",
+          "tool": "ctx_index",
+          "input_key": "content",
+          "args": {
+            "source": "web-sift"
+          }
+        }
+      ]
     }
   ],
   "mappings": [
     {
       "trigger": "tool:search|grep|find",
       "pipe": "rerank-and-sift"
+    },
+    {
+      "trigger": "tool:web_search|web_fetch|google_web_search|scrape|firecrawl_scrape",
+      "pipe": "web-sift"
+    },
+    {
+      "trigger": "tool:query_db|execute_sql|get_schema|list_tables",
+      "pipe": "supabase-refinery"
     },
     {
       "trigger": "size:>10000",
@@ -102,15 +189,28 @@
     }
   ],
   "servers": {
-    "_comment": "Uncomment and configure MCP servers for use as pipe nodes (Phase 7.5).",
-    "_example_firecrawl": {
+    "context-mode": {
       "command": [
-        "python",
-        "-m",
-        "firecrawl_mcp.server"
+        "node",
+        "C:\\Users\\luism\\AppData\\Local\\Yarn\\Data\\global\\node_modules\\context-mode\\cli.bundle.mjs"
+      ]
+    },
+    "_comment": "Uncomment and configure MCP servers for use as pipe nodes (Phase 7.5).",
+    "firecrawl": {
+      "command": [
+        "npx",
+        "-y",
+        "firecrawl-mcp"
       ],
       "env": {
         "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}"
+      }
+    },
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=${SUPABASE_PROJECT_REF}",
+      "headers": {
+        "Authorization": "Bearer ${SUPABASE_ACCESS_TOKEN}"
       }
     }
   }

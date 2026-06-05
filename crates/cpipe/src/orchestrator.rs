@@ -568,7 +568,18 @@ pub async fn run_mcp_node(
         }
     }
     
-    let cmd_list = match &server_cfg.command {
+    let cmd_value = match &server_cfg.command {
+        Some(cmd) => cmd,
+        None => {
+            if server_cfg.url.is_some() || server_cfg.type_.is_some() {
+                return Err("Remote HTTP/SSE/Streamable HTTP MCP servers are not supported in the Rust native cpipe core. Please use the Python version of context-pipe for remote transport.".to_string());
+            } else {
+                return Err(format!("MCP server '{}' is missing required key 'command'.", server_key));
+            }
+        }
+    };
+
+    let cmd_list = match cmd_value {
         crate::config::CommandValue::Single(s) => {
             shlex::split(s).ok_or_else(|| "Failed to parse command string".to_string())?
         }
@@ -858,22 +869,29 @@ pub async fn run_pipe(
             continue;
         }
         
-        let is_optional = node.optional;
         let node_type = &node.node_type;
+        let cmd_str = node.cmd.as_deref().unwrap_or("");
+        if node_type != "mcp" && cmd_str.is_empty() {
+            let err_msg = format!("Error: Node cmd must be defined for node type '{}'", node_type);
+            write_manifest_if_needed(&err_msg, &trace);
+            return (err_msg, trace);
+        }
+
+        let is_optional = node.optional;
         let node_name = if node_type == "mcp" {
             format!("mcp:{}/{}", node.server.as_deref().unwrap_or(""), node.tool.as_deref().unwrap_or(""))
         } else if node_type == "script" {
-            let script_name = &node.cmd;
+            let script_name = cmd_str;
             let script_dir = std::env::var("PIPE_SCRIPT_DIR").unwrap_or_else(|_| ".gemini/scripts".to_string());
             let py_script = std::path::Path::new(&script_dir).join(format!("{}.py", script_name));
             let md_mandate = std::path::Path::new(&script_dir).join(format!("{}.md", script_name));
             if py_script.exists() || md_mandate.exists() {
                 format!("script:{}", script_name)
             } else {
-                node.cmd.clone()
+                script_name.to_string()
             }
         } else {
-            node.cmd.clone()
+            cmd_str.to_string()
         };
         
         emit_pipe_log(pipe_config, "entry", &node_name, tool_name, 0, 0, 0.0, false);
@@ -944,7 +962,7 @@ pub async fn run_pipe(
         let mut resolved_args = Vec::new();
         
         if node.node_type == "script" {
-            let script_name = &node.cmd;
+            let script_name = cmd_str;
             let script_dir = std::env::var("PIPE_SCRIPT_DIR").unwrap_or_else(|_| ".gemini/scripts".to_string());
             let py_script = std::path::Path::new(&script_dir).join(format!("{}.py", script_name));
             let md_mandate = std::path::Path::new(&script_dir).join(format!("{}.md", script_name));
@@ -979,7 +997,7 @@ pub async fn run_pipe(
                     current_node_id = node.next.clone().or(natural_next);
                     continue;
                 } else {
-                    resolved_cmd = resolve_node_cmd(&node.cmd);
+                    resolved_cmd = resolve_node_cmd(cmd_str);
                     if let serde_json::Value::Array(arr) = &node.args {
                         for val in arr {
                             if let Some(s) = val.as_str() {
@@ -989,7 +1007,7 @@ pub async fn run_pipe(
                     }
                 }
             } else {
-                resolved_cmd = resolve_node_cmd(&node.cmd);
+                resolved_cmd = resolve_node_cmd(cmd_str);
                 if let serde_json::Value::Array(arr) = &node.args {
                     for val in arr {
                         if let Some(s) = val.as_str() {
@@ -999,7 +1017,7 @@ pub async fn run_pipe(
                 }
             }
         } else {
-            resolved_cmd = resolve_node_cmd(&node.cmd);
+            resolved_cmd = resolve_node_cmd(cmd_str);
             if let serde_json::Value::Array(arr) = &node.args {
                 for val in arr {
                     if let Some(s) = val.as_str() {
@@ -1033,7 +1051,7 @@ pub async fn run_pipe(
         let start_size = current_input.len();
         let mut tee_path = None;
         if let Some(tee_config) = &node.tee {
-            tee_path = write_tee(tee_config, &current_input, &node.cmd, tool_name);
+            tee_path = write_tee(tee_config, &current_input, cmd_str, tool_name);
         }
         
         let child = Command::new(cmd_exe)
@@ -1053,7 +1071,7 @@ pub async fn run_pipe(
                     "SpawnError"
                 };
                 let mut entry = HashMap::new();
-                entry.insert("node".to_string(), serde_json::json!(node.cmd));
+                entry.insert("node".to_string(), serde_json::json!(cmd_str));
                 entry.insert("error".to_string(), serde_json::json!(err_reason));
                 trace.push(entry);
                 
@@ -1133,7 +1151,7 @@ pub async fn run_pipe(
                         match branch_target {
                             Some(target) => {
                                 let mut entry = HashMap::new();
-                                entry.insert("node".to_string(), serde_json::json!(node.cmd));
+                                entry.insert("node".to_string(), serde_json::json!(cmd_str));
                                 entry.insert("validator_code".to_string(), serde_json::json!(code));
                                 entry.insert("branch".to_string(), serde_json::json!(target));
                                 trace.push(entry);
@@ -1150,13 +1168,13 @@ pub async fn run_pipe(
                             None => {
                                 // No branch matched and no default — fail fast
                                 let mut entry = HashMap::new();
-                                entry.insert("node".to_string(), serde_json::json!(node.cmd));
+                                entry.insert("node".to_string(), serde_json::json!(cmd_str));
                                 entry.insert("error".to_string(), serde_json::json!(format!("Validator exited {} with no matching branch", code)));
                                 trace.push(entry);
                                 let latency_ms = node_start_time.elapsed().as_secs_f64() * 1000.0;
                                 emit_pipe_log(pipe_config, "exit", &node_name, tool_name, start_size, 0, latency_ms, true);
                                 if is_optional { current_node_id = natural_next; continue; }
-                                { let e = format!("Error in node {}: {}", node.cmd, stderr); write_manifest_if_needed(&e, &trace); return (e, trace); }
+                                { let e = format!("Error in node {}: {}", cmd_str, stderr); write_manifest_if_needed(&e, &trace); return (e, trace); }
                             }
                         }
                     }
@@ -1165,7 +1183,7 @@ pub async fn run_pipe(
                 
                 if code != 0 {
                     let mut entry = HashMap::new();
-                    entry.insert("node".to_string(), serde_json::json!(node.cmd));
+                    entry.insert("node".to_string(), serde_json::json!(cmd_str));
                     entry.insert("error".to_string(), serde_json::json!(stderr.trim()));
                     trace.push(entry);
                     
@@ -1173,12 +1191,12 @@ pub async fn run_pipe(
                     emit_pipe_log(pipe_config, "exit", &node_name, tool_name, start_size, 0, latency_ms, true);
                     
                     if is_optional { current_node_id = natural_next; continue; }
-                    return (format!("Error in node {}: {}", node.cmd, stderr), trace);
+                    return (format!("Error in node {}: {}", cmd_str, stderr), trace);
                 }
                 
                 let end_size = stdout.len();
                 let mut entry = HashMap::new();
-                entry.insert("node".to_string(), serde_json::json!(node.cmd));
+                entry.insert("node".to_string(), serde_json::json!(cmd_str));
                 entry.insert("input_size".to_string(), serde_json::json!(start_size));
                 entry.insert("output_size".to_string(), serde_json::json!(end_size));
                 entry.insert("delta".to_string(), serde_json::json!((end_size as isize - start_size as isize)));
@@ -1195,7 +1213,7 @@ pub async fn run_pipe(
             }
             Err(e) => {
                 let mut entry = HashMap::new();
-                entry.insert("node".to_string(), serde_json::json!(node.cmd));
+                entry.insert("node".to_string(), serde_json::json!(cmd_str));
                 entry.insert("error".to_string(), serde_json::json!(e));
                 trace.push(entry);
                 
@@ -1205,7 +1223,7 @@ pub async fn run_pipe(
                 if is_optional { current_node_id = natural_next; continue; }
                 
                 let error_text = if e == "Timeout" {
-                    format!("--- [Context-Pipe: Timeout] ---\nNode {} exceeded {}s.", node.cmd, active_timeout_ms / 1000)
+                    format!("--- [Context-Pipe: Timeout] ---\nNode {} exceeded {}s.", cmd_str, active_timeout_ms / 1000)
                 } else {
                     format!("--- [Context-Pipe: Error] ---\n{}", e)
                 };

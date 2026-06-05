@@ -70,7 +70,7 @@ def pipe(
 
     try:
         result, _ = asyncio.run(
-            run_pipe(pipe_config, text, tool_name=tool_name or None, vars=vars)
+            run_pipe(pipe_config, text, tool_name=tool_name or None, vars=vars, config_path=config_path)
         )
         return result
     except Exception:

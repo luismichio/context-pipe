@@ -92,3 +92,29 @@ def test_scripts_env_script_dir(tmp_path, monkeypatch):
         mock_out.seek(0)
         output = mock_out.read()
     assert "env script body" in output
+
+
+def test_collapse_logs_script():
+    import importlib.util
+    import os
+    
+    script_path = os.path.join(".gemini", "scripts", "collapse_logs.py")
+    spec = importlib.util.spec_from_file_location("collapse_logs", script_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    
+    log_data = (
+        "2026-06-05T22:50:51+02:00 [ERROR] Failed to save config\n"
+        "2026-06-05T22:50:52+02:00 [ERROR] Failed to save config\n"
+        "2026-06-05T22:50:53+02:00 [ERROR] Failed to save config\n"
+        "\n"
+        "2026-06-05T22:50:54+02:00 [INFO] Connection established\n"
+    )
+    
+    result = module.collapse_logs(log_data)
+    expected = (
+        "2026-06-05T22:50:51+02:00 [ERROR] Failed to save config [Repeated 3 times]\n"
+        "\n"
+        "2026-06-05T22:50:54+02:00 [INFO] Connection established"
+    )
+    assert result == expected
