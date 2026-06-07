@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.10] — 2026-06-07
+
 ### Added
 - Implemented Rust native `cpipe tool <server> --list-tools` support via MCP `tools/list` request flow.
   - Added `list_mcp_tools(...)` in `crates/cpipe/src/orchestrator.rs` with stdio MCP handshake and cursor pagination handling.
