@@ -15,7 +15,7 @@
 - [x] **Agnostic Routing**: Dynamic pipe resolution based on tool and size triggers.
 - [x] **Standard Shell Aliases**: `inject_shell_aliases()` / `remove_shell_aliases()` in `onboarding.py`. `mcp-pipe aliases install/remove` CLI subcommands + `pipe_install_aliases` / `pipe_remove_aliases` MCP tools. Idempotent marker-block pattern; platform-aware (POSIX/PowerShell). 20 tests.
 
-## 🟢 Phase 3: The Template Ecosystem (In Progress)
+## 🟢 Phase 3: The Template Ecosystem (Complete)
 - [x] **Pure Switchboard Refactor**: Removed internal nodes to achieve 100% agnostic status.
 - [x] **Pipe Templates**: Professional recipes for `sift-core` and `markitdown`.
 - [x] **Mandate Ecosystem**: Formalized "Expert Lenses" as local Mandate Nodes (`.md` files in `.gemini/scripts/`).
@@ -194,7 +194,7 @@ Supported predicates (reuse existing mapping trigger syntax):
 - [ ] **Phase 11-C — Rust parity** (`crates/cpipe`): Add `condition: Option<String>`, `branches: Option<HashMap<String, String>>`, `id: Option<String>`, `next: Option<String>` to `Node` struct in `config.rs`. Add `branch_sequences: Option<HashMap<String, Vec<Node>>>` to `Pipe` struct. Add `_evaluate_condition()` equivalent in `orchestrator.rs`. Convert `run_pipe()` linear `for` loop to DAG traversal — the function is already `async` so no structural change needed. Ensure `pipes.toml` supports all new fields (`[branch_sequences]` table, inline `condition` strings).
 - [ ] **Phase 11-D — Docs**: `ARCHITECTURE.md` §1 (node schema table + DAG diagram), `README.md` (new node type + condition key), `CHANGELOG.md`, `pipes.json.example` with a minimal validator example.
 
-## 🔷 Phase 12: Runtime Variable Injection & Run Manifests (Planned)
+## 🔷 Phase 12: Runtime Variable Injection & Run Manifests (Complete)
 
 **Origin:** Figma-to-code experiment — a custom pipe runner was built as a deliberate proof-of-concept to validate CPP's utility for complex multi-step automation. It independently derived two abstractions CPP needs to make the pattern self-sufficient without a custom runner:
 1. **Runtime variables** — per-invocation `${VAR}` values passed at call time, not baked into env.
@@ -275,7 +275,7 @@ Alternatively, `"manifest": "auto"` in the pipe definition writes to `.pipe_cach
 - [x] **Phase 12-C — Rust parity** (`crates/cpipe`): `resolve_placeholders()` in `config.rs` already accepts a `HashMap<String, String>` with `os::env` fallback — the substitution engine is 80% done. Work needed: add `vars: &HashMap<String, String>` param to `run_pipe()` in `orchestrator.rs` and merge into `process_env` before the node loop; add `--var KEY=VALUE` (repeatable) flag to `main.rs` CLI; add `vars: Option<HashMap<String, String>>` defaults field to `Pipe` struct in `config.rs`; support `[vars]` table in `pipes.toml`. For manifests: add `--manifest <path>` to `main.rs` and a `write_manifest()` function in `orchestrator.rs` that serialises the existing `trace` Vec + metadata to JSON after `run_pipe()` returns.
 - [x] **Phase 12-D — Docs**: `ARCHITECTURE.md` §1 (node schema — `vars` block), `README.md` (CLI flags, MCP tool params), `pipes.json.example` with `vars` defaults, `CHANGELOG.md`.
 
-## 🔧 Phase 13: MCP Node Banner Tolerance (Planned)
+## 🔧 Phase 13: MCP Node Banner Tolerance (Complete)
 
 **Origin:** Some MCP servers (non-conformant but common in the wild) emit a startup banner — version string, connection status, ready message — to `stdout` before any JSON-RPC communication begins. The MCP protocol specifies that `stdout` belongs exclusively to JSON-RPC; a banner is a spec violation by the server. CPP should tolerate it gracefully rather than failing.
 
