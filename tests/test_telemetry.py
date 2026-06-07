@@ -24,9 +24,14 @@ from context_pipe import telemetry as tel
 
 @pytest.fixture(autouse=True)
 def isolated_telemetry(tmp_path, monkeypatch):
-    """Redirect telemetry writes to a temp file for every test."""
+    """Redirect telemetry writes to a temp file for every test.
+
+    Patches ``_resolve_telemetry_path`` (the lazy resolver) instead of the
+    frozen ``TELEMETRY_FILE`` constant so that ``resolve_telemetry_file()``
+    routes to the temp location regardless of the server's startup cwd.
+    """
     temp_file = str(tmp_path / "test_telemetry.jsonl")
-    monkeypatch.setattr(tel, "TELEMETRY_FILE", temp_file)
+    monkeypatch.setattr(tel, "_resolve_telemetry_path", lambda: temp_file)
     monkeypatch.setattr(tel, "PIPE_TELEMETRY_DISABLED", False)
 
     # Force fallback to local ledger by masking semantic_sift
@@ -134,8 +139,8 @@ def test_log_telemetry_disabled_is_noop(tmp_path, monkeypatch):
 
 def test_get_balance_sheet_no_file(tmp_path, monkeypatch):
     """get_balance_sheet must return a zeroed sheet when no telemetry file exists."""
-    monkeypatch.setattr(tel, "TELEMETRY_FILE", str(tmp_path / "nonexistent.jsonl"))
-    sheet = tel.get_balance_sheet()
+    nonexistent = str(tmp_path / "nonexistent" / "pipes.json")
+    sheet = tel.get_balance_sheet(config_path=nonexistent)
     assert sheet["total_events"] == 0
     assert sheet["net_change"] == 0
 

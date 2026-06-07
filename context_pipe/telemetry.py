@@ -36,11 +36,17 @@ TELEMETRY_FILE = _resolve_telemetry_path()
 
 
 def resolve_telemetry_file(config_path: Optional[str] = None) -> str:
-    """Resolves telemetry path at call time based on active config_path."""
+    """Resolves telemetry path at call time based on active config_path.
+
+    Always evaluated lazily so multi-root workspaces get the correct
+    per-project file instead of the server's startup-cwd file (REPORT_043).
+    """
     if config_path:
         project_dir = os.path.dirname(os.path.abspath(config_path))
         return os.path.join(project_dir, ".pipe_telemetry.jsonl")
-    return TELEMETRY_FILE
+    # Lazy resolution: walk upward from the *current* cwd at call time,
+    # not from the cwd that was frozen when the module was imported.
+    return _resolve_telemetry_path()
 
 
 # Telemetry Consent Gate (Opt-In by Default)

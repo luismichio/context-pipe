@@ -17,6 +17,7 @@ import logging
 from mcp.client.stdio import stdio_client, StdioServerParameters
 from mcp.client.session import ClientSession
 from .config_loader import resolve_placeholders
+from .telemetry import _resolve_telemetry_path as _resolve_project_telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,10 @@ def check_echo(text: str, pipe_name: str = "", node_index: int = 0, config_path:
         project_hash = hashlib.sha256(os.path.abspath(config_path).encode()).hexdigest()[:8]
         raw_key = f"{project_hash}:{pipe_name}:{node_index}:{text}"
     else:
-        cache_dir = os.path.join(os.getcwd(), ".pipe_cache")
+        # Fallback: resolve project root lazily at call time (not startup cwd)
+        # so multi-root workspaces get the correct per-project cache dir.
+        _project_dir = os.path.dirname(_resolve_project_telemetry())
+        cache_dir = os.path.join(_project_dir, ".pipe_cache")
         raw_key = f"{pipe_name}:{node_index}:{text}"
 
     os.makedirs(cache_dir, exist_ok=True)
@@ -427,7 +431,9 @@ def _write_manifest(
             project_dir = os.path.dirname(os.path.abspath(config_path))
             cache_dir = os.path.join(project_dir, ".pipe_cache")
         else:
-            cache_dir = os.path.join(os.getcwd(), ".pipe_cache")
+            # Fallback: resolve project root lazily at call time (not startup cwd)
+            _project_dir = os.path.dirname(_resolve_project_telemetry())
+            cache_dir = os.path.join(_project_dir, ".pipe_cache")
         os.makedirs(cache_dir, exist_ok=True)
         iso_date = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         resolved_path = os.path.join(cache_dir, f"{pipe_name}-{iso_date}.json")

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.9] — 2026-06-07
+
+### Fixed
+- **REPORT_043 (root fix)**: Eliminated import-time CWD anchoring for telemetry and cache under VS Code multi-root workspaces.
+  - `telemetry.py` — `resolve_telemetry_file()` now calls `_resolve_telemetry_path()` lazily at call time instead of returning the `TELEMETRY_FILE` module constant (frozen at server startup).
+  - `orchestrator.py` — `check_echo()` and `_write_manifest()` fallback cache dirs now derive the project root from `_resolve_telemetry_path()` (lazy, per-call) instead of `os.getcwd()` (frozen at startup).
+  - Both fixes are backward-compatible: single-project setups and explicit `config_path` callers are unaffected.
+- Updated `tests/test_telemetry.py` and `tests/test_range_telemetry.py` fixture to patch `_resolve_telemetry_path` instead of the frozen `TELEMETRY_FILE` constant.
+
 ## [0.5.8] — 2026-06-06
 
 ### Added

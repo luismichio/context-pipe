@@ -5,9 +5,13 @@ from context_pipe import telemetry as tel
 
 @pytest.fixture(autouse=True)
 def isolated_telemetry(tmp_path, monkeypatch):
-    """Redirect telemetry writes to a temp file for every test."""
+    """Redirect telemetry writes to a temp file for every test.
+
+    Patches ``_resolve_telemetry_path`` (the lazy resolver) so that
+    ``resolve_telemetry_file()`` routes to the temp location.
+    """
     temp_file = str(tmp_path / "test_telemetry.jsonl")
-    monkeypatch.setattr(tel, "TELEMETRY_FILE", temp_file)
+    monkeypatch.setattr(tel, "_resolve_telemetry_path", lambda: temp_file)
     monkeypatch.setattr(tel, "PIPE_TELEMETRY_DISABLED", False)
     # Mask semantic_sift to isolate local JSONL checks
     with patch.dict("sys.modules", {"semantic_sift.telemetry": None}):
