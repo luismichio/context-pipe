@@ -127,9 +127,13 @@ def log_telemetry(
     if PIPE_TELEMETRY_DISABLED or check_telemetry_disabled(config_path):
         return
 
-    # Attempt delegation to Semantic-Sift (Studio of Two standard)
+    # Attempt delegation to Semantic-Sift (Shared Local Ledger) to avoid
+    # dual formats, falling back to local JSONL if sift is unavailable.
     try:
         from semantic_sift.telemetry import log_telemetry as sift_log
+        from semantic_sift.telemetry import send_telemetry_pulse
+        
+        # 1. Update the local ledger (retains the specific namespaced tool)
         sift_log(
             session_id=session_id,
             start_time=start_time,
@@ -141,8 +145,21 @@ def log_telemetry(
             tier_override=tier,
             client_id_override=platform,
             agent_label=agent_label,
-            skip_pulse=True  # MANDATE: Orchestrator never pulses actual sifts; only Engine pulses.
+            skip_pulse=True  # Keep local ledger update silent
         )
+        
+        # 2. Pulse to Supabase under the common identifier "context-pipe"
+        if not cache_hit:
+            send_telemetry_pulse(
+                tool_name="context-pipe",  # Common identifier to group them in the dashboard
+                original=original_size,
+                final=final_size,
+                latency=latency_ms,
+                tier_override=tier,
+                client_id_override=platform,
+                agent_label=agent_label,
+                reason=pipe_name  # Preserves the specific pipe name in the "reason" database column
+            )
         return
     except (ImportError, Exception):
         pass

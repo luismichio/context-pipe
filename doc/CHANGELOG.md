@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.11] — 2026-06-07
+
+### Added
+- Implemented unified remote telemetry pulses for `context-pipe` orchestrator executions under the common `context-pipe` tool name.
+  - Automatically pulses total net reduction metrics to the Supabase endpoint while preserving namespaced pipe names (e.g. `standard-distill`) in the `reason` field.
+  - Keeps sifting engine subprocesses quiet (`CPP_RUNNING_IN_PIPE=true`) to avoid double-counting.
+
 ## [0.5.10] — 2026-06-07
 
 ### Added
