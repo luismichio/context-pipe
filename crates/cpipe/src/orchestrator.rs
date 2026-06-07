@@ -712,6 +712,206 @@ pub async fn run_mcp_node(
     }
 }
 
+pub async fn list_mcp_tools(
+    server_key: &str,
+    server_registry: &HashMap<String, ServerConfig>,
+    env: &HashMap<String, String>,
+) -> Result<Vec<(String, Option<String>)>, String> {
+    let server_cfg = server_registry
+        .get(server_key)
+        .ok_or_else(|| format!("MCP server '{}' not found in servers registry.", server_key))?;
+
+    let mut resolved_env = get_env_with_venv_path();
+    for (k, v) in env {
+        resolved_env.insert(k.clone(), v.clone());
+    }
+
+    for (k, v) in &server_cfg.env {
+        let v_val = serde_json::Value::String(v.clone());
+        let resolved_v = resolve_placeholders(v_val, &resolved_env)?;
+        if let Some(s) = resolved_v.as_str() {
+            resolved_env.insert(k.clone(), s.to_string());
+        }
+    }
+
+    let cmd_value = match &server_cfg.command {
+        Some(cmd) => cmd,
+        None => {
+            if server_cfg.url.is_some() || server_cfg.type_.is_some() {
+                return Err(
+                    "Remote HTTP/SSE/Streamable HTTP MCP servers are not supported in the Rust native cpipe core. Please use the Python version of context-pipe for remote transport.".to_string(),
+                );
+            } else {
+                return Err(format!("MCP server '{}' is missing required key 'command'.", server_key));
+            }
+        }
+    };
+
+    let cmd_list = match cmd_value {
+        crate::config::CommandValue::Single(s) => {
+            shlex::split(s).ok_or_else(|| "Failed to parse command string".to_string())?
+        }
+        crate::config::CommandValue::Multiple(v) => v.clone(),
+    };
+
+    let resolved_cmd_list: Vec<String> = cmd_list
+        .into_iter()
+        .map(|c| {
+            let c_val = serde_json::Value::String(c);
+            let res = resolve_placeholders(c_val, &resolved_env)?;
+            Ok(res.as_str().unwrap_or("").to_string())
+        })
+        .collect::<Result<Vec<String>, String>>()?;
+
+    if resolved_cmd_list.is_empty() {
+        return Err(format!("Server '{}' has an empty command list.", server_key));
+    }
+
+    let exe = resolve_node_cmd(&resolved_cmd_list[0]);
+    let mut child = Command::new(&exe)
+        .args(&resolved_cmd_list[1..])
+        .envs(&resolved_env)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn MCP server '{}' ({}): {}", server_key, exe, e))?;
+
+    let mut child_stdin = child.stdin.take().unwrap();
+    let mut child_stdout = BufReader::new(child.stdout.take().unwrap());
+
+    let mut child_stderr = BufReader::new(child.stderr.take().unwrap());
+    tokio::spawn(async move {
+        let mut line = String::new();
+        while let Ok(n) = child_stderr.read_line(&mut line).await {
+            if n == 0 {
+                break;
+            }
+            log::warn!("[MCP Server stderr] {}", line.trim());
+            line.clear();
+        }
+    });
+
+    let init_req = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {
+                "name": "cpipe-rust",
+                "version": "0.1.0"
+            }
+        }
+    });
+    let mut init_req_str = serde_json::to_string(&init_req).unwrap();
+    init_req_str.push('\n');
+    child_stdin
+        .write_all(init_req_str.as_bytes())
+        .await
+        .map_err(|e| e.to_string())?;
+    child_stdin.flush().await.map_err(|e| e.to_string())?;
+
+    let is_verbose = server_cfg.verbose.unwrap_or(false);
+    let _ = read_jsonrpc_line(&mut child_stdout, is_verbose).await?;
+
+    let initialized_notification = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized"
+    });
+    let mut init_notif_str = serde_json::to_string(&initialized_notification).unwrap();
+    init_notif_str.push('\n');
+    child_stdin
+        .write_all(init_notif_str.as_bytes())
+        .await
+        .map_err(|e| e.to_string())?;
+    child_stdin.flush().await.map_err(|e| e.to_string())?;
+
+    let mut all_tools: Vec<(String, Option<String>)> = Vec::new();
+    let mut cursor: Option<String> = None;
+    let mut request_id: i64 = 2;
+
+    loop {
+        let params = if let Some(c) = &cursor {
+            serde_json::json!({ "cursor": c })
+        } else {
+            serde_json::json!({})
+        };
+
+        let list_req = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": "tools/list",
+            "params": params
+        });
+
+        let mut list_req_str = serde_json::to_string(&list_req).unwrap();
+        list_req_str.push('\n');
+        child_stdin
+            .write_all(list_req_str.as_bytes())
+            .await
+            .map_err(|e| e.to_string())?;
+        child_stdin.flush().await.map_err(|e| e.to_string())?;
+
+        let res_json: serde_json::Value = loop {
+            let response_line = read_jsonrpc_line(&mut child_stdout, is_verbose).await?;
+            let candidate: serde_json::Value = serde_json::from_str(&response_line)
+                .map_err(|e| format!("Malformed json-rpc from MCP server: {}", e))?;
+
+            let id_matches = candidate
+                .get("id")
+                .and_then(|id| id.as_i64())
+                .map(|id| id == request_id)
+                .unwrap_or(false);
+
+            if id_matches && (candidate.get("result").is_some() || candidate.get("error").is_some()) {
+                break candidate;
+            }
+        };
+
+        if let Some(err) = res_json.get("error") {
+            let _ = child.kill().await;
+            return Err(format!("MCP tools/list error: {}", err));
+        }
+
+        let result = res_json
+            .get("result")
+            .ok_or_else(|| "No result object found in MCP tools/list response".to_string())?;
+
+        if let Some(tools_arr) = result.get("tools").and_then(|t| t.as_array()) {
+            for tool in tools_arr {
+                let name = tool
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                if name.is_empty() {
+                    continue;
+                }
+                let desc = tool
+                    .get("description")
+                    .and_then(|d| d.as_str())
+                    .map(|s| s.to_string());
+                all_tools.push((name, desc));
+            }
+        }
+
+        cursor = result
+            .get("nextCursor")
+            .and_then(|c| c.as_str())
+            .map(|s| s.to_string());
+
+        request_id += 1;
+        if cursor.is_none() {
+            break;
+        }
+    }
+
+    let _ = child.kill().await;
+    Ok(all_tools)
+}
+
 pub async fn run_pipe(
     pipe_config: &crate::config::Pipe,
     input_data: &str,

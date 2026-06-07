@@ -561,8 +561,37 @@ async fn cmd_tool(
     }
 
     if list_tools {
-        eprintln!("cpipe: list-tools not yet implemented in Rust core.");
-        std::process::exit(1);
+        let start_t = std::time::Instant::now();
+        let env = std::collections::HashMap::new();
+        match cpipe::orchestrator::list_mcp_tools(server_key, &config.servers, &env).await {
+            Ok(tools) => {
+                if tools.is_empty() {
+                    println!("No tools found on server '{}'.", server_key);
+                } else {
+                    println!("Tools on server '{}':", server_key);
+                    for (name, description) in tools {
+                        if let Some(desc) = description {
+                            if !desc.trim().is_empty() {
+                                println!("  - {}: {}", name, desc);
+                            } else {
+                                println!("  - {}", name);
+                            }
+                        } else {
+                            println!("  - {}", name);
+                        }
+                    }
+                }
+                if verbose {
+                    let latency_ms = start_t.elapsed().as_secs_f64() * 1000.0;
+                    eprintln!("[cpipe:tool] Latency: {:.2}ms", latency_ms);
+                }
+                return;
+            }
+            Err(e) => {
+                eprintln!("cpipe: tool error: {}", e);
+                std::process::exit(1);
+            }
+        }
     }
 
     let tool_name = match tool_name {

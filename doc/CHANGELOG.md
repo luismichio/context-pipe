@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Implemented Rust native `cpipe tool <server> --list-tools` support via MCP `tools/list` request flow.
+  - Added `list_mcp_tools(...)` in `crates/cpipe/src/orchestrator.rs` with stdio MCP handshake and cursor pagination handling.
+  - Wired CLI `Tool` subcommand to return actual server tool inventory instead of exiting with "not yet implemented".
+
+### Fixed
+- Closed Rust parity gap in Scenario 21 harness for Shadow Discovery command path (`mcp-pipe tool everything --list-tools`).
+
 ## [0.5.9] — 2026-06-07
 
 ### Fixed
