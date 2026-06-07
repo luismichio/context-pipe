@@ -288,9 +288,7 @@ The `mcp` node type was fully implemented in v0.2.0, including:
 
 ## 7. Out of Scope
 
-- **HTTP/SSE transport**: only `stdio` MCP servers are supported in this phase.
-  HTTP transport requires a different connection model and session lifecycle.
-  Tracked as a future item.
+- **HTTP/SSE transport**: Fully supported since v0.5.8, including Streamable HTTP transports for remote cloud-hosted servers (e.g. Supabase).
 - **Server pooling / keep-alive**: each `mcp` node spawns and tears down its
   own server process. Connection reuse across pipe runs is a Phase 8 concern.
 - **Auth beyond env vars**: OAuth flows, keychain integration, etc. are out of
