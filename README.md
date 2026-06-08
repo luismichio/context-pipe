@@ -82,6 +82,9 @@ IDE hooks that apply pipes transparently after every tool call — without the a
 ### 7. The Native Rust Core (`crates/cpipe`)
 `cpipe` is the high-performance Rust heart of the Context-Pipe ecosystem. It ports the full orchestration engine — config merging, placeholder resolution, stream routing, and the self-aware bypass guard — to a pre-compiled native binary with **<2ms startup latency** (500× faster than the Python runtime). It coexists with the Python server: MCP tools stay in Python (FastMCP), while the Rust binary is available as a **Tauri sidecar**, a **standalone CLI** (`cpipe run`, `cpipe list`, `cpipe serve`), or a **Cargo library** for direct embedding in Rust applications. See [`crates/cpipe/README.md`](crates/cpipe/README.md) for the full API.
 
+### 8. The TypeScript/JavaScript Client (`packages/cpipe-js`)
+`@context-pipe/client` is the browser-safe, sandboxed client-side port of the engine. It simulates Unix pipes entirely in memory, supports standard nodes (`grep`, `replace`), allows custom PWA node registration (RAG database lookups, CORS proxies), and fully integrates with `AbortSignal` for cancellation. See [`packages/cpipe-js/README.md`](packages/cpipe-js/README.md) for the full API and examples.
+
 ---
 
 ## ✨ What Makes This Different
@@ -246,6 +249,8 @@ Detailed documentation is available in the [`doc/`](./doc) directory.
 
 ## 🐍 Programmatic Usage
 
+### Python
+
 Context-Pipe exposes a single `pipe()` function for direct integration into Python scripts, notebooks, and agent frameworks (LangChain, CrewAI, etc.) — no MCP server or CLI required.
 
 ```python
@@ -270,15 +275,27 @@ def pipe(
     config_path: str = "pipes.json",
     vars: dict | None = None,
 ) -> str: ...
-// def pipe(
-    text: str,
-    pipe_name: str | None = None,   # explicit pipe name; auto-routes if omitted
-    tool_name: str = "",            # used for trigger matching and telemetry
-    config_path: str = "pipes.json",
-) -> str: ...
 ```
 
 The function always returns the original `text` unchanged on any error (subprocess failure, missing config, etc.), so it is safe to use as a drop-in filter.
+
+### JavaScript/TypeScript
+
+For client-side runtimes (browsers, PWAs, extensions), install the sandboxed package:
+```bash
+npm install @context-pipe/client
+```
+
+Initialize the [PipelineEngine](packages/cpipe-js/src/engine.ts) and run your configurations:
+```typescript
+import { PipelineEngine } from '@context-pipe/client';
+
+const engine = new PipelineEngine({ failFast: true });
+
+// Run a named pipe configuration
+const output = await engine.runPipe(pipeConfig, rawLogs);
+```
+See the [client README](packages/cpipe-js/README.md) for details on registering custom database or fetch nodes and handling cancellations.
 
 ### Rust Library (`cpipe`)
 

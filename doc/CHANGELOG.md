@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Expanded `plans/ts_version_requirements.md` to include client-side browser platform parity limitations (subprocess sandboxing, MCP WS/SSE transports, virtual branching, memory-based A2A handoffs), `AbortSignal` cancellation support, error handling policies (`failFast`), and fixed formatting/syntax typos.
 
 ## [0.5.11] — 2026-06-07
 

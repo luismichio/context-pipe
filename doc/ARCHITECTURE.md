@@ -538,5 +538,21 @@ Two parallel GitHub Actions workflows fire on `v*` tags:
 - **`release.yml`**: Builds Python wheels (via `cibuildwheel`) for Windows/macOS/Linux and publishes to PyPI. The `CIBW_BEFORE_BUILD: pip install setuptools-rust` step compiles and embeds `cpipe` inside the wheel automatically.
 - **`release-binaries.yml`**: Compiles standalone `cpipe` executables for all four target triples and uploads them as GitHub Release assets.
 
+## 14. TypeScript/JavaScript Client (`packages/cpipe-js`)
+
+### Motivation
+Running context pipelines within browser-sandboxed environments (like PWAs, Chrome extensions, or hybrid web apps) presents unique restrictions:
+- No native OS process spawning (`subprocess.run`).
+- No direct file system access.
+- No standard input/output (`stdin`/`stdout`) streams or standard stdio MCP servers.
+
+### Architecture
+To solve these constraints while maintaining full protocol parity, the client-side TS port adopts a sandboxed, state-independent model:
+1. **Piping Simulator**: Implements a promise-driven loop running sequentially over registered [NodeExecutor](../packages/cpipe-js/src/types.ts) callbacks.
+2. **Registry Pattern**: Replaces subprocess-based nodes with JS-native implementations (like standard RegExp for `grep` and `replace`). Custom platform-dependent behaviors (e.g. IndexedDB RAG queries or HTTP CORS relays) are registered dynamically by the PWA wrapper at boot time.
+3. **Operational Controls**:
+   - **`failFast`**: Configurable error boundaries that let the engine fail fast on any error or unregistered node, preventing un-sifted context from leaking to LLMs.
+   - **`AbortSignal`**: Integrates standard browser signal cancellation throughout the execution loop and within registered nodes to prevent UI-blocking loops.
+
 ---
 *High-Fidelity Infrastructure for the Studio of Two.*
