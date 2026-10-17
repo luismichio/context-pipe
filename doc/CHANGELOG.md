@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Expanded `plans/ts_version_requirements.md` to include client-side browser platform parity limitations (subprocess sandboxing, MCP WS/SSE transports, virtual branching, memory-based A2A handoffs), `AbortSignal` cancellation support, error handling policies (`failFast`), and fixed formatting/syntax typos.
 
+### Security
+- Resolved 10 Dependabot alerts in `@context-pipe/client` (`packages/cpipe-js`) by upgrading `vitest` to `^5.0.5` and `tsup` to `^9.0.0` (eliminating vulnerabilities across `tinypool`, `vitest`, `vite`, `postcss`, and `esbuild`).
+
 ## [0.5.11] — 2026-06-07
 
 ### Added

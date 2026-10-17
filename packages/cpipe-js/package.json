@@ -2,6 +2,7 @@
   "name": "@context-pipe/client",
   "version": "0.5.11",
   "description": "Client-side TypeScript port of the Context-Pipe (cpipe) pipeline engine",
+  "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -31,8 +32,8 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
+    "tsup": "^9.0.0",
     "typescript": "^5.0.0",
-    "tsup": "^8.0.0",
-    "vitest": "^1.0.0"
+    "vitest": "^5.0.5"
   }
 }
