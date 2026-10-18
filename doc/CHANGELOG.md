@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Resolved 10 Dependabot alerts in `@context-pipe/client` (`packages/cpipe-js`) by upgrading `vitest` to `^5.0.5` and `tsup` to `^9.0.0` (eliminating vulnerabilities across `tinypool`, `vitest`, `vite`, `postcss`, and `esbuild`).
 
+### Fixed
+- Fixed CI failure with `ruff>=0.17` by explicitly defining `[tool.ruff.lint] select = ["E4", "E7", "E9", "F"]` and adding `build` and `dist` to exclusion lists in `pyproject.toml` and `.gitignore`.
+
 ## [0.5.11] — 2026-06-07
 
 ### Added
