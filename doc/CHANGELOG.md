@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed CI failure with `ruff>=0.17` by explicitly defining `[tool.ruff.lint] select = ["E4", "E7", "E9", "F"]` and adding `build` and `dist` to exclusion lists in `pyproject.toml` and `.gitignore`.
+- Constrained `mcp` dependency to `<2.0` (`mcp>=1.0,<2.0`) in `pyproject.toml` to guard against breaking changes introduced in the `mcp 2.x` SDK.
 
 ## [0.5.11] — 2026-06-07
 
